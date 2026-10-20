@@ -1,0 +1,45 @@
+node_modules/
+out/
+dist/
+release/
+*.log
+*.tsbuildinfo
+.DS_Store
+.vite/
+coverage/
+.eslintcache
+
+# Managed yt-dlp binary is provisioned at runtime, never committed
+resources/bin/yt-dlp*
+resources/bin/*.exe
+
+# Vendored CPython (~110 MB) is fetched by `npm run runtime`, never committed.
+# It also contains absolute symlinks into the build machine's temp directory.
+resources/python/
+
+# Local secrets, credentials and signing material
+.env
+.env.*
+!.env.example
+.envrc
+.npmrc
+.netrc
+secrets/
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.cer
+*.crt
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
+
+# Local data and network captures
+*.sqlite
+*.sqlite3
+*.db
+*.har
+cookies*.txt

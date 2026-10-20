@@ -1,0 +1,162 @@
+import type {
+  BrowseResult,
+  CacheStats,
+  CatalogItem,
+  HistoryEntry,
+  ImportCreateInput,
+  ImportMatch,
+  ImportProgress,
+  ImportSource,
+  Lyrics,
+  PlaybackSession,
+  Playlist,
+  ResolveResult,
+  Result,
+  SearchFilterName,
+  Settings,
+  Shelf,
+  Track,
+  YtDlpInfo
+} from './types'
+
+/** One source of truth for IPC channel names. */
+export const CH = {
+  settingsGet: 'settings:get',
+  settingsSet: 'settings:set',
+
+  playerResolve: 'player:resolve',
+  playerPrefetch: 'player:prefetch',
+  playerCancel: 'player:cancel',
+  playerState: 'player:state',
+
+  sessionGet: 'session:get',
+  sessionSet: 'session:set',
+
+  lyricsGet: 'lyrics:get',
+
+  historyAdd: 'history:add',
+  historyList: 'history:list',
+  historyForget: 'history:forget',
+
+  favoritesList: 'favorites:list',
+  favoritesToggle: 'favorites:toggle',
+
+  libraryPlaylists: 'library:playlists',
+  libraryPlaylistCreate: 'library:playlist-create',
+  libraryPlaylistRename: 'library:playlist-rename',
+  libraryPlaylistDelete: 'library:playlist-delete',
+  libraryPlaylistAdd: 'library:playlist-add',
+  libraryPlaylistRemove: 'library:playlist-remove',
+
+  catalogSearch: 'catalog:search',
+  catalogBrowse: 'catalog:browse',
+  catalogHome: 'catalog:home',
+  catalogCharts: 'catalog:charts',
+  catalogRadio: 'catalog:radio',
+  catalogAudioTrack: 'catalog:audio-track',
+
+  cacheStats: 'cache:stats',
+  cacheClear: 'cache:clear',
+
+  ytdlpInfo: 'ytdlp:info',
+  ytdlpUpdate: 'ytdlp:update',
+
+  importResolve: 'import:resolve',
+  importMatch: 'import:match',
+  importCancel: 'import:cancel',
+  importCreate: 'import:create',
+  importProgress: 'import:progress'
+} as const
+
+export type LyricsRequest = {
+  trackId: string
+  title: string
+  artist: string
+  durationSec: number
+  album?: string
+}
+
+export type ResolveRequest = {
+  /** A YouTube Music / YouTube URL, or a bare 11-character video id. */
+  input: string
+  /** Bypass the resolved-URL and metadata caches. */
+  force?: boolean
+  /** Delete the cached audio for this track (the file is known to be bad). */
+  discardCache?: boolean
+}
+
+/** The entire surface the renderer is allowed to touch. */
+export interface VibyApi {
+  /** `darwin` / `win32`, used to lay out the window chrome. */
+  platform: string
+  settings: {
+    get(): Promise<Settings>
+    set(patch: Partial<Settings>): Promise<Settings>
+  }
+  session: {
+    get(): Promise<PlaybackSession>
+    save(session: PlaybackSession): Promise<void>
+  }
+  lyrics: {
+    get(req: LyricsRequest): Promise<Result<Lyrics>>
+  }
+  player: {
+    resolve(req: ResolveRequest): Promise<Result<ResolveResult>>
+    /** Warm a stream URL in the background; resolves nothing in the renderer. */
+    prefetch(input: string): void
+    /** Abort an in-flight resolve so a slow track cannot hold the UI hostage. */
+    cancel(): void
+    /** Tells main whether audio is currently playing, for the power blocker. */
+    setPlaying(playing: boolean): void
+  }
+  catalog: {
+    search(query: string, filter?: SearchFilterName): Promise<Result<CatalogItem[]>>
+    browse(browseId: string): Promise<Result<BrowseResult>>
+    home(): Promise<Result<Shelf[]>>
+    charts(): Promise<Result<Shelf[]>>
+    /** Related tracks for autoplay, seeded by a video id. */
+    radio(videoId: string): Promise<Result<CatalogItem[]>>
+    /** The released audio track for a music video, when YouTube knows one. */
+    audioTrack(videoId: string, title: string, artist: string): Promise<Result<CatalogItem | null>>
+  }
+  history: {
+    add(entry: HistoryEntry): Promise<void>
+    list(limit?: number): Promise<HistoryEntry[]>
+  }
+  favorites: {
+    list(): Promise<Track[]>
+    toggle(track: Track): Promise<{ favorited: boolean; favorites: Track[] }>
+  }
+  library: {
+    playlists(): Promise<Playlist[]>
+    createPlaylist(name: string): Promise<Playlist>
+    renamePlaylist(id: string, name: string): Promise<Playlist | null>
+    deletePlaylist(id: string): Promise<void>
+    addToPlaylist(id: string, track: Track): Promise<Playlist | null>
+    removeFromPlaylist(id: string, trackId: string): Promise<Playlist | null>
+  }
+  cache: {
+    stats(): Promise<CacheStats>
+    clear(): Promise<CacheStats>
+  }
+  ytDlp: {
+    info(): Promise<Result<YtDlpInfo>>
+    update(): Promise<Result<YtDlpInfo>>
+  }
+  import: {
+    resolve(url: string): Promise<Result<ImportSource>>
+    match(source: ImportSource): Promise<Result<ImportMatch[]>>
+    /** Stop an in-flight match; partial results are discarded by the UI. */
+    cancel(): Promise<void>
+    create(input: ImportCreateInput): Promise<Result<Playlist>>
+    /** Progress events for the currently matching import. */
+    onProgress(callback: (progress: ImportProgress) => void): () => void
+  }
+  /**
+   * Only present when VIBY_DEBUG_PORT is set. Used by the e2e harness to keep
+   * synthetic titles ("Track A", "Seed") out of real listening history.
+   */
+  debug?: {
+    forgetHistory(titles: string[]): Promise<number>
+  }
+}

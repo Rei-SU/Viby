@@ -1,0 +1,209 @@
+:root {
+  color-scheme: dark;
+
+  /* Surfaces are translucent so the ambient wash shows through — glass, but
+     muted: low-contrast fills, hairline strokes, one soft highlight. */
+  --bg: #08080b;
+  --bg-elevated: rgba(20, 20, 27, 0.6);
+  --glass: rgba(17, 17, 23, 0.62);
+  --glass-strong: rgba(24, 24, 32, 0.8);
+  --glass-hover: rgba(255, 255, 255, 0.045);
+  --glass-active: rgba(255, 255, 255, 0.075);
+
+  --stroke: rgba(255, 255, 255, 0.07);
+  --stroke-strong: rgba(255, 255, 255, 0.13);
+
+  --text: #f2f2f5;
+  --text-dim: #9c9ca8;
+  --text-faint: #686873;
+
+  --accent: #ffffff;
+  --accent-strong: #ececef;
+  --accent-soft: rgba(255, 255, 255, 0.09);
+  --accent-ring: rgba(255, 255, 255, 0.38);
+
+  --danger: #ff8080;
+
+  --radius-xl: 22px;
+  --radius-lg: 16px;
+  --radius: 12px;
+  --radius-sm: 8px;
+
+  --shadow-dock: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.5);
+
+  --sidebar-w: 218px;
+  --player-h: 84px;
+  --titlebar-h: 46px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --speed: 160ms;
+
+  font-synthesis-weight: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, Roboto, Helvetica, Arial,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* A neutral wash: enough depth to make the glass readable, no colour cast. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 22% 0%, rgba(255, 255, 255, 0.045), transparent 70%),
+    radial-gradient(48% 40% at 100% 100%, rgba(255, 255, 255, 0.025), transparent 70%);
+}
+
+#app {
+  height: 100vh;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+input {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Glass surface used by the sidebar, the dock and floating panels. */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow-dock);
+}
+
+.scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+  background-clip: content-box;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+.faint {
+  color: var(--text-faint);
+}
+
+/* Range inputs get a filled track via --progress (set inline by the player). */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--progress, 0%),
+    rgba(255, 255, 255, 0.14) var(--progress, 0%)
+  );
+  cursor: pointer;
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity var(--speed) var(--ease);
+}
+
+input[type='range']:hover::-webkit-slider-thumb,
+input[type='range']:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+input[type='range']::-webkit-slider-thumb:active {
+  transform: scale(1.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

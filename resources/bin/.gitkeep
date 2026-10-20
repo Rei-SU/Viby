@@ -1,0 +1,4 @@
+# The managed yt-dlp binary is provisioned at runtime by src/main/ytdlp/binary.ts:
+#   1. copied from here if a platform binary was bundled at build time, else
+#   2. downloaded from the official yt-dlp release, then
+#   3. copied into userData/bin/ where it stays writable and can self-update.

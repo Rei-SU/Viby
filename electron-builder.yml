@@ -1,0 +1,65 @@
+appId: com.viby.app
+productName: Viby
+copyright: Viby
+
+directories:
+  output: dist
+  buildResources: resources
+
+files:
+  - out/**/*
+  - package.json
+
+# yt-dlp runs on the vendored CPython, so a packaged Viby needs no system Python.
+# Both are copied into userData on first run, which keeps yt-dlp writable and
+# self-updatable (see PLAN §2.3). Fetch the runtime with `npm run runtime`.
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter: ['**/*']
+  - from: resources/python/${os}-${arch}
+    to: python
+    filter: ['**/*']
+  - from: resources/yt-dlp-plugins
+    to: yt-dlp-plugins
+    filter: ['**/*']
+
+asar: true
+
+mac:
+  icon: resources/icon.icns
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  category: public.app-category.music
+  # Unsigned on purpose: signing needs a paid Apple Developer account.
+  # See PLAN §2.1 — macOS auto-update requires signing, Windows does not.
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+
+# Update feed. Replace owner/repo with your GitHub repo before the first release.
+# Windows: true in-app auto-update. macOS: notify + download (unsigned builds cannot
+# self-update — Squirrel.Mac requires a code signature).
+publish:
+  provider: github
+  owner: CHANGE_ME
+  repo: viby

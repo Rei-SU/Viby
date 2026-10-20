@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Google's image CDN answers 429 (with an HTML error page) when the Referer is
+      a non-YouTube origin, which is exactly what a localhost/app origin sends.
+      The renderer only loads images and talks to our own preload bridge, so
+      dropping Referer globally is safe and is the one fix that covers every img.
+    -->
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob: https: viby-media:; connect-src 'self' ws: wss: https:; font-src 'self' data:"
+    />
+    <title>Viby</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

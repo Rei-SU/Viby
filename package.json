@@ -1,0 +1,40 @@
+{
+  "name": "viby",
+  "version": "0.1.0",
+  "description": "Ad-free, account-free desktop music client",
+  "main": "./out/main/index.js",
+  "author": "Viby",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "preview": "electron-vite preview",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && svelte-check --tsconfig ./tsconfig.web.json",
+    "icons": "python3 scripts/make-icons.py",
+    "runtime": "node scripts/fetch-runtime.mjs",
+    "runtime:mac": "node scripts/fetch-runtime.mjs --platform darwin --arch x64 && node scripts/fetch-runtime.mjs --platform darwin --arch arm64",
+    "dist:mac": "npm run build && npm run runtime:mac && electron-builder --mac",
+    "dist:win": "npm run build && node scripts/fetch-runtime.mjs --platform win32 --arch x64 && electron-builder --win",
+    "dist:dir": "npm run build && npm run runtime && electron-builder --dir",
+    "measure": "node scripts/measure.mjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@types/node": "^22.10.5",
+    "electron": "^37.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.1.0",
+    "svelte": "^5.19.0",
+    "svelte-check": "^4.1.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  },
+  "allowScripts": {
+    "electron@37.10.3": true,
+    "esbuild@0.25.12": true
+  }
+}

@@ -1,0 +1,7 @@
+# yt-dlp plugins loaded via --plugin-dirs.
+#
+# This directory is the home for the PO-token provider (PLAN §7, risk R1). YouTube
+# requires PO tokens for stream requests on most clients; a local provider generates
+# them without leaking anything to a third party.
+#
+# Drop plugin .py files here and they are picked up automatically on next launch.
