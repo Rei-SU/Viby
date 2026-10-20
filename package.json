@@ -4,7 +4,7 @@
   "description": "Ad-free, account-free desktop music client",
   "main": "./out/main/index.js",
   "author": "Viby",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",

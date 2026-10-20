@@ -56,8 +56,8 @@
       <div class="label">
         <span>Audio quality</span>
         <span class="hint">
-          Best available is what YouTube serves anonymously (~130 kbps). Data saver caps around
-          64 kbps and roughly halves data use.
+          Best available streams at the highest quality the catalogue offers (~130 kbps). Data
+          saver caps around 64 kbps and roughly halves data use.
         </span>
       </div>
       <div class="segmented">

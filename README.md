@@ -1,0 +1,116 @@
+<p align="center">
+  <img src="assets/icon-readme.png" width="84" alt="Viby" />
+</p>
+
+<h1 align="center">Viby</h1>
+
+<p align="center">
+  <strong>Listen without the noise.</strong><br />
+  A fast, ad-free desktop music player for macOS and Windows.
+</p>
+
+<p align="center">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20silicon%20%7C%20Intel-111111?style=flat-square&logo=apple&logoColor=white" />
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%7C%2011-111111?style=flat-square&logo=windows&logoColor=white" />
+  <img alt="Status" src="https://img.shields.io/badge/status-public%20beta-111111?style=flat-square" />
+  <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-111111?style=flat-square" />
+</p>
+
+Viby is a desktop music player for people who just want to press play.
+
+Browse artists, albums, playlists and charts. Build a library that stays on your machine. Follow along with lyrics that move with the song. Nothing to sign up for, nothing to sit through, nothing watching what you listen to.
+
+<p align="center">
+  <img src="docs/screenshots/artist.png" alt="Viby artist page with a full-width banner and monthly listeners" />
+</p>
+<p align="center">
+  <sub>Artist pages with full-width artwork, monthly listeners and the full discography.</sub>
+</p>
+
+## What's inside
+
+- **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a local cache that makes replays instant.
+- **A catalogue worth browsing.** Search with filters, home shelves, charts, and artist and album pages with real discographies.
+- **Lyrics that keep up.** Time-synced lyrics from LRCLIB with a fallback, click-to-seek, and a panel that stays out of the way.
+- **A library that stays yours.** Liked songs, playlists and history stored locally. No account, no cloud, no sync.
+- **Import from a link.** Paste a public Spotify, Apple Music, Deezer or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.
+- **Quiet by design.** A monochrome interface, a collapsible sidebar, around 300 MB at idle in our macOS tests, and a warm start in under a second.
+
+## Look around
+
+<p align="center">
+  <img src="docs/screenshots/album.png" alt="Album page with a real track list, play counts and durations" />
+</p>
+<p align="center">
+  <sub>Album pages with real track lists, play counts and durations.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/lyrics.png" alt="Time-synced lyrics panel over an artist page" />
+</p>
+<p align="center">
+  <sub>Time-synced lyrics; click any line to seek.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/search.png" width="49%" alt="Search results with filters for songs, albums, artists and playlists" />
+  <img src="docs/screenshots/settings.png" width="49%" alt="Playback quality, autoplay and cache settings" />
+</p>
+<p align="center">
+  <sub>Search across songs, albums, artists and playlists &nbsp;·&nbsp; Quality, autoplay and cache, all local</sub>
+</p>
+
+## Build from source
+
+Requirements: **Node.js 20+**, npm, and the platform you are building for.
+
+```bash
+git clone https://github.com/Rei-SU/Viby.git
+cd Viby
+npm install
+npm run runtime   # fetch the pinned playback runtime (once)
+npm run dev
+```
+
+To build an installer:
+
+```bash
+npm run dist:mac   # macOS DMGs — Apple silicon + Intel
+npm run dist:win   # Windows x64 installer
+```
+
+Packaged builds need no Python install, no configuration file and no first-run setup screen.
+
+## What's next
+
+Viby is a public beta. The core is in place; the edges are still being sanded.
+
+- Signed and notarized macOS builds, plus in-app updates
+- Windows 10/11 validation on real hardware
+- Manual search for import rows that don't match automatically
+- Album and single links in the importer
+- Virtualized lists for playlists with thousands of tracks
+- Drag-to-reorder playlists
+- Add to playlist from the player bar
+
+## Privacy
+
+No accounts. No analytics. No telemetry. Your library, playlists, history and cache live in your user data folder, and the app only talks to the network to browse, play, fetch lyrics and import a link you paste.
+
+## Contributing
+
+Viby is intentionally small and opinionated, and contributions are welcome.
+
+- Open an issue before a large feature or refactor; small fixes can go straight to a PR.
+- Keep PRs focused, match the existing Svelte/TypeScript style, and keep the UI monochrome.
+- Run `npm run typecheck` and the suites in [TESTING.md](TESTING.md) for the files you changed.
+- No ads, accounts, tracking, telemetry or bundled credentials — ever.
+- Don't commit `.env` files, cookies, downloaded audio or the vendored runtime.
+
+The full rules live in [CONTRIBUTING.md](CONTRIBUTING.md). Be decent to each other.
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE). The Viby name and logo are not covered by the license.
+
+<p align="center"><sub>Built with Electron, Svelte and TypeScript. Lyrics by LRCLIB.<br />Viby is an independent project, not affiliated with any music service or rights holder.</sub></p>

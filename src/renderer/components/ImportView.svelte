@@ -182,8 +182,7 @@
   <header class="head">
     <h1>Import</h1>
     <p>
-      Paste a playlist link from Spotify, Apple Music, Deezer, YouTube Music or SoundCloud. No account
-      needed.
+      Paste a playlist link from Spotify, Apple Music, Deezer or SoundCloud. No account needed.
     </p>
   </header>
 
@@ -221,7 +220,7 @@
         <button class="ghost" onclick={cancel}>Cancel</button>
       </div>
       <div class="bar" aria-hidden="true"><span style="width: {percent()}%"></span></div>
-      <p class="hint">Each source track is looked up on YouTube Music. Long playlists take a minute.</p>
+      <p class="hint">Each source track is matched against the catalogue. Long playlists take a minute.</p>
     </section>
   {/if}
 
@@ -295,7 +294,7 @@
               <select
                 value={row.chosenId ?? ''}
                 onchange={(event) => choose(row, event)}
-                aria-label="YouTube Music match for {row.match.source.title}"
+                aria-label="Best match for {row.match.source.title}"
               >
                 {#each row.match.candidates as candidate (candidate.id)}
                   <option value={candidate.id}>
