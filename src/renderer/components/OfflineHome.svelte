@@ -1,28 +1,40 @@
 <script lang="ts">
-  import type { CatalogItem, DownloadCollection, DownloadEntry } from '@shared/types'
+  import type { CatalogItem, DownloadCollection } from '@shared/types'
   import { downloads } from '../lib/downloads.svelte'
   import { network } from '../lib/network.svelte'
   import { player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
-  import { trackToItem } from '../lib/track'
+  import {
+    collectionItems,
+    entryToItem,
+    formatSize as size,
+    standaloneEntries
+  } from '../lib/download-groups'
   import MediaCard from './MediaCard.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
 
   const entries = $derived(downloads.entries)
+  const collections = $derived(downloads.collections)
   const stats = $derived(downloads.stats)
 
   const collectionGroups = $derived.by(() =>
-    downloads.collections
-      .map((collection) => ({ collection, tracks: collectionEntries(collection) }))
-      .filter((group) => group.tracks.length > 0)
+    collections
+      .map((collection) => ({
+        collection,
+        items: collectionItems(collection, entries)
+      }))
+      .filter((group) => group.items.length > 0)
   )
 
   const albums = $derived(collectionGroups.filter((group) => group.collection.kind === 'album'))
   const playlists = $derived(collectionGroups.filter((group) => group.collection.kind !== 'album'))
 
-  const allItems = $derived(entries.map(entryItem))
+  const allItems = $derived(entries.map((entry) => entryToItem(entry, collections)))
   const recent = $derived(allItems.slice(0, 8))
+  const standalone = $derived(
+    standaloneEntries(collections, entries).map((entry) => entryToItem(entry, collections))
+  )
 
   const title = $derived(
     network.state.forcedOffline
@@ -31,21 +43,6 @@
         ? "Can't reach YouTube"
         : "You're offline"
   )
-
-  function entryItem(entry: DownloadEntry): CatalogItem {
-    return {
-      ...trackToItem(entry.track),
-      thumbnail: entry.artUrl ?? entry.track.thumbnail
-    }
-  }
-
-  function collectionEntries(collection: DownloadCollection): CatalogItem[] {
-    const byId = new Map(entries.map((entry) => [entry.track.id, entry]))
-    return collection.trackIds
-      .map((id) => byId.get(id))
-      .filter((entry): entry is DownloadEntry => Boolean(entry))
-      .map(entryItem)
-  }
 
   function collectionItem(collection: DownloadCollection, tracks: CatalogItem[]): CatalogItem {
     return {
@@ -58,19 +55,16 @@
     }
   }
 
+  function openCollection(collection: DownloadCollection): void {
+    nav.openCollection({ kind: 'download', key: collection.key })
+  }
+
   function playCollection(tracks: CatalogItem[]): void {
     if (tracks.length > 0) void player.playList(tracks, 0)
   }
 
   function playAll(): void {
     if (allItems.length > 0) void player.playList(allItems, 0)
-  }
-
-  function size(bytes: number | undefined): string {
-    if (!bytes) return '0 MB'
-    const gb = bytes / 1024 ** 3
-    if (gb >= 1) return `${gb.toFixed(1)} GB`
-    return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`
   }
 </script>
 
@@ -139,8 +133,8 @@
         <div class="rail">
           {#each albums as group (group.collection.key)}
             <MediaCard
-              item={collectionItem(group.collection, group.tracks)}
-              onActivate={() => playCollection(group.tracks)}
+              item={collectionItem(group.collection, group.items)}
+              onActivate={() => openCollection(group.collection)}
             />
           {/each}
         </div>
@@ -153,30 +147,32 @@
         <div class="rail">
           {#each playlists as group (group.collection.key)}
             <MediaCard
-              item={collectionItem(group.collection, group.tracks)}
-              onActivate={() => playCollection(group.tracks)}
+              item={collectionItem(group.collection, group.items)}
+              onActivate={() => openCollection(group.collection)}
             />
           {/each}
         </div>
       </section>
     {/if}
 
-    <section class="shelf">
-      <div class="shelf-head">
-        <h2>Songs</h2>
-        <button class="link" onclick={() => nav.go('downloads')}>Manage</button>
-      </div>
-      <ul class="rows">
-        {#each recent as item, index (item.id)}
-          <TrackRow {item} {index} context={recent} showDownload={false} />
-        {/each}
-      </ul>
-      {#if entries.length > recent.length}
-        <button class="link more" onclick={() => nav.go('downloads')}>
-          {entries.length - recent.length} more in Downloads
-        </button>
-      {/if}
-    </section>
+    {#if standalone.length > 0}
+      <section class="shelf">
+        <div class="shelf-head">
+          <h2>Songs</h2>
+          <button class="link" onclick={() => nav.go('downloads')}>Manage</button>
+        </div>
+        <ul class="rows">
+          {#each standalone.slice(0, 8) as item, index (item.id)}
+            <TrackRow {item} {index} context={standalone} showDownload={false} />
+          {/each}
+        </ul>
+        {#if standalone.length > 8}
+          <button class="link more" onclick={() => nav.go('downloads')}>
+            {standalone.length - 8} more in Downloads
+          </button>
+        {/if}
+      </section>
+    {/if}
   {/if}
 </div>
 

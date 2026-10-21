@@ -32,15 +32,24 @@ export type LyricsQuery = {
 }
 
 export async function getLyrics(query: LyricsQuery): Promise<Lyrics> {
-  const cached = lyricsStore().get()[query.trackId]
-  if (cached) {
-    const stale = cached.kind === 'none' && Date.now() - cached.fetchedAt > MISS_TTL
-    if (!stale) return strip(cached)
-  }
+  const cached = cachedLyrics(query.trackId)
+  if (cached) return cached
 
   const found = (await lookup(query)) ?? { kind: 'none' as const }
   save(query.trackId, found)
   return found
+}
+
+/**
+ * The persisted result for a track, without touching the network. Downloaded
+ * songs use this while offline; a stale "no lyrics" miss is treated as absent so
+ * a later online lookup can try again.
+ */
+export function cachedLyrics(trackId: string): Lyrics | null {
+  const cached = lyricsStore().get()[trackId]
+  if (!cached) return null
+  const stale = cached.kind === 'none' && Date.now() - cached.fetchedAt > MISS_TTL
+  return stale ? null : strip(cached)
 }
 
 async function lookup(query: LyricsQuery): Promise<Lyrics | null> {

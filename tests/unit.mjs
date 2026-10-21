@@ -18,6 +18,7 @@ const suites = {
   import: { file: 'import-adapters.test.ts' },
   'downloads-store': { file: 'downloads-store.test.ts', electron: true },
   'downloads-manager': { file: 'downloads-manager.test.ts', electron: true },
+  'download-groups': { file: 'download-groups.test.ts' },
   network: { file: 'network.test.ts', electron: true }
 }
 

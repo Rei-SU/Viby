@@ -74,17 +74,22 @@
     return result?.header?.artist ?? null
   })
 
-  function withArtist(track: CatalogItem): CatalogItem {
-    if ((track.artists?.length ?? 0) > 0 || !fallbackArtist) return track
-    return {
-      ...track,
-      subtitle: fallbackArtist.name,
-      artists: [fallbackArtist.name],
-      parts: [{ text: fallbackArtist.name, artistId: fallbackArtist.id }]
+  function withDefaults(track: CatalogItem): CatalogItem {
+    let next = track
+    if ((track.artists?.length ?? 0) === 0 && fallbackArtist) {
+      next = {
+        ...track,
+        subtitle: fallbackArtist.name,
+        artists: [fallbackArtist.name],
+        parts: [{ text: fallbackArtist.name, artistId: fallbackArtist.id }]
+      }
     }
+    // Album rows often omit their own thumbnail. The header cover is the right
+    // artwork, and it is what a per-track download should snapshot.
+    return next.thumbnail ? next : { ...next, thumbnail: art }
   }
 
-  const displaySongs = $derived(songs.map(withArtist))
+  const displaySongs = $derived(songs.map(withDefaults))
 
   const collectionKind = $derived(
     item.kind === 'album' || item.kind === 'playlist' ? item.kind : null

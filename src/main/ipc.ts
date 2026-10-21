@@ -31,7 +31,7 @@ import type {
 import { CH, type LyricsRequest, type ResolveRequest } from '@shared/ipc'
 import { qualityCapKbps, settings } from './settings'
 import { session } from './session'
-import { getLyrics } from './lyrics'
+import { cachedLyrics, getLyrics } from './lyrics'
 import { lib } from './library'
 import { AudioCache } from './cache/audio'
 import { shouldCache } from './cache/policy'
@@ -210,6 +210,14 @@ export function registerIpc(): void {
     }
   )
 
+  ipcMain.handle(
+    CH.downloadsPruneCollection,
+    (_e, key: string, trackIds: string[]): Promise<DownloadsSnapshot> => {
+      manager.pruneCollection(key, Array.isArray(trackIds) ? trackIds : [])
+      return snapshot()
+    }
+  )
+
   ipcMain.handle(CH.downloadsClear, (): Promise<DownloadsSnapshot> => {
     manager.clear()
     return snapshot()
@@ -227,8 +235,28 @@ export function registerIpc(): void {
 
   ipcMain.handle(CH.lyricsGet, async (_e, req: LyricsRequest): Promise<Result<Lyrics>> => {
     try {
-      if (networkMonitor.isOffline()) throw new Error("You're offline.")
-      return ok(await getLyrics(req))
+      const store = downloadStore()
+
+      // A downloaded song keeps its own copy, so lyrics survive both the shared
+      // cache's 300-entry cap and a lost connection.
+      const stored = store.lyrics(req.trackId)
+      if (stored) return ok(stored)
+
+      const cached = cachedLyrics(req.trackId)
+      if (cached) return ok(cached)
+
+      if (networkMonitor.isOffline()) {
+        // The track is downloaded, so "no lyrics stored" is a real answer rather
+        // than a connection error.
+        if (store.entry(req.trackId)) return ok({ kind: 'none' })
+        throw new Error("You're offline.")
+      }
+
+      const lyrics = await getLyrics(req)
+      // Backfill downloads made before lyrics were stored with them: the next
+      // online lookup pins the result for offline use.
+      if (lyrics.kind !== 'none') store.putLyrics(req.trackId, lyrics)
+      return ok(lyrics)
     } catch (err) {
       return fail(err)
     }

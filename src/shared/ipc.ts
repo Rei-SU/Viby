@@ -72,6 +72,7 @@ export const CH = {
   downloadsAddCollection: 'downloads:add-collection',
   downloadsRemoveTrack: 'downloads:remove-track',
   downloadsRemoveCollection: 'downloads:remove-collection',
+  downloadsPruneCollection: 'downloads:prune-collection',
   downloadsClear: 'downloads:clear',
   downloadsRetry: 'downloads:retry',
   downloadsCancel: 'downloads:cancel',
@@ -171,6 +172,8 @@ export interface VibyApi {
     addCollection(input: DownloadCollectionInput, tracks: Track[]): Promise<DownloadsSnapshot>
     removeTrack(trackId: string): Promise<DownloadsSnapshot>
     removeCollection(key: string): Promise<DownloadsSnapshot>
+    /** Drop songs from a downloaded collection without touching its other owners. */
+    pruneCollection(key: string, trackIds: string[]): Promise<DownloadsSnapshot>
     clear(): Promise<DownloadsSnapshot>
     retry(trackId: string): Promise<DownloadsSnapshot>
     cancel(trackId: string): Promise<DownloadsSnapshot>

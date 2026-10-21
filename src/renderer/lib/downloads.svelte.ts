@@ -110,6 +110,15 @@ class DownloadsStore {
     this.apply(await api.downloads.removeCollection(key))
   }
 
+  async pruneCollection(key: string, trackIds: string[]): Promise<void> {
+    const collection = this.collections.find((item) => item.key === key)
+    if (collection) {
+      const keep = new Set(trackIds)
+      this.pauseIfPlaying(collection.trackIds.filter((id) => !keep.has(id)))
+    }
+    this.apply(await api.downloads.pruneCollection(key, trackIds))
+  }
+
   async clear(): Promise<void> {
     this.pauseIfPlaying(this.entries.map((entry) => entry.track.id))
     this.apply(await api.downloads.clear())

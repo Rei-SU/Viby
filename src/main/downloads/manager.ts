@@ -10,6 +10,7 @@ import type {
 } from '@shared/types'
 import { ensureRunner, pluginArgs } from '../ytdlp/binary'
 import { runStreamed } from '../ytdlp/exec'
+import { getLyrics } from '../lyrics'
 import { fetchArt } from './art'
 import type { DownloadJob, DownloadsStore } from './store'
 
@@ -91,6 +92,7 @@ export class DownloadManager {
   private lastProgressAt = 0
   private estimateReported = new Set<string>()
   private busy = false
+  private backfillingLyrics = false
 
   constructor(
     private readonly store: DownloadsStore,
@@ -109,6 +111,7 @@ export class DownloadManager {
     }
     this.publish()
     this.pump()
+    void this.backfillLyrics()
   }
 
   addTrack(track: Track, quality: Quality): void {
@@ -121,8 +124,14 @@ export class DownloadManager {
   addCollection(input: DownloadCollectionInput, tracks: Track[], quality: Quality): void {
     this.store.addCollection(input)
     const source = input.key
+    // Album rows often carry no thumbnail of their own; snapshot the collection
+    // cover so the downloaded file gets artwork instead of a blank square.
+    const fallback = input.thumbnail
+    const normalized = tracks.map((track) =>
+      !track.thumbnail && fallback ? { ...track, thumbnail: fallback } : track
+    )
     const added = this.store.enqueue(
-      tracks.map((track) => ({ track, source })),
+      normalized.map((track) => ({ track, source })),
       quality
     )
     for (const id of added) this.enqueue(id)
@@ -216,6 +225,7 @@ export class DownloadManager {
     }
     this.publish()
     this.pump()
+    void this.backfillLyrics()
   }
 
   async snapshot(): Promise<DownloadsSnapshot> {
@@ -359,11 +369,12 @@ export class DownloadManager {
       if (!file) throw new Error('Downloaded file was not found')
 
       const ext = file.split('.').pop()?.toLowerCase() ?? 'm4a'
-      const art = await fetchArt(job.track.thumbnail, this.store)
+      const art = await this.artFor(job.track)
       const current = this.store.job(id)
       this.store.put(job.track, file, ext, current?.sources ?? job.sources, job.quality, art ?? undefined)
       this.progress.delete(id)
       this.opts.onCompleted(id)
+      void this.storeLyrics(job.track)
       this.publish()
     } catch (err) {
       if (this.active?.cancelled) return
@@ -441,6 +452,63 @@ export class DownloadManager {
     if (!art) return
     this.store.setCollectionArt(key, art)
     this.publish()
+  }
+
+  /**
+   * Cover for one downloaded track: its own thumbnail when it has one, else the
+   * cover of a downloaded collection it belongs to.
+   */
+  private async artFor(track: Track): Promise<string | null> {
+    const direct = await fetchArt(track.thumbnail, this.store)
+    if (direct) return direct
+
+    const owner = this.store.collections().find((collection) =>
+      collection.trackIds.includes(track.id)
+    )
+    if (!owner) return null
+    if (owner.art) return owner.art
+    return owner.thumbnail ? fetchArt(owner.thumbnail, this.store) : null
+  }
+
+  /**
+   * Lyrics are part of a download, not a nice-to-have: pin them next to the
+   * audio so the lyrics panel works with no connection. Failures never fail the
+   * download.
+   */
+  private async storeLyrics(track: Track): Promise<void> {
+    if (this.opts.isOffline()) return
+    if (this.store.lyrics(track.id)) return
+    try {
+      const lyrics = await getLyrics({
+        trackId: track.id,
+        title: track.title,
+        artist: track.artist,
+        durationSec: track.durationSec ?? 0,
+        album: track.album
+      })
+      if (lyrics.kind !== 'none') this.store.putLyrics(track.id, lyrics)
+    } catch {
+      // Lyrics are optional; the download itself already succeeded.
+    }
+  }
+
+  /**
+   * Downloads made before lyrics were saved with the audio get a free top-up the
+   * first time the app is online. Stored tracks are skipped, so this is cheap
+   * after the first pass.
+   */
+  private async backfillLyrics(): Promise<void> {
+    if (this.backfillingLyrics || this.opts.isOffline()) return
+    this.backfillingLyrics = true
+    try {
+      for (const entry of this.store.entries()) {
+        if (this.opts.isOffline()) return
+        if (this.store.lyrics(entry.track.id)) continue
+        await this.storeLyrics(entry.track)
+      }
+    } finally {
+      this.backfillingLyrics = false
+    }
   }
 
   private publish(): void {

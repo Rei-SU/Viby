@@ -10,8 +10,12 @@ export type View =
   | 'import'
   | 'settings'
 
-/** A saved collection page: liked songs, or a user playlist. */
-export type CollectionRef = { kind: 'liked' } | { kind: 'playlist'; id: string }
+/** A collection page: liked songs, a user playlist, or a downloaded collection. */
+export type CollectionRef =
+  | { kind: 'liked' }
+  | { kind: 'playlist'; id: string }
+  /** `album:<id>`, `playlist:<id>` or `liked` — rendered from local downloads. */
+  | { kind: 'download'; key: string }
 
 type Snapshot = {
   view: View
@@ -92,7 +96,10 @@ class Navigator {
   openCollection(ref: CollectionRef): void {
     if (this.collection && this.collection.kind === ref.kind) {
       if (ref.kind === 'liked') return
-      if (this.collection.kind === 'playlist' && this.collection.id === ref.id) return
+      if (ref.kind === 'playlist' && this.collection.kind === 'playlist' && this.collection.id === ref.id)
+        return
+      if (ref.kind === 'download' && this.collection.kind === 'download' && this.collection.key === ref.key)
+        return
     }
     this.record()
     this.collection = ref

@@ -121,6 +121,37 @@ check('shared artwork survives one removal', existsSync(join(store.artDir, share
 store.removeTrack('y')
 check('artwork removed with its last owner', existsSync(join(store.artDir, sharedName)) === false)
 
+console.log('\nlyrics are pinned to the download:')
+const tmpL = makeFile(join(root, 'tmp', 'l'), 'l.m4a')
+store.put(track('l'), tmpL, 'm4a', ['track:l'], 'best')
+store.putLyrics('l', {
+  kind: 'synced',
+  lines: [{ time: 0, text: 'Hello' }, { time: 4, text: 'World' }],
+  source: 'LRCLIB'
+})
+check('lyrics read back', store.lyrics('l')?.lines?.[1]?.text === 'World')
+store.putLyrics('missing-entry', { kind: 'plain', plain: 'nope' })
+check('lyrics without an entry are ignored', store.lyrics('missing-entry') === null)
+store.removeTrack('l')
+check('lyrics are deleted with the entry', store.lyrics('l') === null)
+check('lyrics file is gone', existsSync(store.lyricsPath('l')) === false)
+
+console.log('\nalbum art covers tracks without their own thumbnail:')
+const tmpM = makeFile(join(root, 'tmp', 'm'), 'm.m4a')
+store.put(track('m'), tmpM, 'm4a', ['album:cover'], 'best')
+const coverArt = store.artNameFor('https://example.test/album-cover.jpg', 'jpg')
+makeFileAt(join(store.dir, coverArt), 2048)
+store.addCollection({
+  key: 'album:cover',
+  kind: 'album',
+  title: 'Cover',
+  thumbnail: 'https://example.test/album-cover.jpg',
+  trackIds: ['m']
+})
+store.setCollectionArt('album:cover', coverArt)
+check('entry borrows the collection cover at read time', Boolean(store.entry('m')?.artUrl))
+check('entry keeps no art path of its own', store.entry('m')?.art === undefined)
+
 console.log('\nhealing on startup:')
 // Simulate a crash: an entry whose file disappeared.
 const fresh = new DownloadsStore(mkdtempSync(join(tmpdir(), 'viby-downloads-')))
@@ -134,6 +165,23 @@ const artRel = fresh.artNameFor('https://example.test/e.jpg', 'jpg')
 makeFileAt(join(fresh.dir, artRel), 16)
 fresh.put(track('e'), tmpE, 'm4a', ['track:e'], 'best', artRel)
 makeFile(fresh.artDir, 'orphan.jpg', 16)
+// An album download whose tracks have no thumbnail of their own: healing should
+// pin the cached collection cover onto each entry.
+const tmpF = makeFile(join(fresh.tmpDir, 'f'), 'f.m4a', 2048)
+fresh.put(track('f'), tmpF, 'm4a', ['album:fa'], 'best')
+const albumArtRel = fresh.artNameFor('https://example.test/fa.jpg', 'jpg')
+makeFileAt(join(fresh.dir, albumArtRel), 16)
+fresh.addCollection({
+  key: 'album:fa',
+  kind: 'album',
+  title: 'FA',
+  thumbnail: 'https://example.test/fa.jpg',
+  trackIds: ['f']
+})
+fresh.setCollectionArt('album:fa', albumArtRel)
+check('collection art is used before a restart', Boolean(fresh.entry('f')?.artUrl))
+// A lyrics file left behind by a crash has no entry to belong to.
+makeFile(fresh.lyricsDir, 'ghost.json', 8)
 // A file with no entry (Windows deferred deletion) is swept on the next launch.
 makeFile(join(fresh.audioDir), 'orphan.m4a', 32)
 // A partial tmp dir with no job is swept too.
@@ -147,8 +195,10 @@ check(
 )
 check('referenced artwork survives', existsSync(join(fresh.root, artRel)) === true)
 check('orphan artwork removed', existsSync(join(fresh.artDir, 'orphan.jpg')) === false)
+check('orphan lyrics removed', existsSync(join(fresh.lyricsDir, 'ghost.json')) === false)
 check('valid entry survives', reopened.entry('d') !== null)
 check('entry keeps its art path', reopened.entry('e')?.art === artRel)
+check('entry without a thumbnail keeps the album cover', reopened.entry('f')?.art === albumArtRel)
 
 console.log('\nclear:')
 reopened.clear()
@@ -159,6 +209,7 @@ check(
   readdirSync(reopened.audioDir).length === 0
 )
 check('art dir empty after clear', readdirSync(reopened.artDir).length === 0)
+check('lyrics dir empty after clear', readdirSync(reopened.lyricsDir).length === 0)
 
 console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)

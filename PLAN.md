@@ -824,13 +824,15 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
 **Downloads view**
 
 - Header: count, total size, free disk space, "Delete all downloads" (confirmation).
-- Groups: Albums, Playlists, Songs; each can play, remove, and shows n/m when incomplete.
+- Groups: downloaded collections and loose songs. A song that belongs to a downloaded album, playlist or Liked Songs appears only inside that collection, never again under Songs; `n/m` marks incomplete collections.
+- Clicking a collection opens its downloaded collection page (cover, title, Play all, Remove download, per-song size/quality and remove). The play button on the row still plays the whole collection without leaving Downloads.
 - Renders from snapshots in the download index, so it works offline even though artist/album pages need the network.
-- Song rows: play, remove, size and quality.
+- Song rows: play, remove, size and quality, with artwork (the collection cover when a track has no thumbnail of its own).
 
 **Collection pages**
 
 - Album, playlist and Liked Songs heroes get a Download action with states: Download · Downloading n/m · Downloaded · Update (when tracks are missing).
+- A downloaded collection opens a local-first page with the same hero/play/track-row language as the online page, but marked "Downloaded album/playlist/liked songs" and "Offline ready". It lists only songs actually on disk, with Remove download at the collection and row level; removing a row drops that reference and deletes the file only when nothing else owns it.
 - Track rows get a download action/state in the existing hover cluster: idle, queued, downloading %, done, failed with retry.
 - Deleting a playlist, or removing a track from it, prunes that playlist's references. The confirmation states how many downloaded songs will be deleted.
 
@@ -853,7 +855,8 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
 userData/downloads/
   index.json          entries, collection references, persisted jobs
   audio/<trackId>.<ext>
-  art/<hash>.<ext>    offline covers
+  art/<hash>.<ext>    offline covers (content-addressed)
+  lyrics/<trackId>.json  lyrics pinned to a downloaded song
   tmp/<trackId>/      stable .part location for resume
 ```
 
@@ -894,8 +897,9 @@ type DownloadJob = {
 
 - The index is the truth for playback. An entry without a file is healed away; an orphan file with no entry is deleted on the next launch — which also finishes a removal whose file the OS still held open (Windows).
 - References: a direct song download adds `track:<id>`; an album or playlist adds its key to every member; Liked Songs adds the `liked` source. Unfavouriting never prunes, and removing the Liked Songs download deletes only the files no other source still owns. Removing a reference deletes the entry/file only when `sources` is empty. "Remove download" in Downloads clears all sources for that track.
+- Lyrics are part of a download: fetched when the song finishes and pinned under `downloads/lyrics/`, then served by the lyrics API before its offline check. Downloads made before this existed are backfilled the first time the app is online. Lyrics disappear with their entry.
 - Collection snapshots keep offline grouping working; n/m is computed against the live library where it exists, otherwise the snapshot.
-- Artwork is fetched at enqueue/download time through `net.fetch` (proxy-aware), size-capped, and served locally. Extend the media scheme's MIME table for images and restrict served paths to the cache/downloads roots as hardening.
+- Artwork is fetched at enqueue/download time through `net.fetch` (proxy-aware), size-capped, and served locally. A track with no thumbnail of its own borrows its downloaded collection's cover. Extend the media scheme's MIME table for images and restrict served paths to the cache/downloads roots as hardening.
 - One file per track id regardless of how many collections reference it.
 - On successful download, remove the cache entry; `kickOffBackgroundCache` skips downloaded tracks; cache eviction never sees downloads.
 
@@ -929,7 +933,8 @@ type DownloadJob = {
 - `src/main/downloads/manager.ts` — queue, progress, retries, resume, disk guard
 - `src/main/downloads/art.ts` — artwork fetch/cache
 - `src/renderer/lib/network.svelte.ts`, `src/renderer/lib/downloads.svelte.ts`
-- `src/renderer/components/DownloadsView.svelte`, `OfflineHome.svelte`, `DownloadButton.svelte`
+- `src/renderer/lib/download-groups.ts` — collection/loose-song split and offline artwork fallbacks
+- `src/renderer/components/DownloadsView.svelte`, `DownloadCollectionView.svelte`, `OfflineHome.svelte`, `DownloadButton.svelte`
 
 **Touched**
 

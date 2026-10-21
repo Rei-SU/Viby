@@ -13,6 +13,7 @@
   import TrackView from './components/TrackView.svelte'
   import LibraryView from './components/LibraryView.svelte'
   import CollectionView from './components/CollectionView.svelte'
+  import DownloadCollectionView from './components/DownloadCollectionView.svelte'
   import PlaylistPicker from './components/PlaylistPicker.svelte'
   import LyricsPanel from './components/LyricsPanel.svelte'
   import { lyrics } from './lib/lyrics.svelte'
@@ -88,9 +89,9 @@
     if (nav.track) return `track:${nav.track.id}`
     if (nav.detail) return `detail:${nav.detail.id}`
     if (nav.collection) {
-      return nav.collection.kind === 'liked'
-        ? 'collection:liked'
-        : `collection:${nav.collection.id}`
+      if (nav.collection.kind === 'liked') return 'collection:liked'
+      if (nav.collection.kind === 'playlist') return `collection:${nav.collection.id}`
+      return `collection:${nav.collection.key}`
     }
     return nav.view
   }
@@ -266,7 +267,11 @@
     {:else if nav.detail}
       <DetailView item={nav.detail} />
     {:else if nav.collection}
-      <CollectionView ref={nav.collection} />
+      {#if nav.collection.kind === 'download'}
+        <DownloadCollectionView collectionKey={nav.collection.key} />
+      {:else}
+        <CollectionView ref={nav.collection} />
+      {/if}
     {:else if nav.view === 'home'}
       {#if network.localFirst}
         <OfflineHome />

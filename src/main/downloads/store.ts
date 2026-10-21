@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   renameSync,
   rmSync,
   statSync,
-  unlinkSync
+  unlinkSync,
+  writeFileSync
 } from 'node:fs'
 import { statfs } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -18,6 +20,7 @@ import type {
   DownloadJobView,
   DownloadStats,
   DownloadsSnapshot,
+  Lyrics,
   Quality,
   Track
 } from '@shared/types'
@@ -55,6 +58,7 @@ export class DownloadsStore {
   constructor(private readonly root: string) {
     mkdirSync(this.audioDir, { recursive: true })
     mkdirSync(this.artDir, { recursive: true })
+    mkdirSync(this.lyricsDir, { recursive: true })
     mkdirSync(this.tmpDir, { recursive: true })
     this.store = new JsonStore<DownloadData>(join(root, 'index.json'), {
       entries: {},
@@ -76,6 +80,11 @@ export class DownloadsStore {
     return join(this.root, 'art')
   }
 
+  /** Lyrics saved with a download, so they keep working offline. */
+  get lyricsDir(): string {
+    return join(this.root, 'lyrics')
+  }
+
   get tmpDir(): string {
     return join(this.root, 'tmp')
   }
@@ -87,6 +96,36 @@ export class DownloadsStore {
   /** Video ids are already URL-safe, but never let an id escape the folder. */
   safeId(trackId: string): string {
     return trackId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 96)
+  }
+
+  lyricsPath(trackId: string): string {
+    return join(this.lyricsDir, `${this.safeId(trackId)}.json`)
+  }
+
+  /** The lyrics pinned to a download, or null when none were saved. */
+  lyrics(trackId: string): Lyrics | null {
+    try {
+      const parsed = JSON.parse(readFileSync(this.lyricsPath(trackId), 'utf8')) as Lyrics
+      if (!parsed || typeof parsed !== 'object' || typeof parsed.kind !== 'string') return null
+      return parsed
+    } catch {
+      return null
+    }
+  }
+
+  putLyrics(trackId: string, lyrics: Lyrics): void {
+    if (!this.store.get().entries[trackId]) return
+    try {
+      mkdirSync(this.lyricsDir, { recursive: true })
+      const file = this.lyricsPath(trackId)
+      // A unique temp name keeps the download-time and playback-time lookups
+      // from colliding if both finish at once.
+      const tmp = `${file}.${process.pid}.${Date.now()}.tmp`
+      writeFileSync(tmp, JSON.stringify(lyrics))
+      renameSync(tmp, file)
+    } catch {
+      // Lyrics are a bonus; a failed write must never fail a download or lookup.
+    }
   }
 
   lookup(trackId: string): string | null {
@@ -419,9 +458,11 @@ export class DownloadsStore {
     })
     rmSync(this.audioDir, { recursive: true, force: true })
     rmSync(this.artDir, { recursive: true, force: true })
+    rmSync(this.lyricsDir, { recursive: true, force: true })
     rmSync(this.tmpDir, { recursive: true, force: true })
     mkdirSync(this.audioDir, { recursive: true })
     mkdirSync(this.artDir, { recursive: true })
+    mkdirSync(this.lyricsDir, { recursive: true })
     mkdirSync(this.tmpDir, { recursive: true })
   }
 
@@ -438,6 +479,18 @@ export class DownloadsStore {
       for (const [id, entry] of Object.entries(data.entries)) {
         const file = join(this.audioDir, `${this.safeId(id)}.${entry.ext}`)
         if (!existsSync(file)) delete data.entries[id]
+      }
+
+      // Album tracks often arrive without their own thumbnail. Once the
+      // collection cover is on disk, make it the entry's cover too, so the
+      // artwork survives for downloads made before this fallback existed.
+      const collections = Object.values(data.collections)
+      for (const [id, entry] of Object.entries(data.entries)) {
+        if (entry.art && existsSync(join(this.root, entry.art))) continue
+        const owner = collections.find(
+          (collection) => collection.art && collection.trackIds.includes(id)
+        )
+        entry.art = owner?.art
       }
 
       for (const [id, job] of Object.entries(data.jobs)) {
@@ -475,6 +528,7 @@ export class DownloadsStore {
     }
 
     this.sweepArt()
+    this.sweepLyrics()
   }
 
   /**
@@ -499,6 +553,19 @@ export class DownloadsStore {
     }
   }
 
+  /** Lyrics belong to their entry; delete files whose entry is gone. */
+  private sweepLyrics(): void {
+    const wanted = new Set(Object.keys(this.store.get().entries).map((id) => `${this.safeId(id)}.json`))
+    for (const name of this.lyricsFiles()) {
+      if (wanted.has(name)) continue
+      try {
+        unlinkSync(join(this.lyricsDir, name))
+      } catch {
+        // Still held; the next launch tries again.
+      }
+    }
+  }
+
   private audioFiles(): string[] {
     try {
       return readdirSync(this.audioDir)
@@ -510,6 +577,14 @@ export class DownloadsStore {
   private artFiles(): string[] {
     try {
       return readdirSync(this.artDir)
+    } catch {
+      return []
+    }
+  }
+
+  private lyricsFiles(): string[] {
+    try {
+      return readdirSync(this.lyricsDir)
     } catch {
       return []
     }
@@ -529,14 +604,25 @@ export class DownloadsStore {
     } catch {
       // Already gone; the index entry is the part that matters.
     }
+    rmSync(this.lyricsPath(trackId), { force: true })
+  }
+
+  /** The entry's own cover, or the cover of a downloaded collection it belongs to. */
+  private artForEntry(entry: DownloadEntry): string | undefined {
+    if (entry.art) return entry.art
+    const owner = Object.values(this.store.get().collections).find(
+      (collection) => collection.art && collection.trackIds.includes(entry.track.id)
+    )
+    return owner?.art
   }
 
   private decorateEntry(entry: DownloadEntry): DownloadEntry {
+    const art = this.artForEntry(entry)
     return {
       ...entry,
       track: { ...entry.track },
       sources: [...entry.sources],
-      artUrl: entry.art ? mediaUrlFor(join(this.root, entry.art)) : undefined
+      artUrl: art ? mediaUrlFor(join(this.root, art)) : undefined
     }
   }
 

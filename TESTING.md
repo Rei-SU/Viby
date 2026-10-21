@@ -51,8 +51,9 @@ ones that touch main-process modules.
 | `lyrics` | LRCLIB synced/plain, lyrics.ovh backup, cache, miss |
 | `spotify` | Anonymous Spotify pathfinder: 200-track pagination, fields, non-playlist rejection |
 | `import` | Link detection, all four non-Spotify adapters, matcher scoring, YouTube exact path |
-| `downloads-store` | downloads index: references, shared-file survival, pruning, healing, orphan sweep, path safety |
+| `downloads-store` | downloads index: references, shared-file survival, pruning, healing, orphan sweep, pinned lyrics, path safety |
 | `downloads-manager` | yt-dlp progress parsing (known/unknown totals) and transient-vs-permanent failure classification |
+| `download-groups` | Downloads page split: collection-owned vs loose songs, album order, offline artwork fallbacks |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 
 ### E2E scenarios (app must be running)
@@ -110,7 +111,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | e2e `settings`, `playback` (volume restore) · behaviour |
 | `src/main/json-store.ts` | unit `library` · e2e `library`, `resume` |
 | `src/main/downloads/**`, `src/main/network.ts` | unit `downloads-store`, `downloads-manager`, `network` · e2e `offline`, `playback` |
-| `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `DownloadsView`, `OfflineHome` | e2e `offline`, `playback`, `navigation` |
+| `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `DownloadsView`, `OfflineHome` | e2e `offline`, `playback`, `navigation` · unit `download-groups` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links` · behaviour |
 | `src/renderer/lib/nav.svelte.ts` | e2e `navigation`, `links` |

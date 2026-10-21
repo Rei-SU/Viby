@@ -1,53 +1,48 @@
 <script lang="ts">
   import type { CatalogItem, DownloadCollection, DownloadEntry, DownloadJobView } from '@shared/types'
   import { downloads } from '../lib/downloads.svelte'
+  import { nav } from '../lib/nav.svelte'
   import { player } from '../lib/player.svelte'
-  import { trackToItem } from '../lib/track'
+  import {
+    collectionBytes,
+    collectionEntries,
+    collectionItems,
+    entryToItem,
+    formatSize as size,
+    standaloneEntries
+  } from '../lib/download-groups'
   import Icon from './Icon.svelte'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
 
   const entries = $derived(downloads.entries)
+  const collections = $derived(downloads.collections)
   const stats = $derived(downloads.stats)
   const jobs = $derived(
     Object.values(downloads.jobs).sort((a, b) => a.track.title.localeCompare(b.track.title))
   )
 
   const groups = $derived.by(() =>
-    downloads.collections
-      .map((collection) => ({ collection, tracks: collectionEntries(collection) }))
+    collections
+      .map((collection) => ({
+        collection,
+        entries: collectionEntries(collection, entries),
+        items: collectionItems(collection, entries)
+      }))
       .filter((group) => group.collection.trackIds.length > 0)
   )
 
-  const allItems = $derived(entries.map(entryItem))
+  const allItems = $derived(entries.map((entry) => entryToItem(entry, collections)))
 
-  function entryItem(entry: DownloadEntry): CatalogItem {
-    return {
-      ...trackToItem(entry.track),
-      thumbnail: entry.artUrl ?? entry.track.thumbnail
-    }
-  }
+  /**
+   * A song that belongs to a downloaded album/playlist lives on that page. Listing
+   * it here too made a downloaded album look like a pile of loose tracks.
+   */
+  const standalone = $derived(standaloneEntries(collections, entries))
+  const standaloneItems = $derived(standalone.map((entry) => entryToItem(entry, collections)))
 
-  function collectionEntries(collection: DownloadCollection): CatalogItem[] {
-    const byId = new Map(entries.map((entry) => [entry.track.id, entry]))
-    return collection.trackIds
-      .map((id) => byId.get(id))
-      .filter((entry): entry is DownloadEntry => Boolean(entry))
-      .map(entryItem)
-  }
-
-  function size(bytes: number | undefined): string {
-    if (!bytes) return '0 MB'
-    const gb = bytes / 1024 ** 3
-    if (gb >= 1) return `${gb.toFixed(1)} GB`
-    return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`
-  }
-
-  function collectionSize(collection: DownloadCollection): number {
-    const ids = new Set(collection.trackIds)
-    return entries
-      .filter((entry) => ids.has(entry.track.id))
-      .reduce((sum, entry) => sum + entry.bytes, 0)
+  function openCollection(collection: DownloadCollection): void {
+    nav.openCollection({ kind: 'download', key: collection.key })
   }
 
   function play(tracks: CatalogItem[]): void {
@@ -169,9 +164,15 @@
       <ul class="collections">
         {#each groups as group (group.collection.key)}
           <li class="collection">
-            <button class="collection-main" onclick={() => play(group.tracks)}>
+            <button
+              class="collection-main"
+              title="Open downloaded {group.collection.kind === 'liked'
+                ? 'collection'
+                : group.collection.kind}"
+              onclick={() => openCollection(group.collection)}
+            >
               <Cover
-                src={group.collection.artUrl ?? group.collection.thumbnail ?? group.tracks[0]?.thumbnail}
+                src={group.collection.artUrl ?? group.collection.thumbnail ?? group.items[0]?.thumbnail}
                 size={52}
                 radius={group.collection.kind === 'album' ? 8 : 12}
                 alt={group.collection.title}
@@ -184,13 +185,13 @@
                     : group.collection.kind === 'playlist'
                       ? 'Playlist'
                       : 'Album'}
-                  · {group.tracks.length}/{group.collection.trackIds.length}
+                  · {group.entries.length}/{group.collection.trackIds.length}
                   {group.collection.trackIds.length === 1 ? 'song' : 'songs'} ·
-                  {size(collectionSize(group.collection))}
+                  {size(collectionBytes(group.collection, entries))}
                 </span>
               </span>
             </button>
-            <button class="icon-btn" title="Play" onclick={() => play(group.tracks)}>
+            <button class="icon-btn" title="Play" onclick={() => play(group.items)}>
               <Icon name="play" size={14} solid />
             </button>
             <button
@@ -206,15 +207,15 @@
     </section>
   {/if}
 
-  {#if entries.length > 0}
+  {#if standalone.length > 0}
     <section class="section">
       <h2>Songs</h2>
       <ul class="rows">
-        {#each entries as entry, index (entry.track.id)}
+        {#each standalone as entry, index (entry.track.id)}
           <TrackRow
-            item={entryItem(entry)}
+            item={entryToItem(entry, collections)}
             {index}
-            context={allItems}
+            context={standaloneItems}
             showDownload={false}
             meta={`${size(entry.bytes)} · ${entry.quality === 'data-saver' ? 'Data saver' : 'Best'}`}
             onRemove={() => void removeTrack(entry)}
@@ -222,7 +223,7 @@
         {/each}
       </ul>
     </section>
-  {:else if jobs.length === 0}
+  {:else if entries.length === 0 && jobs.length === 0}
     <section class="empty">
       <div class="empty-art"><Icon name="download" size={26} /></div>
       <div>

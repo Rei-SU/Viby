@@ -22,7 +22,7 @@
   const tracks = $derived(isLiked ? liked : (playlist?.tracks ?? []))
   const items = $derived(tracks.map(trackToItem))
   const title = $derived(isLiked ? 'Liked songs' : (playlist?.name ?? 'Playlist'))
-  const cover = $derived(tracks[0]?.thumbnail)
+  const cover = $derived(tracks.find((track) => track.thumbnail)?.thumbnail)
   const total = $derived(tracks.reduce((acc, track) => acc + (track.durationSec ?? 0), 0))
   const collectionKey = $derived(
     isLiked ? 'liked' : playlist ? `playlist:${playlist.id}` : null

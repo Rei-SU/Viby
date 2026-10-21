@@ -88,6 +88,8 @@ const api: VibyApi = {
       ipcRenderer.invoke(CH.downloadsAddCollection, input, tracks),
     removeTrack: (trackId: string) => ipcRenderer.invoke(CH.downloadsRemoveTrack, trackId),
     removeCollection: (key: string) => ipcRenderer.invoke(CH.downloadsRemoveCollection, key),
+    pruneCollection: (key: string, trackIds: string[]) =>
+      ipcRenderer.invoke(CH.downloadsPruneCollection, key, trackIds),
     clear: () => ipcRenderer.invoke(CH.downloadsClear),
     retry: (trackId: string) => ipcRenderer.invoke(CH.downloadsRetry, trackId),
     cancel: (trackId: string) => ipcRenderer.invoke(CH.downloadsCancel, trackId),
