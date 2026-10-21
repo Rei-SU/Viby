@@ -10,7 +10,8 @@ export const DEFAULT_SETTINGS: Settings = {
   muted: false,
   shuffle: false,
   repeat: 'off',
-  autoplay: true
+  autoplay: true,
+  offlineMode: 'auto'
 }
 
 let store: JsonStore<Settings> | null = null

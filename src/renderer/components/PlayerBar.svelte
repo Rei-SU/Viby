@@ -48,7 +48,13 @@
     if (!stream) return ''
     const parts = [codec ?? stream.ext.toUpperCase()]
     if (stream.bitrateKbps) parts.push(`${stream.bitrateKbps} kbps`)
-    parts.push(stream.kind === 'file' ? 'cached on disk' : 'streaming')
+    parts.push(
+      stream.source === 'download'
+        ? 'downloaded'
+        : stream.kind === 'file'
+          ? 'cached on disk'
+          : 'streaming'
+    )
     return parts.join(' · ')
   })
 

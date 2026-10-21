@@ -2,6 +2,7 @@
   import type { SearchFilterName } from '@shared/types'
   import { player } from '../lib/player.svelte'
   import { searchState } from '../lib/search.svelte'
+  import { network } from '../lib/network.svelte'
   import TrackRow from './TrackRow.svelte'
 
   const filters: { id: SearchFilterName; label: string }[] = [
@@ -20,20 +21,32 @@
   <header class="head">
     <h1>Search</h1>
     {#if searchState.query.trim()}
-      <p class="for">Results for “{searchState.query.trim()}”</p>
+      <p class="for">
+        {network.localFirst ? 'Searching your downloads for ' : 'Results for '}“{searchState.query
+          .trim()}”
+      </p>
     {/if}
   </header>
 
-  <div class="chips">
-    {#each filters as f (f.id)}
-      <button class="chip" class:on={searchState.filter === f.id} onclick={() => searchState.setFilter(f.id)}>
-        {f.label}
-      </button>
-    {/each}
-    {#if items.length > 0}
-      <span class="count">{items.length} results</span>
-    {/if}
-  </div>
+  {#if network.localFirst}
+    <div class="chips">
+      <span class="offline-hint">Offline — only downloaded songs can be found.</span>
+      {#if items.length > 0}
+        <span class="count">{items.length} downloads</span>
+      {/if}
+    </div>
+  {:else}
+    <div class="chips">
+      {#each filters as f (f.id)}
+        <button class="chip" class:on={searchState.filter === f.id} onclick={() => searchState.setFilter(f.id)}>
+          {f.label}
+        </button>
+      {/each}
+      {#if items.length > 0}
+        <span class="count">{items.length} results</span>
+      {/if}
+    </div>
+  {/if}
 
   {#if searchState.error}
     <div class="notice">
@@ -45,9 +58,16 @@
   {#if searchState.loading && items.length === 0}
     <p class="placeholder">Searching…</p>
   {:else if !searchState.query.trim()}
-    <p class="placeholder">Search from the bar above — songs, artists, albums and playlists.</p>
+    <p class="placeholder">
+      {network.localFirst
+        ? 'Search your downloads by title, artist or album.'
+        : 'Search from the bar above — songs, artists, albums and playlists.'}
+    </p>
   {:else if items.length === 0}
-    <p class="placeholder">No results for “{searchState.query.trim()}”.</p>
+    <p class="placeholder">
+      {network.localFirst ? 'No downloaded songs match' : 'No results for'} “{searchState.query
+        .trim()}”.
+    </p>
   {:else}
     <ul class="results">
       {#each items as item (item.kind + item.id + item.title)}
@@ -90,6 +110,11 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+  }
+
+  .offline-hint {
+    color: #f0c477;
+    font-size: 11.5px;
   }
 
   .chip {

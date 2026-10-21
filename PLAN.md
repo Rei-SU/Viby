@@ -887,11 +887,13 @@ type DownloadJob = {
   state: 'queued' | 'downloading' | 'paused' | 'failed'
   error?: string
   attempts: number
+  /** Last reported total, so a retry can guard free space. */
+  estimateBytes?: number
 }
 ```
 
-- The index is the truth for playback. An entry without a file is healed away; a file without an entry is ignored.
-- References: a direct song download adds `track:<id>`; an album or playlist adds its key to every member. Liked Songs also adds `track:<id>`, so unfavouriting keeps the download; its `liked` collection entry exists only for grouping. Removing a reference deletes the entry/file only when `sources` is empty. "Remove download" in Downloads clears all sources for that track.
+- The index is the truth for playback. An entry without a file is healed away; an orphan file with no entry is deleted on the next launch — which also finishes a removal whose file the OS still held open (Windows).
+- References: a direct song download adds `track:<id>`; an album or playlist adds its key to every member; Liked Songs adds the `liked` source. Unfavouriting never prunes, and removing the Liked Songs download deletes only the files no other source still owns. Removing a reference deletes the entry/file only when `sources` is empty. "Remove download" in Downloads clears all sources for that track.
 - Collection snapshots keep offline grouping working; n/m is computed against the live library where it exists, otherwise the snapshot.
 - Artwork is fetched at enqueue/download time through `net.fetch` (proxy-aware), size-capped, and served locally. Extend the media scheme's MIME table for images and restrict served paths to the cache/downloads roots as hardening.
 - One file per track id regardless of how many collections reference it.

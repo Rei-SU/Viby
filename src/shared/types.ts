@@ -37,6 +37,8 @@ export type StreamInfo = {
   bitrateKbps?: number
   expiresAt: number
   cached: boolean
+  /** Local files can come from the invisible cache or an explicit download. */
+  source?: 'cache' | 'download'
 }
 
 export type ResolveResult = {
@@ -51,6 +53,8 @@ export type Repeat = 'off' | 'all' | 'one'
 export type Quality = 'best' | 'data-saver'
 export type SearchFilterName = 'all' | 'songs' | 'albums' | 'artists' | 'playlists'
 
+export type OfflineMode = 'auto' | 'offline'
+
 export type Settings = {
   audioQuality: Quality
   cacheCapBytes: number
@@ -60,6 +64,19 @@ export type Settings = {
   repeat: Repeat
   /** Keep playing related tracks when the queue runs out. */
   autoplay: boolean
+  /** `auto` follows connectivity; `offline` is the manual switch. */
+  offlineMode: OfflineMode
+}
+
+/** Connectivity as the main process sees it, not just `navigator.onLine`. */
+export type NetworkStatus = 'online' | 'offline' | 'unreachable'
+
+export type NetworkState = {
+  status: NetworkStatus
+  /** The user forced offline mode from Settings. */
+  forcedOffline: boolean
+  checkedAt: number
+  detail?: string
 }
 
 export type CatalogKind = 'song' | 'album' | 'artist' | 'playlist' | 'unknown'
@@ -152,6 +169,91 @@ export type CacheStats = {
   capBytes: number
   entries: number
   dir: string
+}
+
+// ---- explicit downloads (PLAN §17) ---------------------------------------
+// Downloads are deliberately not cache entries: they are user-owned, visible,
+// reference-counted and never auto-evicted.
+
+export type DownloadJobState = 'queued' | 'downloading' | 'paused' | 'failed'
+
+/** Source keys that keep a downloaded file alive. */
+export type DownloadSource = string // 'track:<id>' | 'album:<id>' | 'playlist:<id>' | 'liked'
+
+export type DownloadEntry = {
+  /** Snapshot, so the offline UI needs no catalog or network. */
+  track: Track
+  ext: string
+  bytes: number
+  bitrateKbps?: number
+  downloadedAt: number
+  quality: Quality
+  /** Relative path under the downloads root. */
+  art?: string
+  /** Absolute media URL, decorated by the main process for the renderer. */
+  artUrl?: string
+  sources: DownloadSource[]
+}
+
+export type DownloadCollectionKind = 'album' | 'playlist' | 'liked'
+
+export type DownloadCollection = {
+  /** `album:<id>`, `playlist:<id>` or `liked`. */
+  key: string
+  kind: DownloadCollectionKind
+  title: string
+  thumbnail?: string
+  art?: string
+  artUrl?: string
+  /** Snapshot at request time; live coverage is computed against the library. */
+  trackIds: string[]
+  addedAt: number
+}
+
+export type DownloadCollectionInput = {
+  key: string
+  kind: DownloadCollectionKind
+  title: string
+  thumbnail?: string
+  trackIds: string[]
+}
+
+export type DownloadStats = {
+  bytes: number
+  entries: number
+  freeBytes: number
+  dir: string
+}
+
+export type DownloadJobView = {
+  trackId: string
+  track: Track
+  sources: DownloadSource[]
+  state: DownloadJobState
+  quality: Quality
+  attempts: number
+  error?: string
+  downloadedBytes?: number
+  totalBytes?: number
+  speedBps?: number
+  percent?: number
+}
+
+export type DownloadsSnapshot = {
+  entries: DownloadEntry[]
+  collections: DownloadCollection[]
+  jobs: DownloadJobView[]
+  stats: DownloadStats
+}
+
+export type DownloadProgress = {
+  trackId: string
+  state: DownloadJobState
+  downloadedBytes?: number
+  totalBytes?: number
+  speedBps?: number
+  percent?: number
+  error?: string
 }
 
 export type YtDlpInfo = {

@@ -1,17 +1,22 @@
 import { createReadStream, statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
-import { app, ipcMain, powerSaveBlocker, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, powerSaveBlocker, protocol } from 'electron'
 import type {
   BrowseResult,
   CatalogItem,
+  DownloadCollectionInput,
+  DownloadProgress,
+  DownloadsSnapshot,
   HistoryEntry,
   ImportCreateInput,
   ImportMatch,
   ImportProgress,
   ImportSource,
   Lyrics,
+  NetworkState,
+  OfflineMode,
   PlaybackSession,
   Playlist,
   ResolveResult,
@@ -36,13 +41,28 @@ import { JsonStore, userDataFile } from './json-store'
 import { MEDIA_SCHEME, mediaUrlFor, mimeForPath, pathFromMediaUrl } from './media'
 import * as innertube from './innertube/client'
 import { resolveImport, matchImport } from './import'
+import { networkMonitor } from './network'
+import { DownloadsStore } from './downloads/store'
+import { DownloadManager } from './downloads/manager'
 
 const resolver = new Resolver()
 const inflightDownloads = new Set<string>()
 let blockerId: number | null = null
+let downloadBlockerId: number | null = null
+/** The track the <audio> element is currently on, for download-safety checks. */
+let playingTrackId: string | null = null
+let lastResolvedId: string | null = null
 let activeResolve: AbortController | null = null
 /** All in-flight hover prefetches share one controller so a real click can cancel them. */
 let prefetchAbort: AbortController | null = null
+
+let downloads: DownloadsStore | null = null
+let downloadsManager: DownloadManager | null = null
+
+function downloadStore(): DownloadsStore {
+  if (!downloads) downloads = new DownloadsStore(join(app.getPath('userData'), 'downloads'))
+  return downloads
+}
 
 export function audioCache(): AudioCache {
   return new AudioCache(join(app.getPath('userData'), 'cache', 'audio'), () => settings().get().cacheCapBytes)
@@ -67,6 +87,10 @@ export function registerIpc(): void {
     ok: false,
     error: err instanceof Error ? err.message : String(err)
   })
+  const offline = (): Result<never> | null =>
+    networkMonitor.isOffline()
+      ? fail(new Error("You're offline. Connect to the internet to browse."))
+      : null
 
   let importJob: { cancelled: boolean } | null = null
 
@@ -81,6 +105,56 @@ export function registerIpc(): void {
   cacheInstance()
   cacheInstance().evict()
 
+  // ---- offline + downloads (PLAN §17) ------------------------------------
+  const broadcast = <T>(channel: string, payload: T): void => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(channel, payload)
+    }
+  }
+
+  const downloadsStore = downloadStore()
+  const manager = new DownloadManager(downloadsStore, {
+    isOffline: () => networkMonitor.isOffline(),
+    onProgress: (progress: DownloadProgress) => broadcast(CH.downloadsProgress, progress),
+    onChanged: () => {
+      void manager.snapshot().then((snapshot) => broadcast(CH.downloadsChanged, snapshot))
+    },
+    onBusy: (busy) => {
+      // Downloads deserve the same app-suspension protection playback gets.
+      if (busy && downloadBlockerId === null) {
+        downloadBlockerId = powerSaveBlocker.start('prevent-app-suspension')
+      } else if (!busy && downloadBlockerId !== null) {
+        powerSaveBlocker.stop(downloadBlockerId)
+        downloadBlockerId = null
+      }
+    },
+    onCompleted: (trackId) => {
+      // The explicit download supersedes the invisible cache copy — unless that
+      // copy is the file currently playing, which must survive until eviction.
+      if (playingTrackId !== trackId) cacheInstance().remove(trackId)
+      const entry = downloadsStore.entry(trackId)
+      if (entry) remember(entry.track)
+    }
+  })
+  downloadsManager = manager
+
+  networkMonitor.onChange((state: NetworkState) => {
+    broadcast(CH.networkChanged, state)
+    // `unreachable` keeps the network path alive; only a missing link pauses.
+    manager.onNetworkChange(networkMonitor.isOffline())
+  })
+  networkMonitor.start()
+  manager.start()
+
+  app.on('before-quit', () => {
+    manager.shutdown()
+    networkMonitor.stop()
+    if (downloadBlockerId !== null) {
+      powerSaveBlocker.stop(downloadBlockerId)
+      downloadBlockerId = null
+    }
+  })
+
   ipcMain.handle(CH.settingsGet, (): Settings => settings().get())
 
   ipcMain.handle(CH.settingsSet, (_e, patch: Partial<Settings>): Settings => {
@@ -90,6 +164,9 @@ export function registerIpc(): void {
     // A smaller cap must take effect immediately, not on next launch.
     cacheInstance().evict()
 
+    // The offline switch may have been changed through the generic settings API.
+    if (patch.offlineMode !== undefined) networkMonitor.applySettings()
+
     // Stream URLs were resolved for the old quality ceiling; drop them so the
     // next play honours the new setting instead of reusing a stale bitrate.
     if (next.audioQuality !== previous) resolver.clearUrlCache()
@@ -97,8 +174,60 @@ export function registerIpc(): void {
     return next
   })
 
+  ipcMain.handle(CH.networkGet, (): NetworkState => networkMonitor.get())
+
+  ipcMain.handle(CH.networkSetMode, (_e, mode: OfflineMode): NetworkState =>
+    networkMonitor.setMode(mode === 'offline' ? 'offline' : 'auto')
+  )
+
+  const snapshot = (): Promise<DownloadsSnapshot> => manager.snapshot()
+
+  ipcMain.handle(CH.downloadsSnapshot, () => snapshot())
+
+  ipcMain.handle(CH.downloadsAddTrack, (_e, track: Track): Promise<DownloadsSnapshot> => {
+    manager.addTrack(track, settings().get().audioQuality)
+    return snapshot()
+  })
+
+  ipcMain.handle(
+    CH.downloadsAddCollection,
+    (_e, input: DownloadCollectionInput, tracks: Track[]): Promise<DownloadsSnapshot> => {
+      manager.addCollection(input, Array.isArray(tracks) ? tracks : [], settings().get().audioQuality)
+      return snapshot()
+    }
+  )
+
+  ipcMain.handle(CH.downloadsRemoveTrack, (_e, trackId: string): Promise<DownloadsSnapshot> => {
+    manager.removeTrack(trackId)
+    return snapshot()
+  })
+
+  ipcMain.handle(
+    CH.downloadsRemoveCollection,
+    (_e, key: string): Promise<DownloadsSnapshot> => {
+      manager.removeCollection(key)
+      return snapshot()
+    }
+  )
+
+  ipcMain.handle(CH.downloadsClear, (): Promise<DownloadsSnapshot> => {
+    manager.clear()
+    return snapshot()
+  })
+
+  ipcMain.handle(CH.downloadsRetry, (_e, trackId: string): Promise<DownloadsSnapshot> => {
+    manager.retry(trackId)
+    return snapshot()
+  })
+
+  ipcMain.handle(CH.downloadsCancel, (_e, trackId: string): Promise<DownloadsSnapshot> => {
+    manager.cancel(trackId)
+    return snapshot()
+  })
+
   ipcMain.handle(CH.lyricsGet, async (_e, req: LyricsRequest): Promise<Result<Lyrics>> => {
     try {
+      if (networkMonitor.isOffline()) throw new Error("You're offline.")
       return ok(await getLyrics(req))
     } catch (err) {
       return fail(err)
@@ -122,7 +251,9 @@ export function registerIpc(): void {
     const controller = new AbortController()
     activeResolve = controller
     try {
-      return ok(await resolveForPlayback(req, controller.signal))
+      const result = await resolveForPlayback(req, controller.signal)
+      lastResolvedId = result.track.id
+      return ok(result)
     } catch (err) {
       return fail(err)
     } finally {
@@ -143,8 +274,10 @@ export function registerIpc(): void {
   const prefetching = new Set<string>()
   ipcMain.on(CH.playerPrefetch, (_e, input: string) => {
     const value = input?.trim()
-    if (!value || activeResolve) return
+    if (!value || activeResolve || networkMonitor.isOffline()) return
     if (prefetching.has(value) || prefetching.size >= 2) return
+    const directId = Resolver.extractId(value)
+    if (directId && downloadStore().has(directId)) return
     if (resolver.hasCached(value, qualityCapKbps())) return
 
     if (!prefetchAbort) prefetchAbort = new AbortController()
@@ -166,6 +299,8 @@ export function registerIpc(): void {
     async (_e, query: string, filter?: SearchFilterName): Promise<Result<CatalogItem[]>> => {
       try {
         if (!query?.trim()) return ok([])
+        const blocked = offline()
+        if (blocked) return blocked
         return ok(await innertube.search(query.trim(), filter ?? 'all'))
       } catch (err) {
         return fail(err)
@@ -177,6 +312,8 @@ export function registerIpc(): void {
     CH.catalogBrowse,
     async (_e, browseId: string): Promise<Result<BrowseResult>> => {
       try {
+        const blocked = offline()
+        if (blocked) return blocked
         return ok(await innertube.browse(browseId))
       } catch (err) {
         return fail(err)
@@ -186,6 +323,8 @@ export function registerIpc(): void {
 
   ipcMain.handle(CH.catalogHome, async (): Promise<Result<Shelf[]>> => {
     try {
+      const blocked = offline()
+      if (blocked) return blocked
       return ok(await innertube.home())
     } catch (err) {
       return fail(err)
@@ -194,6 +333,8 @@ export function registerIpc(): void {
 
   ipcMain.handle(CH.catalogCharts, async (): Promise<Result<Shelf[]>> => {
     try {
+      const blocked = offline()
+      if (blocked) return blocked
       return ok(await innertube.charts())
     } catch (err) {
       return fail(err)
@@ -202,6 +343,8 @@ export function registerIpc(): void {
 
   ipcMain.handle(CH.catalogRadio, async (_e, videoId: string): Promise<Result<CatalogItem[]>> => {
     try {
+      const blocked = offline()
+      if (blocked) return blocked
       return ok(await innertube.radio(videoId))
     } catch (err) {
       return fail(err)
@@ -212,6 +355,8 @@ export function registerIpc(): void {
     CH.catalogAudioTrack,
     async (_e, videoId: string, title: string, artist: string): Promise<Result<CatalogItem | null>> => {
       try {
+        const blocked = offline()
+        if (blocked) return blocked
         return ok(await innertube.audioTrackFor(videoId, title, artist))
       } catch (err) {
         return fail(err)
@@ -220,6 +365,7 @@ export function registerIpc(): void {
   )
 
   ipcMain.on(CH.playerState, (_e, playing: boolean) => {
+    playingTrackId = playing ? lastResolvedId : null
     if (playing && blockerId === null) {
       blockerId = powerSaveBlocker.start('prevent-display-sleep')
     } else if (!playing && blockerId !== null) {
@@ -269,16 +415,25 @@ export function registerIpc(): void {
     lib().renamePlaylist(id, name)
   )
 
-  ipcMain.handle(CH.libraryPlaylistDelete, (_e, id: string): void => lib().deletePlaylist(id))
+  ipcMain.handle(CH.libraryPlaylistDelete, (_e, id: string): void => {
+    lib().deletePlaylist(id)
+    // Delete the download references, not the files another source still owns.
+    downloadsManager?.removeCollection(`playlist:${id}`)
+  })
 
-  ipcMain.handle(CH.libraryPlaylistAdd, (_e, id: string, track: Track): Playlist | null =>
-    lib().addToPlaylist(id, track)
-  )
+  ipcMain.handle(CH.libraryPlaylistAdd, (_e, id: string, track: Track): Playlist | null => {
+    const playlist = lib().addToPlaylist(id, track)
+    if (playlist) downloadsManager?.syncCollection(`playlist:${id}`, playlist.tracks.map((t) => t.id))
+    return playlist
+  })
 
-  ipcMain.handle(
-    CH.libraryPlaylistRemove,
-    (_e, id: string, trackId: string): Playlist | null => lib().removeFromPlaylist(id, trackId)
-  )
+  ipcMain.handle(CH.libraryPlaylistRemove, (_e, id: string, trackId: string): Playlist | null => {
+    const playlist = lib().removeFromPlaylist(id, trackId)
+    if (playlist) {
+      downloadsManager?.pruneCollection(`playlist:${id}`, playlist.tracks.map((t) => t.id))
+    }
+    return playlist
+  })
 
   ipcMain.handle(CH.importResolve, async (_e, url: string): Promise<Result<ImportSource>> => {
     try {
@@ -372,10 +527,31 @@ async function resolveForPlayback(
   const store = cacheInstance()
   const known = trackStore().get()
   const directId = Resolver.extractId(input)
+  const offline = networkMonitor.isOffline()
+
+  // 1. An explicit download always wins, even over a fresh URL. It is the one
+  //    file the user asked us to keep.
+  if (directId) {
+    const file = downloadStore().lookup(directId)
+    const entry = downloadStore().entry(directId)
+    if (file && entry) {
+      const track = known[directId] ?? entry.track
+      remember(track)
+      return {
+        track,
+        stream: localStream(file, entry.ext, directId, 'download'),
+        client: 'download',
+        resolveMs: 0
+      }
+    }
+  }
 
   if (req.discardCache && directId) store.remove(directId)
 
-  if (directId && !req.force) {
+  // 2. The invisible cache is still a valid offline bonus when no explicit
+  //    download exists. On a forced retry we normally bypass it, except offline,
+  //    where a cached copy is better than a guaranteed failure.
+  if (directId && (!req.force || offline)) {
     const file = store.lookup(directId)
     const track = known[directId]
     if (file && track) {
@@ -387,6 +563,10 @@ async function resolveForPlayback(
         resolveMs: 0
       }
     }
+  }
+
+  if (offline) {
+    throw new Error("You're offline. This song isn't downloaded.")
   }
 
   try {
@@ -426,7 +606,12 @@ function remember(track: Track): void {
  * and the track store has the duration — enough to report the real average
  * bitrate in the player's quality tag.
  */
-function localStream(file: string, ext: string, trackId: string): StreamInfo {
+function localStream(
+  file: string,
+  ext: string,
+  trackId: string,
+  source: 'cache' | 'download' = 'cache'
+): StreamInfo {
   let bitrateKbps: number | undefined
   try {
     const duration = trackStore().get()[trackId]?.durationSec ?? 0
@@ -444,13 +629,16 @@ function localStream(file: string, ext: string, trackId: string): StreamInfo {
     mime: mimeForPath(file),
     bitrateKbps,
     expiresAt: Number.MAX_SAFE_INTEGER,
-    cached: true
+    cached: source === 'cache',
+    source
   }
 }
 
 function kickOffBackgroundCache(track: Track, input: string): void {
   const store = cacheInstance()
   if (store.has(track.id) || inflightDownloads.has(track.id)) return
+  // A user-owned download already covers this track; do not duplicate the file.
+  if (downloadStore().has(track.id)) return
 
   const worth = shouldCache({
     favorited: lib().isFavorite(track.id),
@@ -482,7 +670,13 @@ export function handleMediaProtocol(): void {
   // cached track was unseekable: dragging the scrubber snapped back to zero.
   // Serving real 206 partial responses fixes it.
   protocol.handle(MEDIA_SCHEME, async (request) => {
-    const file = pathFromMediaUrl(request.url)
+    const requested = pathFromMediaUrl(request.url)
+    const file = resolve(requested)
+    const userData = app.getPath('userData')
+    const allowed = [join(userData, 'cache'), join(userData, 'downloads')]
+    if (!allowed.some((root) => file === root || file.startsWith(root + sep))) {
+      return new Response('Not found', { status: 404 })
+    }
 
     let total: number
     try {

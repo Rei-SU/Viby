@@ -4,6 +4,7 @@
   import { nav, type CollectionRef } from '../lib/nav.svelte'
   import { playlists } from '../lib/playlists.svelte'
   import { player } from '../lib/player.svelte'
+  import { downloads } from '../lib/downloads.svelte'
   import { trackToItem } from '../lib/track'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
@@ -23,6 +24,11 @@
   const title = $derived(isLiked ? 'Liked songs' : (playlist?.name ?? 'Playlist'))
   const cover = $derived(tracks[0]?.thumbnail)
   const total = $derived(tracks.reduce((acc, track) => acc + (track.durationSec ?? 0), 0))
+  const collectionKey = $derived(
+    isLiked ? 'liked' : playlist ? `playlist:${playlist.id}` : null
+  )
+  const dlCounts = $derived(downloads.countsFor(tracks))
+  const fullyDownloaded = $derived(dlCounts.total > 0 && dlCounts.done === dlCounts.total)
 
   $effect(() => {
     if (isLiked) void loadLiked()
@@ -35,6 +41,30 @@
 
   function playAll(): void {
     if (items.length > 0) void player.playList(items, 0)
+  }
+
+  async function downloadCollection(): Promise<void> {
+    if (!collectionKey) return
+    if (fullyDownloaded) {
+      if (window.confirm(`Remove “${title}” from downloads?`)) {
+        await downloads.removeCollection(collectionKey)
+      }
+      return
+    }
+
+    for (const track of tracks) {
+      if (downloads.stateFor(track.id) === 'failed') await downloads.retry(track.id)
+    }
+    await downloads.addCollection(
+      {
+        key: collectionKey,
+        kind: isLiked ? 'liked' : 'playlist',
+        title,
+        thumbnail: cover,
+        trackIds: tracks.map((track) => track.id)
+      },
+      tracks
+    )
   }
 
   async function remove(item: CatalogItem): Promise<void> {
@@ -107,11 +137,37 @@
           <span>Play all</span>
         </button>
 
+        {#if collectionKey && tracks.length > 0}
+          <button
+            class="ghost"
+            class:on={fullyDownloaded}
+            title={fullyDownloaded ? 'Downloaded — click to remove' : 'Download this collection'}
+            onclick={() => void downloadCollection()}
+          >
+            {#if dlCounts.active > 0}
+              <span class="spin" aria-hidden="true"></span>
+              <span>{dlCounts.done}/{dlCounts.total} downloading</span>
+            {:else if fullyDownloaded}
+              <Icon name="check" size={14} />
+              <span>Downloaded</span>
+            {:else}
+              <Icon name="download" size={14} />
+              <span>Download{dlCounts.done > 0 ? ` (${dlCounts.done}/${dlCounts.total})` : ''}</span>
+            {/if}
+          </button>
+        {/if}
+
         {#if playlist}
           <button class="ghost" onclick={startRename}>Rename</button>
           {#if confirming}
             <button class="ghost danger" onclick={deletePlaylist}>Delete playlist</button>
             <button class="ghost" onclick={() => (confirming = false)}>Cancel</button>
+            {#if dlCounts.done > 0}
+              <span class="delete-note">
+                {dlCounts.done} downloaded {dlCounts.done === 1 ? 'song' : 'songs'} will be
+                removed unless another download uses them.
+              </span>
+            {/if}
           {:else}
             <button class="ghost" onclick={() => (confirming = true)}>Delete</button>
           {/if}
@@ -228,6 +284,9 @@
   }
 
   .ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     border: 1px solid var(--stroke);
     border-radius: 999px;
     padding: 8px 14px;
@@ -241,6 +300,33 @@
   .ghost:hover {
     background: var(--glass-hover);
     color: var(--text);
+  }
+
+  .ghost.on {
+    color: var(--text);
+    border-color: var(--stroke-strong);
+  }
+
+  .spin {
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--stroke-strong);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .delete-note {
+    flex-basis: 100%;
+    color: var(--text-faint);
+    font-size: 11.5px;
+    line-height: 1.45;
   }
 
   .danger {

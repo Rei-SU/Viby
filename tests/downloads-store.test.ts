@@ -1,0 +1,164 @@
+/**
+ * Downloads index: references, healing, orphan cleanup and stats. Run:
+ *   node tests/unit.mjs downloads-store
+ */
+import { mkdtempSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, dirname } from 'node:path'
+import { DownloadsStore } from '../src/main/downloads/store'
+import type { Track } from '../src/shared/types'
+
+let failures = 0
+function check(label: string, ok: boolean, detail = ''): void {
+  if (!ok) failures++
+  console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`)
+}
+
+const root = mkdtempSync(join(tmpdir(), 'viby-downloads-'))
+const track = (id: string, title = id): Track => ({
+  id,
+  title,
+  artist: 'Artist',
+  durationSec: 200,
+  thumbnail: 'https://example.test/cover.jpg'
+})
+
+function makeFile(dir: string, name: string, bytes = 1024): string {
+  mkdirSync(dir, { recursive: true })
+  const file = join(dir, name)
+  writeFileSync(file, Buffer.alloc(bytes, 1))
+  return file
+}
+
+/** Create a file at an exact path (used for content-addressed artwork). */
+function makeFileAt(path: string, bytes = 1024): string {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, Buffer.alloc(bytes, 1))
+  return path
+}
+
+const store = new DownloadsStore(root)
+
+console.log('enqueue:')
+const added = store.enqueue(
+  [
+    { track: track('a'), source: 'track:a' },
+    { track: track('b'), source: 'playlist:p1' }
+  ],
+  'best'
+)
+check('queues missing tracks', added.join(',') === 'a,b', added.join(','))
+check('no entries yet', store.entries().length === 0)
+check('jobs are queued', store.allJobs().every(({ job }) => job.state === 'queued'))
+
+console.log('\nput + lookup:')
+const tmpA = makeFile(join(root, 'tmp', 'a'), 'a.m4a', 5_000_000)
+const entry = store.put(track('a'), tmpA, 'm4a', ['track:a', 'album:z'], 'best')
+check('entry recorded', store.entries().length === 1)
+check('job cleared', store.allJobs().some(({ id }) => id === 'a') === false)
+check('sources deduped', entry.sources.join(',') === 'track:a,album:z', entry.sources.join(','))
+check('lookup finds the file', store.lookup('a') !== null)
+check('ext recorded', store.extOf('a') === 'm4a')
+check('bitrate from duration', typeof entry.bitrateKbps === 'number' && entry.bitrateKbps > 0)
+check('artUrl decorated', entry.artUrl === undefined)
+
+console.log('\nreference add on an existing entry:')
+store.enqueue([{ track: track('a'), source: 'playlist:p1' }], 'best')
+check(
+  'existing entry gains the source without a job',
+  store.entry('a')?.sources.includes('playlist:p1') === true &&
+    store.allJobs().some(({ id }) => id === 'a') === false
+)
+
+console.log('\npruneCollection:')
+const tmpC = makeFile(join(root, 'tmp', 'c'), 'c.m4a')
+store.put(track('c'), tmpC, 'm4a', ['playlist:p1'], 'best')
+const affected = store.pruneCollection('playlist:p1', [])
+check('track dropped from the playlist is deleted', store.entry('c') === null)
+check('a queued member of the playlist is cancelled too', affected.join(',') === 'b', affected.join(','))
+check('its queued job is gone', store.allJobs().some(({ id }) => id === 'b') === false)
+check('unrelated track survives', store.entry('a') !== null)
+check('a keeps its other sources', store.entry('a')?.sources.join(',') === 'track:a,album:z')
+
+console.log('\nremoveCollection keeps shared files:')
+store.addCollection({ key: 'album:z', kind: 'album', title: 'Z', trackIds: ['a'] })
+const affectedJobs = store.removeCollection('album:z')
+check('album reference removed', store.entry('a')?.sources.includes('album:z') === false)
+check('file survives via track source', store.entry('a') !== null)
+check('collection removed from index', store.collection('album:z') === null)
+check('no jobs affected', affectedJobs.length === 0)
+
+console.log('\nqueue-only track cancels with its collection:')
+store.addCollection({ key: 'playlist:p2', kind: 'playlist', title: 'P2', trackIds: ['b'] })
+store.enqueue([{ track: track('b'), source: 'playlist:p2' }], 'best')
+const jobs = store.removeCollection('playlist:p2')
+check('queued job removed', jobs.join(',') === 'b', jobs.join(','))
+check('job gone from index', store.allJobs().length === 0)
+
+console.log('\npath safety:')
+check('safeId strips separators', store.safeId('../../etc/passwd') === '______etc_passwd', store.safeId('../../etc/passwd'))
+check('safeId allows normal ids', store.safeId('dQw4w9WgXcQ') === 'dQw4w9WgXcQ')
+
+console.log('\nremoveTrack:')
+const before = store.entries().length
+store.removeTrack('a')
+check('entry gone', store.entry('a') === null)
+check('one fewer entry', store.entries().length === before - 1)
+check('file gone or healed', store.lookup('a') === null)
+
+console.log('\nartwork is reference counted:')
+// Two entries sharing one content-addressed cover.
+const sharedArt = store.artNameFor('https://example.test/shared.jpg', 'jpg')
+const sharedName = sharedArt.split(/[\\/]/).pop() as string
+makeFileAt(join(store.dir, sharedArt), 4096)
+const tmpX = makeFile(join(root, 'tmp', 'x'), 'x.m4a')
+store.put(track('x'), tmpX, 'm4a', ['track:x'], 'best', sharedArt)
+const tmpY = makeFile(join(root, 'tmp', 'y'), 'y.m4a')
+store.put(track('y'), tmpY, 'm4a', ['track:y'], 'best', sharedArt)
+
+store.removeTrack('x')
+check('shared artwork survives one removal', existsSync(join(store.artDir, sharedName)))
+store.removeTrack('y')
+check('artwork removed with its last owner', existsSync(join(store.artDir, sharedName)) === false)
+
+console.log('\nhealing on startup:')
+// Simulate a crash: an entry whose file disappeared.
+const fresh = new DownloadsStore(mkdtempSync(join(tmpdir(), 'viby-downloads-')))
+const tmpD = makeFile(join(fresh.tmpDir, 'd'), 'd.m4a')
+fresh.put(track('d'), tmpD, 'm4a', ['track:d'], 'best')
+const audioFile = fresh.lookup('d')
+check('seed file exists', audioFile !== null && existsSync(audioFile))
+// An entry with artwork, plus an orphan art file with no owner.
+const tmpE = makeFile(join(fresh.tmpDir, 'e'), 'e.m4a', 2048)
+const artRel = fresh.artNameFor('https://example.test/e.jpg', 'jpg')
+makeFileAt(join(fresh.dir, artRel), 16)
+fresh.put(track('e'), tmpE, 'm4a', ['track:e'], 'best', artRel)
+makeFile(fresh.artDir, 'orphan.jpg', 16)
+// A file with no entry (Windows deferred deletion) is swept on the next launch.
+makeFile(join(fresh.audioDir), 'orphan.m4a', 32)
+// A partial tmp dir with no job is swept too.
+makeFile(join(fresh.tmpDir, 'ghost'), 'ghost.part', 32)
+const reopened = new DownloadsStore(fresh.dir)
+check('orphan audio removed', existsSync(join(fresh.audioDir, 'orphan.m4a')) === false)
+check(
+  'orphan tmp dir removed',
+  readdirSync(fresh.tmpDir).includes('ghost') === false,
+  readdirSync(fresh.tmpDir).join(',')
+)
+check('referenced artwork survives', existsSync(join(fresh.root, artRel)) === true)
+check('orphan artwork removed', existsSync(join(fresh.artDir, 'orphan.jpg')) === false)
+check('valid entry survives', reopened.entry('d') !== null)
+check('entry keeps its art path', reopened.entry('e')?.art === artRel)
+
+console.log('\nclear:')
+reopened.clear()
+check('no entries after clear', reopened.entries().length === 0)
+check('no jobs after clear', reopened.allJobs().length === 0)
+check(
+  'audio dir empty after clear',
+  readdirSync(reopened.audioDir).length === 0
+)
+check('art dir empty after clear', readdirSync(reopened.artDir).length === 0)
+
+console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`)
+process.exit(failures === 0 ? 0 : 1)

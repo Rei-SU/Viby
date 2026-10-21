@@ -1,0 +1,127 @@
+import { sleep } from './lib.mjs'
+
+export const description = 'Offline: manual mode shows the local-first Home and gated navigation'
+
+/**
+ * Deterministic offline coverage using the manual switch, so it never depends
+ * on the machine's real network. Downloads that need yt-dlp are covered by the
+ * unit suites and the manual smoke pass.
+ */
+export async function run(app, check) {
+  const original = app.settings.offlineMode ?? 'auto'
+
+  try {
+    const offline = await app.evaluate(
+      `
+      (async () => {
+        const { api, nav } = window.__viby
+        await api.network.setMode('offline')
+        nav.go('home')
+        await new Promise((r) => setTimeout(r, 700))
+        const navButton = (label) =>
+          [...document.querySelectorAll('.nav')].find((b) => b.textContent?.trim().includes(label))
+        const pill = document.querySelector('.net-pill')
+        const home = document.querySelector('.content h1')?.textContent?.trim() ?? null
+        return {
+          state: await api.network.get(),
+          pill: pill?.textContent?.trim() ?? null,
+          home,
+          eyebrow: document.querySelector('.content .status, .content .eyebrow')?.textContent?.trim() ?? null,
+          downloadsDisabled: navButton('Charts')?.disabled ?? null,
+          importDisabled: navButton('Import')?.disabled ?? null,
+          downloadsPresent: Boolean(navButton('Downloads')),
+          notice: document.querySelector('.content .notice')?.textContent?.trim() ?? null
+        }
+      })()
+    `,
+      { userGesture: true }
+    )
+
+    check('manual mode is reported', offline.state?.forcedOffline === true, JSON.stringify(offline.state))
+    check('titlebar shows the offline pill', Boolean(offline.pill), String(offline.pill))
+    check('offline Home replaces Home', offline.home === 'Ready when you are.', String(offline.home))
+    check('Charts is disabled offline', offline.downloadsDisabled === true, String(offline.downloadsDisabled))
+    check('Import is disabled offline', offline.importDisabled === true, String(offline.importDisabled))
+    check('Downloads stays available', offline.downloadsPresent === true)
+    check('no error banner on offline Home', offline.notice === null, String(offline.notice))
+
+    const snapshot = await app.evaluate(
+      `(async () => {
+        const s = await window.__viby.api.downloads.snapshot()
+        return {
+          entries: Array.isArray(s.entries),
+          collections: Array.isArray(s.collections),
+          jobs: Array.isArray(s.jobs),
+          stats: typeof s.stats?.bytes === 'number'
+        }
+      })()`
+    )
+    check('downloads snapshot is well formed', Object.values(snapshot).every(Boolean), JSON.stringify(snapshot))
+
+    const downloads = await app.evaluate(
+      `
+      (async () => {
+        const item = [...document.querySelectorAll('.nav')].find((b) =>
+          b.textContent?.trim().includes('Downloads')
+        )
+        item?.click()
+        await new Promise((r) => setTimeout(r, 700))
+        return document.querySelector('.content h1')?.textContent?.trim() ?? null
+      })()
+    `,
+      { userGesture: true }
+    )
+    check('Downloads view opens offline', downloads === 'Downloads', String(downloads))
+
+    const online = await app.evaluate(
+      `
+      (async () => {
+        const { api, nav } = window.__viby
+        await api.network.setMode('auto')
+        nav.go('home')
+        // Reconnecting runs a real probe (up to a few seconds); wait for the
+        // connected layout instead of assuming a fixed delay.
+        let state = await api.network.get()
+        for (let i = 0; i < 40 && state.status !== 'online'; i++) {
+          await new Promise((r) => setTimeout(r, 250))
+          state = await api.network.get()
+        }
+        await new Promise((r) => setTimeout(r, 200))
+        const navButton = (label) =>
+          [...document.querySelectorAll('.nav')].find((b) => b.textContent?.trim().includes(label))
+        return {
+          state,
+          home: document.querySelector('.content h1')?.textContent?.trim() ?? null,
+          pill: Boolean(document.querySelector('.net-pill')),
+          chartsDisabled: navButton('Charts')?.disabled ?? null
+        }
+      })()
+    `,
+      { userGesture: true }
+    )
+    check('auto mode clears the manual flag', online.state?.forcedOffline === false, JSON.stringify(online.state))
+    check('normal Home returns', online.home === 'Home', String(online.home))
+    check('offline pill is gone when connected', online.pill === false)
+    check('Charts is enabled again', online.chartsDisabled === false, String(online.chartsDisabled))
+  } finally {
+    await app.evaluate(
+      `(async () => {
+        const { api, nav } = window.__viby
+        await api.network.setMode(${JSON.stringify(original)})
+        // Leave the app connected before the next scenario runs.
+        let state = await api.network.get()
+        for (let i = 0; i < 40 && state.forcedOffline; i++) {
+          await new Promise((r) => setTimeout(r, 250))
+          state = await api.network.get()
+        }
+        for (let i = 0; i < 40 && state.status !== 'online' && !state.forcedOffline; i++) {
+          await new Promise((r) => setTimeout(r, 250))
+          state = await api.network.get()
+        }
+        nav.go('home')
+        return true
+      })()`
+    )
+    await sleep(300)
+  }
+}

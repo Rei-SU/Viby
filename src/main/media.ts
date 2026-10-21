@@ -24,6 +24,15 @@ export function mimeForPath(file: string): string {
       return 'audio/ogg'
     case 'mp3':
       return 'audio/mpeg'
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg'
+    case 'png':
+      return 'image/png'
+    case 'webp':
+      return 'image/webp'
+    case 'gif':
+      return 'image/gif'
     case 'm4a':
     case 'mp4':
     default:

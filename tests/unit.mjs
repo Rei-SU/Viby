@@ -15,7 +15,10 @@ const suites = {
   library: { file: 'library.test.ts', electron: true },
   lyrics: { file: 'lyrics.test.ts', electron: true },
   spotify: { file: 'spotify-import.test.ts' },
-  import: { file: 'import-adapters.test.ts' }
+  import: { file: 'import-adapters.test.ts' },
+  'downloads-store': { file: 'downloads-store.test.ts', electron: true },
+  'downloads-manager': { file: 'downloads-manager.test.ts', electron: true },
+  network: { file: 'network.test.ts', electron: true }
 }
 
 const requested = process.argv.slice(2)

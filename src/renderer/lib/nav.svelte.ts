@@ -1,6 +1,14 @@
 import type { CatalogItem, Track } from '@shared/types'
 
-export type View = 'home' | 'charts' | 'search' | 'library' | 'queue' | 'import' | 'settings'
+export type View =
+  | 'home'
+  | 'charts'
+  | 'search'
+  | 'library'
+  | 'downloads'
+  | 'queue'
+  | 'import'
+  | 'settings'
 
 /** A saved collection page: liked songs, or a user playlist. */
 export type CollectionRef = { kind: 'liked' } | { kind: 'playlist'; id: string }

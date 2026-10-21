@@ -1,5 +1,8 @@
 import type { CatalogItem, SearchFilterName } from '@shared/types'
 import { api } from './api'
+import { downloads } from './downloads.svelte'
+import { network } from './network.svelte'
+import { trackToItem } from './track'
 
 /**
  * Search state lives outside the component on purpose: opening an artist page
@@ -53,6 +56,27 @@ class SearchState {
 
     const mine = ++this.seq
     this.loading = true
+
+    // Offline search is a search over downloads, not a cached catalog. It still
+    // finds songs by title, artist or album without touching the network.
+    if (network.localFirst) {
+      await downloads.init()
+      if (mine !== this.seq) return
+      const needle = query.toLowerCase()
+      this.items = downloads.entries
+        .filter((entry) => {
+          const haystack = `${entry.track.title} ${entry.track.artist} ${entry.track.album ?? ''}`
+          return haystack.toLowerCase().includes(needle)
+        })
+        .map((entry) => ({
+          ...trackToItem(entry.track),
+          thumbnail: entry.artUrl ?? entry.track.thumbnail
+        }))
+      this.error = null
+      this.loading = false
+      return
+    }
+
     const res = await api.catalog.search(query, this.filter)
     // A newer query already superseded this one.
     if (mine !== this.seq) return

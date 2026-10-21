@@ -2,12 +2,17 @@ import type {
   BrowseResult,
   CacheStats,
   CatalogItem,
+  DownloadCollectionInput,
+  DownloadProgress,
+  DownloadsSnapshot,
   HistoryEntry,
   ImportCreateInput,
   ImportMatch,
   ImportProgress,
   ImportSource,
   Lyrics,
+  NetworkState,
+  OfflineMode,
   PlaybackSession,
   Playlist,
   ResolveResult,
@@ -57,6 +62,21 @@ export const CH = {
 
   cacheStats: 'cache:stats',
   cacheClear: 'cache:clear',
+
+  networkGet: 'network:get',
+  networkSetMode: 'network:set-mode',
+  networkChanged: 'network:changed',
+
+  downloadsSnapshot: 'downloads:snapshot',
+  downloadsAddTrack: 'downloads:add-track',
+  downloadsAddCollection: 'downloads:add-collection',
+  downloadsRemoveTrack: 'downloads:remove-track',
+  downloadsRemoveCollection: 'downloads:remove-collection',
+  downloadsClear: 'downloads:clear',
+  downloadsRetry: 'downloads:retry',
+  downloadsCancel: 'downloads:cancel',
+  downloadsChanged: 'downloads:changed',
+  downloadsProgress: 'downloads:progress',
 
   ytdlpInfo: 'ytdlp:info',
   ytdlpUpdate: 'ytdlp:update',
@@ -138,6 +158,24 @@ export interface VibyApi {
   cache: {
     stats(): Promise<CacheStats>
     clear(): Promise<CacheStats>
+  }
+  network: {
+    get(): Promise<NetworkState>
+    /** Persist the manual switch and return the resulting state. */
+    setMode(mode: OfflineMode): Promise<NetworkState>
+    onChange(callback: (state: NetworkState) => void): () => void
+  }
+  downloads: {
+    snapshot(): Promise<DownloadsSnapshot>
+    addTrack(track: Track): Promise<DownloadsSnapshot>
+    addCollection(input: DownloadCollectionInput, tracks: Track[]): Promise<DownloadsSnapshot>
+    removeTrack(trackId: string): Promise<DownloadsSnapshot>
+    removeCollection(key: string): Promise<DownloadsSnapshot>
+    clear(): Promise<DownloadsSnapshot>
+    retry(trackId: string): Promise<DownloadsSnapshot>
+    cancel(trackId: string): Promise<DownloadsSnapshot>
+    onChanged(callback: (snapshot: DownloadsSnapshot) => void): () => void
+    onProgress(callback: (progress: DownloadProgress) => void): () => void
   }
   ytDlp: {
     info(): Promise<Result<YtDlpInfo>>

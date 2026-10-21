@@ -3,6 +3,7 @@
   import { api } from '../lib/api'
   import { player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
+  import { network } from '../lib/network.svelte'
   import { cacheRadio, cachedRadio } from '../lib/catalog-cache.svelte'
   import { openArtist } from '../lib/artist'
   import Cover from './Cover.svelte'
@@ -24,6 +25,11 @@
     const cached = cachedRadio(id)
     if (cached) {
       related = cached.slice(0, 10)
+      return
+    }
+
+    if (network.localFirst) {
+      related = []
       return
     }
 

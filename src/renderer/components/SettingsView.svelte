@@ -2,6 +2,9 @@
   import type { CacheStats, Settings } from '@shared/types'
   import { api } from '../lib/api'
   import { player } from '../lib/player.svelte'
+  import { downloads } from '../lib/downloads.svelte'
+  import { network } from '../lib/network.svelte'
+  import { nav } from '../lib/nav.svelte'
   import Icon from './Icon.svelte'
 
   const CAPS = [
@@ -23,6 +26,7 @@
     current = settings
     stats = cache
     player.applySettings(settings)
+    await downloads.init()
   }
 
   async function patch(update: Partial<Settings>): Promise<void> {
@@ -30,6 +34,12 @@
     current = await api.settings.set(update)
     player.applySettings(current)
     stats = await api.cache.stats()
+  }
+
+  async function toggleOffline(): Promise<void> {
+    if (!current) return
+    await network.setMode(current.offlineMode === 'offline' ? 'auto' : 'offline')
+    current = await api.settings.get()
   }
 
   async function clearCache(): Promise<void> {
@@ -91,7 +101,52 @@
   </section>
 
   <section>
+    <h2>Connectivity</h2>
+
+    <div class="row">
+      <div class="label">
+        <span>Offline mode</span>
+        <span class="hint">
+          {#if network.state.forcedOffline}
+            On. Only downloads play, and browsing waits until you switch it off.
+          {:else if network.state.status === 'online'}
+            Automatic. Viby follows your connection; downloads are always available.
+          {:else}
+            Automatic — {network.detail.toLowerCase()} Downloads still play.
+          {/if}
+        </span>
+      </div>
+      <button
+        class="switch"
+        class:on={current?.offlineMode === 'offline'}
+        role="switch"
+        aria-checked={current?.offlineMode === 'offline'}
+        aria-label="Offline mode"
+        onclick={toggleOffline}
+      >
+        <span class="thumb"></span>
+      </button>
+    </div>
+  </section>
+
+  <section>
     <h2>Storage</h2>
+
+    <div class="row">
+      <div class="label">
+        <span>Downloads</span>
+        <span class="hint">
+          {#if downloads.stats}
+            {downloads.stats.entries} {downloads.stats.entries === 1 ? 'song' : 'songs'} · {size(
+              downloads.stats.bytes
+            )} used · {size(downloads.stats.freeBytes)} free. Explicit files are never evicted.
+          {:else}
+            Reading downloads…
+          {/if}
+        </span>
+      </div>
+      <button class="ghost" onclick={() => nav.go('downloads')}>Manage</button>
+    </div>
 
     <div class="row">
       <div class="label">
@@ -115,7 +170,10 @@
     <div class="row">
       <div class="label">
         <span>Clear cache</span>
-        <span class="hint">Cached audio plays offline and instantly. Clearing it frees the space.</span>
+        <span class="hint">
+          A rolling cache keeps playback smooth and sometimes works offline. Clearing it frees
+          space but never touches your downloads.
+        </span>
       </div>
       <button class="ghost" onclick={clearCache} disabled={!stats || stats.entries === 0}>Clear</button>
     </div>

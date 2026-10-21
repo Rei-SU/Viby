@@ -51,6 +51,9 @@ ones that touch main-process modules.
 | `lyrics` | LRCLIB synced/plain, lyrics.ovh backup, cache, miss |
 | `spotify` | Anonymous Spotify pathfinder: 200-track pagination, fields, non-playlist rejection |
 | `import` | Link detection, all four non-Spotify adapters, matcher scoring, YouTube exact path |
+| `downloads-store` | downloads index: references, shared-file survival, pruning, healing, orphan sweep, path safety |
+| `downloads-manager` | yt-dlp progress parsing (known/unknown totals) and transient-vs-permanent failure classification |
+| `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 
 ### E2E scenarios (app must be running)
 
@@ -78,6 +81,7 @@ the app while they run — they own the queue.
 | `navigation` | drag strip, full-bleed artist banner, titlebar back/forward, artist page from search, history restore |
 | `quick-search` | centered titlebar field, recents, grouped songs/artists/playlists, show-more filters, Enter routing, song click, arrow navigation |
 | `settings` | sidebar entry, quality/autoplay/cache-cap persist, clear control |
+| `offline` | manual offline: local-first Home, titlebar pill, gated Charts/Import, Downloads stays, auto restores |
 | `import` | paste a Spotify link, match 50 tracks, create and clean up a playlist |
 
 ### Behaviour suite (separate)
@@ -105,6 +109,8 @@ Find the row for what you changed; run what it lists.
 | `src/main/cache/**`, `src/main/media.ts`, `viby-media://` handler | e2e `playback`, `resume` |
 | `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | e2e `settings`, `playback` (volume restore) · behaviour |
 | `src/main/json-store.ts` | unit `library` · e2e `library`, `resume` |
+| `src/main/downloads/**`, `src/main/network.ts` | unit `downloads-store`, `downloads-manager`, `network` · e2e `offline`, `playback` |
+| `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `DownloadsView`, `OfflineHome` | e2e `offline`, `playback`, `navigation` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links` · behaviour |
 | `src/renderer/lib/nav.svelte.ts` | e2e `navigation`, `links` |

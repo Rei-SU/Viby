@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { BrowseResult, CatalogItem } from '@shared/types'
   import { api } from '../lib/api'
-  import { isPlayable, player } from '../lib/player.svelte'
+  import { isPlayable, player, toTrack } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
+  import { downloads } from '../lib/downloads.svelte'
   import { cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
@@ -85,6 +86,40 @@
 
   const displaySongs = $derived(songs.map(withArtist))
 
+  const collectionKind = $derived(
+    item.kind === 'album' || item.kind === 'playlist' ? item.kind : null
+  )
+  const collectionKey = $derived(
+    collectionKind ? `${collectionKind}:${item.browseId ?? item.id}` : null
+  )
+  const downloadTracks = $derived(displaySongs.map(toTrack))
+  const dlCounts = $derived(downloads.countsFor(downloadTracks))
+  const fullyDownloaded = $derived(dlCounts.total > 0 && dlCounts.done === dlCounts.total)
+
+  async function downloadCollection(): Promise<void> {
+    if (!collectionKind || !collectionKey || downloadTracks.length === 0) return
+    if (fullyDownloaded) {
+      if (window.confirm(`Remove “${result?.header?.title ?? item.title}” from downloads?`)) {
+        await downloads.removeCollection(collectionKey)
+      }
+      return
+    }
+
+    for (const track of downloadTracks) {
+      if (downloads.stateFor(track.id) === 'failed') await downloads.retry(track.id)
+    }
+    await downloads.addCollection(
+      {
+        key: collectionKey,
+        kind: collectionKind,
+        title: result?.header?.title ?? item.title,
+        thumbnail: art,
+        trackIds: downloadTracks.map((track) => track.id)
+      },
+      downloadTracks
+    )
+  }
+
   $effect(() => {
     const browseId = item.browseId ?? item.id
     shown = PAGE
@@ -158,6 +193,10 @@
     const s = Math.floor(seconds % 60)
     return `${m}:${s.toString().padStart(2, '0')}`
   }
+
+  function countsLabel(done: number, total: number): string {
+    return done > 0 ? ` (${done}/${total})` : ''
+  }
 </script>
 
 <div class="view">
@@ -212,6 +251,25 @@
           <button class="play-all" onclick={playAll}>
             <Icon name="play" size={14} solid />
             <span>Play all</span>
+          </button>
+        {/if}
+        {#if collectionKey && downloadTracks.length > 0}
+          <button
+            class="download-all"
+            class:on={fullyDownloaded}
+            title={fullyDownloaded ? 'Downloaded — click to remove' : 'Download this collection'}
+            onclick={() => void downloadCollection()}
+          >
+            {#if dlCounts.active > 0}
+              <span class="spin" aria-hidden="true"></span>
+              <span>{dlCounts.done}/{dlCounts.total} downloading</span>
+            {:else if fullyDownloaded}
+              <Icon name="check" size={14} />
+              <span>Downloaded</span>
+            {:else}
+              <Icon name="download" size={14} />
+              <span>Download{countsLabel(dlCounts.done, dlCounts.total)}</span>
+            {/if}
           </button>
         {/if}
       </div>
@@ -465,6 +523,49 @@
 
   .play-all:hover {
     transform: translateY(-1px);
+  }
+
+  .download-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 0 8px;
+    padding: 8px 16px;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-size: 12.5px;
+    font-weight: 500;
+    transition:
+      border-color var(--speed) var(--ease),
+      color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .download-all:hover {
+    border-color: var(--stroke-strong);
+    color: var(--text);
+    background: var(--glass-hover);
+  }
+
+  .download-all.on {
+    color: var(--text);
+    border-color: var(--stroke-strong);
+  }
+
+  .spin {
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--stroke-strong);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .shelf {

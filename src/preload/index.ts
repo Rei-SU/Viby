@@ -1,10 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { CH, type LyricsRequest, type ResolveRequest, type VibyApi } from '@shared/ipc'
 import type {
+  DownloadCollectionInput,
+  DownloadProgress,
+  DownloadsSnapshot,
   HistoryEntry,
   ImportCreateInput,
   ImportProgress,
   ImportSource,
+  NetworkState,
+  OfflineMode,
   PlaybackSession,
   SearchFilterName,
   Settings,
@@ -66,6 +71,36 @@ const api: VibyApi = {
   cache: {
     stats: () => ipcRenderer.invoke(CH.cacheStats),
     clear: () => ipcRenderer.invoke(CH.cacheClear)
+  },
+  network: {
+    get: () => ipcRenderer.invoke(CH.networkGet),
+    setMode: (mode: OfflineMode) => ipcRenderer.invoke(CH.networkSetMode, mode),
+    onChange: (callback: (state: NetworkState) => void) => {
+      const handler = (_event: unknown, state: NetworkState): void => callback(state)
+      ipcRenderer.on(CH.networkChanged, handler)
+      return () => ipcRenderer.removeListener(CH.networkChanged, handler)
+    }
+  },
+  downloads: {
+    snapshot: () => ipcRenderer.invoke(CH.downloadsSnapshot),
+    addTrack: (track: Track) => ipcRenderer.invoke(CH.downloadsAddTrack, track),
+    addCollection: (input: DownloadCollectionInput, tracks: Track[]) =>
+      ipcRenderer.invoke(CH.downloadsAddCollection, input, tracks),
+    removeTrack: (trackId: string) => ipcRenderer.invoke(CH.downloadsRemoveTrack, trackId),
+    removeCollection: (key: string) => ipcRenderer.invoke(CH.downloadsRemoveCollection, key),
+    clear: () => ipcRenderer.invoke(CH.downloadsClear),
+    retry: (trackId: string) => ipcRenderer.invoke(CH.downloadsRetry, trackId),
+    cancel: (trackId: string) => ipcRenderer.invoke(CH.downloadsCancel, trackId),
+    onChanged: (callback: (snapshot: DownloadsSnapshot) => void) => {
+      const handler = (_event: unknown, snapshot: DownloadsSnapshot): void => callback(snapshot)
+      ipcRenderer.on(CH.downloadsChanged, handler)
+      return () => ipcRenderer.removeListener(CH.downloadsChanged, handler)
+    },
+    onProgress: (callback: (progress: DownloadProgress) => void) => {
+      const handler = (_event: unknown, progress: DownloadProgress): void => callback(progress)
+      ipcRenderer.on(CH.downloadsProgress, handler)
+      return () => ipcRenderer.removeListener(CH.downloadsProgress, handler)
+    }
   },
   ytDlp: {
     info: () => ipcRenderer.invoke(CH.ytdlpInfo),

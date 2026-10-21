@@ -142,7 +142,7 @@ const favClick = await evaluate(
      const list = await window.__viby.api.favorites.list()
      return {
        clicked: true,
-       on: btn.classList.contains('fav-on'),
+       on: btn.classList.contains('on'),
        saved: list.some((t) => t.id === window.__viby.player.current.id),
        count: list.length
      }
@@ -157,7 +157,7 @@ const favOff = await evaluate(
      btn.click()
      await new Promise((r) => setTimeout(r, 400))
      const list = await window.__viby.api.favorites.list()
-     return { on: btn.classList.contains('fav-on'), saved: list.some((t) => t.id === window.__viby.player.current.id) }
+     return { on: btn.classList.contains('on'), saved: list.some((t) => t.id === window.__viby.player.current.id) }
    })()`
 )
 check('heart button unfavourites', favOff.on === false && favOff.saved === false, JSON.stringify(favOff))

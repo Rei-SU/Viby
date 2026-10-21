@@ -7,6 +7,7 @@ import type {
   Track
 } from '@shared/types'
 import { api } from './api'
+import { network } from './network.svelte'
 import { cacheRadio, cachedRadio } from './catalog-cache.svelte'
 
 /**
@@ -490,6 +491,8 @@ class Player {
    * doing it ahead of time is what makes "next" feel instant.
    */
   private prefetchNext(): void {
+    // No connection means no useful warm-up; local files need none anyway.
+    if (network.localFirst) return
     // Repeat-one repeats this track; shuffle has no known next. Warming a guess
     // in either case just wastes a resolve.
     if (this.repeat === 'one' || this.shuffle || this.queue.length === 0) return
@@ -509,7 +512,7 @@ class Player {
 
   /** Fetch the radio queue ahead of time and warm its first track. */
   private async warmRadio(): Promise<void> {
-    if (this.radioPreparing) return
+    if (this.radioPreparing || network.localFirst) return
 
     const seed = this.queue[this.queue.length - 1]?.id ?? this.current?.id
     if (!seed) return
@@ -573,7 +576,7 @@ class Player {
       // "Prioritise audio": a music video's soundtrack is not the released
       // track. When YouTube knows the official audio version, play that instead
       // and update the queue entry so the UI stays truthful.
-      if (track.videoType && track.videoType !== 'audio') {
+      if (track.videoType && track.videoType !== 'audio' && !network.localFirst) {
         const alt = await api.catalog.audioTrack(track.id, track.title, track.artist)
         if (token !== this.playToken) return
         if (alt.ok && alt.data) {
@@ -660,6 +663,11 @@ class Player {
     const track = this.current
     if (this.recovering || !track) return
 
+    if (network.offline && this.stream?.source !== 'download') {
+      this.error = "You're offline. This song isn't downloaded."
+      return
+    }
+
     if (this.recoverTrackId !== track.id) {
       this.recoverTrackId = track.id
       this.recoverAttempts = 0
@@ -744,6 +752,7 @@ class Player {
    * drifting through the same neighbourhood instead of replaying the queue.
    */
   private async extendWithRadio(): Promise<void> {
+    if (network.localFirst) return
     const seed = this.queue[this.queue.length - 1]?.id ?? this.current?.id
     if (!seed) return
 

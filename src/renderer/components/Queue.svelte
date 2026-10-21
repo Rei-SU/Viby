@@ -1,5 +1,6 @@
 <script lang="ts">
   import { player } from '../lib/player.svelte'
+  import { downloads } from '../lib/downloads.svelte'
   import { openArtist } from '../lib/artist'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -63,6 +64,14 @@
                 {/if}
               </span>
             </span>
+            {#if downloads.stateFor(track.id) === 'done'}
+              <span class="dl-badge" title="Downloaded">
+                <Icon name="check" size={11} /> Downloaded
+              </span>
+            {:else if downloads.stateFor(track.id) === 'downloading' ||
+              downloads.stateFor(track.id) === 'queued'}
+              <span class="dl-badge busy" title="Downloading…">Downloading</span>
+            {/if}
             <span class="len tabular">{fmt(track.durationSec)}</span>
           </div>
           <button class="remove" title="Remove" aria-label="Remove from queue" onclick={() => player.removeAt(i)}>
@@ -210,6 +219,23 @@
   .len {
     color: var(--text-faint);
     font-size: 11.5px;
+  }
+
+  .dl-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-size: 10.5px;
+  }
+
+  .dl-badge.busy {
+    color: #f0c477;
+    border-color: rgba(240, 196, 119, 0.26);
   }
 
   .remove {

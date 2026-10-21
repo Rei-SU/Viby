@@ -4,6 +4,7 @@
   import { nav } from '../lib/nav.svelte'
   import { openArtist } from '../lib/artist'
   import { playlistPicker } from '../lib/playlist-picker.svelte'
+  import { downloads } from '../lib/downloads.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
 
@@ -14,7 +15,9 @@
     onQueue,
     onRemove,
     showIndex = false,
-    showArt = true
+    showArt = true,
+    showDownload = true,
+    meta
   }: {
     item: CatalogItem
     index?: number
@@ -24,6 +27,10 @@
     showIndex?: boolean
     /** Album/playlist pages already show the artwork on the page itself. */
     showArt?: boolean
+    /** Off in the Downloads page itself, where removal is the row action. */
+    showDownload?: boolean
+    /** Small right-aligned annotation, e.g. "12 MB · Best". */
+    meta?: string
   } = $props()
 
   // A track may have been swapped to its official audio release; the row still
@@ -35,6 +42,25 @@
   const playing = $derived(active && player.playing)
   const playable = $derived(isPlayable(item))
   const rounded = $derived(item.kind === 'artist')
+  const downloadState = $derived(downloads.stateFor(item.id))
+  const downloadJob = $derived(downloads.jobFor(item.id))
+  const art = $derived(downloads.entryFor(item.id)?.artUrl ?? item.thumbnail)
+  const downloadTitle = $derived.by(() => {
+    switch (downloadState) {
+      case 'done':
+        return 'Downloaded — click to remove'
+      case 'downloading':
+        return `Downloading ${downloadJob?.percent ?? 0}% — click to cancel`
+      case 'queued':
+        return 'Queued — click to cancel'
+      case 'paused':
+        return 'Paused — click to cancel'
+      case 'failed':
+        return 'Download failed — click to retry'
+      default:
+        return 'Download'
+    }
+  })
 
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -79,6 +105,25 @@
     const s = Math.floor(seconds % 60)
     return `${m}:${s.toString().padStart(2, '0')}`
   }
+
+  async function toggleDownload(): Promise<void> {
+    if (!playable) return
+    if (downloadState === 'done') {
+      if (window.confirm(`Remove the download for “${item.title}”?`)) {
+        await downloads.removeTrack(item.id)
+      }
+      return
+    }
+    if (downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused') {
+      await downloads.cancel(item.id)
+      return
+    }
+    if (downloadState === 'failed') {
+      await downloads.retry(item.id)
+      return
+    }
+    await downloads.addTrack(toTrack(item))
+  }
 </script>
 
 <li class="row" class:active onpointerenter={hoverStart} onpointerleave={hoverEnd}>
@@ -104,7 +149,7 @@
     </span>
 
     {#if showArt}
-      <Cover src={item.thumbnail} size={40} radius={rounded ? 20 : 6} alt={item.title} />
+      <Cover src={art} size={40} radius={rounded ? 20 : 6} alt={item.title} />
     {/if}
 
     <span class="text">
@@ -130,6 +175,33 @@
 
     <span class="dur tabular">{fmt(item.durationSec)}</span>
   </div>
+
+  {#if meta}
+    <span class="row-meta tabular">{meta}</span>
+  {/if}
+
+  {#if playable && showDownload}
+    <button
+      class="row-action dl"
+      class:on={downloadState === 'done'}
+      class:failed={downloadState === 'failed'}
+      class:busy={downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused'}
+      title={downloadTitle}
+      aria-label={downloadTitle}
+      onclick={(event) => {
+        event.stopPropagation()
+        void toggleDownload()
+      }}
+    >
+      {#if downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused'}
+        <span class="spin" aria-hidden="true"></span>
+      {:else if downloadState === 'done'}
+        <Icon name="check" size={15} />
+      {:else}
+        <Icon name="download" size={15} />
+      {/if}
+    </button>
+  {/if}
 
   {#if playable}
     <button
@@ -271,6 +343,15 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .row-meta {
+    flex-shrink: 0;
+    padding-left: 10px;
+    color: var(--text-faint);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+  }
+
   .row-action {
     display: grid;
     place-items: center;
@@ -293,6 +374,35 @@
   .row-action:hover {
     color: var(--text);
     background: var(--glass-hover);
+  }
+
+  .row-action.dl.on {
+    opacity: 1;
+    color: var(--text);
+  }
+
+  .row-action.dl.failed {
+    opacity: 1;
+    color: var(--danger);
+  }
+
+  .row-action.dl.busy {
+    opacity: 1;
+  }
+
+  .spin {
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--stroke-strong);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* Three bars that dance while this row is the playing one. */

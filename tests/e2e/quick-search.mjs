@@ -117,6 +117,11 @@ export async function run(app, check) {
   const entered = await app.evaluate(`
     (async () => {
       const input = document.querySelector('.searchbox input')
+      // The window has a real cursor. If it rests over the panel, a row ends up
+      // highlighted — which is not the "no highlight" case this step asserts.
+      // Cmd/Ctrl+K clears the highlight and refocuses the field.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', keyCode: 75, which: 75, metaKey: true, bubbles: true }))
+      await new Promise((r) => setTimeout(r, 150))
       input.focus()
       await new Promise((r) => setTimeout(r, 120))
       input.dispatchEvent(
@@ -241,6 +246,10 @@ export async function run(app, check) {
         await new Promise((r) => setTimeout(r, 150))
         if (document.querySelector('.quick-row[data-kind="song"]')) break
       }
+      // Clear any highlight left by the real cursor before testing ArrowDown,
+      // so the highlight is chosen deterministically by the keyboard.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', keyCode: 75, which: 75, metaKey: true, bubbles: true }))
+      await new Promise((r) => setTimeout(r, 150))
       input.focus()
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true }))
       await new Promise((r) => setTimeout(r, 300))

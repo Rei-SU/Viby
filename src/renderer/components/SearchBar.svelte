@@ -4,6 +4,9 @@
   import { nav } from '../lib/nav.svelte'
   import { player } from '../lib/player.svelte'
   import { searchState } from '../lib/search.svelte'
+  import { downloads } from '../lib/downloads.svelte'
+  import { network } from '../lib/network.svelte'
+  import { trackToItem } from '../lib/track'
   import { openArtist } from '../lib/artist'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -147,6 +150,17 @@
       timer = null
     }
 
+    if (network.localFirst) {
+      seq += 1
+      const mine = seq
+      if (quickFor !== query) quick = emptyQuick()
+      quickFor = query
+      quickError = null
+      loading = { songs: true, artists: false, playlists: false }
+      void fetchLocalQuick(query, mine)
+      return
+    }
+
     const key = cacheKey(query)
     const cached = cache.get(key)
     if (cached) {
@@ -175,8 +189,31 @@
     timer = setTimeout(() => void fetchQuick(query), immediate ? 0 : 170)
   }
 
+  async function fetchLocalQuick(query: string, mine: number): Promise<void> {
+    await downloads.init()
+    if (mine !== seq) return
+    const needle = query.toLowerCase()
+    const songs = downloads.entries
+      .filter((entry) =>
+        `${entry.track.title} ${entry.track.artist} ${entry.track.album ?? ''}`
+          .toLowerCase()
+          .includes(needle)
+      )
+      .slice(0, QUICK_LIMIT)
+      .map((entry) => ({
+        ...trackToItem(entry.track),
+        thumbnail: entry.artUrl ?? entry.track.thumbnail
+      }))
+    quick = { songs, artists: [], playlists: [] }
+    loading = { songs: false, artists: false, playlists: false }
+  }
+
   async function fetchQuick(query: string): Promise<void> {
     timer = null
+    if (network.localFirst) {
+      await fetchLocalQuick(query, ++seq)
+      return
+    }
     const mine = ++seq
     let left = GROUP_DEFS.length
     let failures = 0
@@ -452,7 +489,9 @@
       onfocus={onFocus}
       onclick={onInputClick}
       onkeydown={onInputKeydown}
-      placeholder="Search songs, artists, playlists…"
+      placeholder={network.localFirst
+        ? 'Search your downloads…'
+        : 'Search songs, artists, playlists…'}
       spellcheck="false"
       autocomplete="off"
       role="combobox"
@@ -567,6 +606,10 @@
             <div class="quick-status">
               <span class="pip" aria-hidden="true"></span>
               Searching…
+            </div>
+          {:else if network.localFirst}
+            <div class="quick-status">
+              No downloaded songs match “{searchState.query.trim()}”.
             </div>
           {:else if quickError}
             <div class="quick-status error">
