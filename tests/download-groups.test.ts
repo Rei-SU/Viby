@@ -1,5 +1,5 @@
 /**
- * Downloads page grouping: collection-owned songs must not appear again in the
+ * Library download grouping: collection-owned songs must not appear again in
  * loose Songs list, and artwork must fall back to the collection cover.
  * Run: node tests/unit.mjs download-groups
  */

@@ -9,7 +9,9 @@
     formatDuration,
     formatSize
   } from '../lib/download-groups'
+  import { markFor } from '../lib/library-items'
   import Cover from './Cover.svelte'
+  import DownloadBadge from './DownloadBadge.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
 
@@ -27,6 +29,12 @@
   const total = $derived(entries.reduce((sum, entry) => sum + (entry.track.durationSec ?? 0), 0))
   const bytes = $derived(entries.reduce((sum, entry) => sum + entry.bytes, 0))
   const art = $derived(collection?.artUrl ?? collection?.thumbnail ?? items[0]?.thumbnail)
+  const mark = $derived(markFor(entries.length, collection?.trackIds.length ?? 0))
+  const progress = $derived(
+    collection && collection.trackIds.length > 0
+      ? (entries.length / collection.trackIds.length) * 100
+      : 0
+  )
 
   const kindLabel = $derived(
     collection?.kind === 'album'
@@ -85,18 +93,18 @@
 
 {#if !collection}
   <div class="view missing">
-    <span class="kind">Downloads</span>
+    <span class="kind">Library</span>
     <h1>This download is gone</h1>
     <p class="missing-text">It is no longer on this device.</p>
-    <button class="play-all" onclick={() => nav.go('downloads')}>Back to downloads</button>
+    <button class="play-all" onclick={() => nav.go('library')}>Back to Library</button>
   </div>
 {:else}
   <div class="view">
     <header class="hero">
       <div class="art-wrap">
         <Cover src={art} size={168} radius={14} alt={collection.title} />
-        <span class="offline-badge" title="Available offline" aria-label="Available offline">
-          <Icon name="check" size={12} />
+        <span class="offline-badge">
+          <DownloadBadge {mark} {progress} size={26} />
         </span>
       </div>
 
@@ -180,14 +188,7 @@
     position: absolute;
     right: 9px;
     bottom: 9px;
-    display: grid;
-    place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    color: #08080b;
-    background: var(--accent);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    display: flex;
   }
 
   .hero-text {

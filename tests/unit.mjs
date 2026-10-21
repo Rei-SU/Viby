@@ -19,6 +19,8 @@ const suites = {
   'downloads-store': { file: 'downloads-store.test.ts', electron: true },
   'downloads-manager': { file: 'downloads-manager.test.ts', electron: true },
   'download-groups': { file: 'download-groups.test.ts' },
+  'library-items': { file: 'library-items.test.ts' },
+  images: { file: 'images.test.ts', electron: true },
   network: { file: 'network.test.ts', electron: true }
 }
 

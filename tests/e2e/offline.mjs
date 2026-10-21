@@ -27,8 +27,9 @@ export async function run(app, check) {
           pill: pill?.textContent?.trim() ?? null,
           home,
           eyebrow: document.querySelector('.content .status, .content .eyebrow')?.textContent?.trim() ?? null,
-          downloadsDisabled: navButton('Charts')?.disabled ?? null,
+          chartsDisabled: navButton('Charts')?.disabled ?? null,
           importDisabled: navButton('Import')?.disabled ?? null,
+          libraryPresent: Boolean(navButton('Library')),
           downloadsPresent: Boolean(navButton('Downloads')),
           notice: document.querySelector('.content .notice')?.textContent?.trim() ?? null
         }
@@ -40,9 +41,10 @@ export async function run(app, check) {
     check('manual mode is reported', offline.state?.forcedOffline === true, JSON.stringify(offline.state))
     check('titlebar shows the offline pill', Boolean(offline.pill), String(offline.pill))
     check('offline Home replaces Home', offline.home === 'Ready when you are.', String(offline.home))
-    check('Charts is disabled offline', offline.downloadsDisabled === true, String(offline.downloadsDisabled))
+    check('Charts is disabled offline', offline.chartsDisabled === true, String(offline.chartsDisabled))
     check('Import is disabled offline', offline.importDisabled === true, String(offline.importDisabled))
-    check('Downloads stays available', offline.downloadsPresent === true)
+    check('Library stays available', offline.libraryPresent === true)
+    check('the separate Downloads page is gone', offline.downloadsPresent === false)
     check('no error banner on offline Home', offline.notice === null, String(offline.notice))
 
     const snapshot = await app.evaluate(
@@ -58,20 +60,33 @@ export async function run(app, check) {
     )
     check('downloads snapshot is well formed', Object.values(snapshot).every(Boolean), JSON.stringify(snapshot))
 
-    const downloads = await app.evaluate(
+    const library = await app.evaluate(
       `
       (async () => {
         const item = [...document.querySelectorAll('.nav')].find((b) =>
-          b.textContent?.trim().includes('Downloads')
+          b.textContent?.trim().includes('Library')
         )
         item?.click()
-        await new Promise((r) => setTimeout(r, 700))
-        return document.querySelector('.content h1')?.textContent?.trim() ?? null
+        await new Promise((r) => setTimeout(r, 900))
+        const chips = [...document.querySelectorAll('.filters .chip')].map((chip) =>
+          chip.textContent?.trim()
+        )
+        return {
+          title: document.querySelector('.content h1')?.textContent?.trim() ?? null,
+          chips,
+          badgeCount: document.querySelectorAll('.badge').length
+        }
       })()
     `,
       { userGesture: true }
     )
-    check('Downloads view opens offline', downloads === 'Downloads', String(downloads))
+    check('Library opens offline', library.title === 'Library', String(library.title))
+    check(
+      'Library offers Spotify-style filters',
+      ['All', 'Playlists', 'Albums', 'Downloaded'].every((label) => library.chips?.includes(label)),
+      JSON.stringify(library.chips)
+    )
+    check('badges render without a crash', typeof library.badgeCount === 'number', String(library.badgeCount))
 
     const online = await app.evaluate(
       `

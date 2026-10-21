@@ -87,7 +87,7 @@
       <button class="primary" disabled={entries.length === 0} onclick={playAll}>
         <Icon name="play" size={13} solid /> Play downloads
       </button>
-      <button class="secondary" onclick={() => nav.go('downloads')}>Manage downloads</button>
+      <button class="secondary" onclick={() => nav.go('library')}>Manage downloads</button>
       {#if network.state.forcedOffline}
         <button class="secondary" onclick={() => void network.setMode('auto')}>Go online</button>
       {/if}
@@ -117,7 +117,7 @@
       <section class="shelf">
         <div class="shelf-head">
           <h2>Continue listening</h2>
-          <button class="link" onclick={() => nav.go('downloads')}>See all</button>
+          <button class="link" onclick={() => nav.go('library')}>See all</button>
         </div>
         <div class="rail">
           {#each recent as item (item.id)}
@@ -159,7 +159,7 @@
       <section class="shelf">
         <div class="shelf-head">
           <h2>Songs</h2>
-          <button class="link" onclick={() => nav.go('downloads')}>Manage</button>
+          <button class="link" onclick={() => nav.go('library')}>Manage</button>
         </div>
         <ul class="rows">
           {#each standalone.slice(0, 8) as item, index (item.id)}
@@ -167,8 +167,8 @@
           {/each}
         </ul>
         {#if standalone.length > 8}
-          <button class="link more" onclick={() => nav.go('downloads')}>
-            {standalone.length - 8} more in Downloads
+          <button class="link more" onclick={() => nav.go('library')}>
+            {standalone.length - 8} more in Library
           </button>
         {/if}
       </section>

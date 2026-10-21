@@ -145,7 +145,7 @@
           {/if}
         </span>
       </div>
-      <button class="ghost" onclick={() => nav.go('downloads')}>Manage</button>
+      <button class="ghost" onclick={() => nav.go('library')}>Manage</button>
     </div>
 
     <div class="row">

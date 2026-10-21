@@ -34,6 +34,7 @@ import { session } from './session'
 import { cachedLyrics, getLyrics } from './lyrics'
 import { lib } from './library'
 import { AudioCache } from './cache/audio'
+import { ImageCache } from './cache/images'
 import { shouldCache } from './cache/policy'
 import { Resolver, NoDirectUrlError } from './ytdlp/resolver'
 import { ensureRunner, runnerInfo, updateRunner } from './ytdlp/binary'
@@ -72,6 +73,12 @@ let cache: AudioCache | null = null
 function cacheInstance(): AudioCache {
   if (!cache) cache = audioCache()
   return cache
+}
+
+let images: ImageCache | null = null
+function imageCache(): ImageCache {
+  if (!images) images = new ImageCache(join(app.getPath('userData'), 'cache', 'art'))
+  return images
 }
 
 /** Metadata for anything we have played, so cached tracks work offline. */
@@ -518,7 +525,24 @@ export function registerIpc(): void {
 
   ipcMain.handle(CH.cacheStats, () => cacheInstance().stats())
 
-  ipcMain.handle(CH.cacheClear, () => cacheInstance().clear())
+  ipcMain.handle(CH.cacheClear, () => {
+    cacheInstance().clear()
+    // Artwork is cache too, even though the Settings line reports audio only.
+    imageCache().clear()
+    return cacheInstance().stats()
+  })
+
+  ipcMain.handle(CH.imagesCache, (_e, urls: unknown): Promise<Record<string, string>> => {
+    const list = Array.isArray(urls)
+      ? urls.filter((url): url is string => typeof url === 'string')
+      : []
+    const art = imageCache()
+    // Offline we can only answer with what is already on disk; fetching would
+    // hang until the timeout and make the library flicker through placeholders.
+    return networkMonitor.isOffline()
+      ? Promise.resolve(art.localMany(list))
+      : art.cacheMany(list)
+  })
 
   ipcMain.handle(CH.ytdlpInfo, async (): Promise<Result<YtDlpInfo>> => {
     try {

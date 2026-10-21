@@ -11,24 +11,30 @@
   let {
     item,
     index,
+    contextIndex,
     context,
     onQueue,
     onRemove,
     showIndex = false,
     showArt = true,
     showDownload = true,
+    unavailable = false,
     meta
   }: {
     item: CatalogItem
     index?: number
+    /** Position inside `context` when the context is a filtered (offline) list. */
+    contextIndex?: number
     context?: CatalogItem[]
     onQueue?: (item: CatalogItem) => void
     onRemove?: (item: CatalogItem) => void
     showIndex?: boolean
     /** Album/playlist pages already show the artwork on the page itself. */
     showArt?: boolean
-    /** Off in the Downloads page itself, where removal is the row action. */
+    /** Off on library rows where removal is the row action. */
     showDownload?: boolean
+    /** Offline and not downloaded: visible for context, but inert and faded. */
+    unavailable?: boolean
     /** Small right-aligned annotation, e.g. "12 MB · Best". */
     meta?: string
   } = $props()
@@ -41,6 +47,7 @@
   )
   const playing = $derived(active && player.playing)
   const playable = $derived(isPlayable(item))
+  const canPlay = $derived(playable && !unavailable)
   const rounded = $derived(item.kind === 'artist')
   const downloadState = $derived(downloads.stateFor(item.id))
   const downloadJob = $derived(downloads.jobFor(item.id))
@@ -65,7 +72,7 @@
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
 
   function hoverStart(): void {
-    if (!playable) return
+    if (!canPlay) return
     hoverTimer = setTimeout(() => player.prefetch(item.id), 80)
   }
 
@@ -77,9 +84,9 @@
   }
 
   function activate(): void {
-    if (playable) {
-      void player.playList(context ?? [item], index ?? 0)
-    } else {
+    if (canPlay) {
+      void player.playList(context ?? [item], contextIndex ?? index ?? 0)
+    } else if (!unavailable) {
       nav.open(item)
     }
   }
@@ -107,7 +114,7 @@
   }
 
   async function toggleDownload(): Promise<void> {
-    if (!playable) return
+    if (!canPlay) return
     if (downloadState === 'done') {
       if (window.confirm(`Remove the download for “${item.title}”?`)) {
         await downloads.removeTrack(item.id)
@@ -126,12 +133,19 @@
   }
 </script>
 
-<li class="row" class:active onpointerenter={hoverStart} onpointerleave={hoverEnd}>
+<li
+  class="row"
+  class:active
+  class:unavailable
+  onpointerenter={hoverStart}
+  onpointerleave={hoverEnd}
+>
   <div
     class="main"
     role="button"
     tabindex="0"
-    title={playable ? 'Play' : 'Open'}
+    aria-disabled={unavailable}
+    title={unavailable ? 'Not downloaded — unavailable offline' : playable ? 'Play' : 'Open'}
     onclick={activate}
     onkeydown={(event) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -180,7 +194,7 @@
     <span class="row-meta tabular">{meta}</span>
   {/if}
 
-  {#if playable && showDownload}
+  {#if canPlay && showDownload}
     <button
       class="row-action dl"
       class:on={downloadState === 'done'}
@@ -203,7 +217,7 @@
     </button>
   {/if}
 
-  {#if playable}
+  {#if canPlay}
     <button
       class="row-action"
       title="Add to playlist"
@@ -260,6 +274,18 @@
 
   .row.active {
     background: var(--glass-active);
+  }
+
+  .row.unavailable {
+    opacity: 0.38;
+  }
+
+  .row.unavailable:hover {
+    background: transparent;
+  }
+
+  .row.unavailable .main {
+    cursor: default;
   }
 
   .main {

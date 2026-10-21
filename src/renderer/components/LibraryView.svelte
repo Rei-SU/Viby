@@ -1,18 +1,73 @@
 <script lang="ts">
-  import type { Playlist, Track } from '@shared/types'
+  import type { CatalogItem, Track } from '@shared/types'
   import { api } from '../lib/api'
   import { playlists } from '../lib/playlists.svelte'
+  import { downloads } from '../lib/downloads.svelte'
   import { nav } from '../lib/nav.svelte'
+  import { artwork } from '../lib/artwork.svelte'
+  import { buildLibraryItems } from '../lib/library-items'
+  import {
+    entryToItem,
+    formatSize,
+    standaloneEntries
+  } from '../lib/download-groups'
   import Cover from './Cover.svelte'
+  import DownloadBadge from './DownloadBadge.svelte'
   import Icon from './Icon.svelte'
+  import TrackRow from './TrackRow.svelte'
+
+  type Filter = 'all' | 'playlists' | 'albums' | 'downloaded'
+
+  const FILTERS: { id: Filter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'playlists', label: 'Playlists' },
+    { id: 'albums', label: 'Albums' },
+    { id: 'downloaded', label: 'Downloaded' }
+  ]
 
   let favorites = $state<Track[]>([])
   let creating = $state(false)
   let name = $state('')
+  let filter = $state<Filter>('all')
+
+  const items = $derived(
+    buildLibraryItems(favorites, playlists.items, downloads.collections, downloads.entries)
+  )
+  const visible = $derived(
+    items.filter((item) => {
+      if (filter === 'all') return true
+      if (filter === 'playlists') return item.kind === 'liked' || item.kind === 'playlist'
+      if (filter === 'albums') return item.kind === 'album'
+      return item.mark !== 'none'
+    })
+  )
+  const loose = $derived(standaloneEntries(downloads.collections, downloads.entries))
+  const looseSongs = $derived(
+    loose.map((entry) => ({ entry, item: entryToItem(entry, downloads.collections) }))
+  )
+  const looseItems = $derived(looseSongs.map((song) => song.item))
+  const looseBytes = $derived(loose.reduce((sum, entry) => sum + entry.bytes, 0))
+
+  const showNew = $derived(filter === 'all' || filter === 'playlists')
+  const showSongs = $derived((filter === 'all' || filter === 'downloaded') && loose.length > 0)
+  const empty = $derived(visible.length === 0 && !showNew && !showSongs)
 
   $effect(() => {
     void playlists.load(true)
     void loadFavorites()
+  })
+
+  // Keep every cover and row thumbnail for the saved library on disk. Opening a
+  // playlist offline should never be a page of placeholders.
+  $effect(() => {
+    artwork.warm(
+      [
+        ...items.map((item) => item.art),
+        ...favorites.map((track) => track.thumbnail),
+        ...playlists.items.flatMap((playlist) => playlist.tracks.map((track) => track.thumbnail))
+      ],
+      true
+    )
   })
 
   async function loadFavorites(): Promise<void> {
@@ -28,63 +83,121 @@
     nav.openCollection({ kind: 'playlist', id: playlist.id })
   }
 
-  function coverOf(playlist: Playlist): string | undefined {
-    return playlist.tracks[0]?.thumbnail
-  }
-
-  function count(n: number): string {
-    return `${n} ${n === 1 ? 'song' : 'songs'}`
+  async function removeSong(item: CatalogItem): Promise<void> {
+    if (!window.confirm(`Remove the download for “${item.title}”?`)) return
+    await downloads.removeTrack(item.id)
   }
 </script>
 
 <div class="view">
   <header class="head">
-    <h1>Library</h1>
-    <p>Saved on this machine — no sign-in required.</p>
+    <div>
+      <h1>Library</h1>
+      <p>Saved on this device. Downloaded items are badged and play offline.</p>
+    </div>
+    <div class="filters" role="toolbar" aria-label="Library filters">
+      {#each FILTERS as option (option.id)}
+        <button
+          class="chip"
+          class:on={filter === option.id}
+          aria-pressed={filter === option.id}
+          onclick={() => (filter = option.id)}
+        >
+          {option.label}
+        </button>
+      {/each}
+    </div>
   </header>
 
-  <div class="grid">
-    <button class="tile" onclick={() => nav.openCollection({ kind: 'liked' })}>
-      <span class="art liked">
-        <Icon name="heart" size={44} solid />
-      </span>
-      <span class="tile-title truncate">Liked songs</span>
-      <span class="tile-sub">{count(favorites.length)}</span>
-    </button>
+  {#if visible.length > 0 || showNew}
+    <div class="grid">
+      {#each visible as item (item.id)}
+        <button class="tile" onclick={() => nav.openCollection(item.ref)}>
+          <span class="art-wrap">
+            {#if item.kind === 'liked'}
+              <span class="art liked">
+                <Icon name="heart" size={44} solid />
+              </span>
+            {:else}
+              <Cover src={artwork.src(item.art)} size={152} radius={12} alt={item.title} />
+            {/if}
+            <span class="badge-slot">
+              <DownloadBadge mark={item.mark} progress={item.progress} />
+            </span>
+          </span>
+          <span class="tile-title truncate">{item.title}</span>
+          <span class="tile-sub truncate">{item.subtitle}</span>
+        </button>
+      {/each}
 
-    {#each playlists.items as playlist (playlist.id)}
-      <button class="tile" onclick={() => nav.openCollection({ kind: 'playlist', id: playlist.id })}>
-        <Cover src={coverOf(playlist)} size={152} radius={12} alt={playlist.name} />
-        <span class="tile-title truncate">{playlist.name}</span>
-        <span class="tile-sub">{count(playlist.tracks.length)}</span>
-      </button>
-    {/each}
+      {#if showNew}
+        {#if creating}
+          <form class="tile new" onsubmit={create}>
+            <input bind:value={name} placeholder="Playlist name" aria-label="Playlist name" />
+            <div class="new-actions">
+              <button type="submit" class="primary" disabled={!name.trim()}>Create</button>
+              <button
+                type="button"
+                class="ghost"
+                onclick={() => {
+                  creating = false
+                  name = ''
+                }}>Cancel</button
+              >
+            </div>
+          </form>
+        {:else}
+          <button class="tile" onclick={() => (creating = true)}>
+            <span class="art add">
+              <Icon name="plus" size={28} />
+            </span>
+            <span class="tile-title">New playlist</span>
+            <span class="tile-sub">Start from scratch</span>
+          </button>
+        {/if}
+      {/if}
+    </div>
+  {/if}
 
-    {#if creating}
-      <form class="tile new" onsubmit={create}>
-        <input bind:value={name} placeholder="Playlist name" aria-label="Playlist name" />
-        <div class="new-actions">
-          <button type="submit" class="primary" disabled={!name.trim()}>Create</button>
-          <button
-            type="button"
-            class="ghost"
-            onclick={() => {
-              creating = false
-              name = ''
-            }}>Cancel</button
-          >
-        </div>
-      </form>
-    {:else}
-      <button class="tile" onclick={() => (creating = true)}>
-        <span class="art add">
-          <Icon name="plus" size={28} />
+  {#if empty}
+    <div class="empty">
+      <Icon name="download" size={26} />
+      <p class="empty-title">
+        {filter === 'albums' ? 'No downloaded albums yet' : 'Nothing downloaded yet'}
+      </p>
+      <p>
+        {#if filter === 'albums'}
+          Download an album to keep it here for offline listening.
+        {:else}
+          Use the download button on any song, album or playlist to keep it available offline.
+        {/if}
+      </p>
+    </div>
+  {/if}
+
+  {#if showSongs}
+    <section class="songs">
+      <div class="section-head">
+        <h2>Downloaded songs</h2>
+        <span>
+          {loose.length} {loose.length === 1 ? 'song' : 'songs'} · {formatSize(looseBytes)}
         </span>
-        <span class="tile-title">New playlist</span>
-        <span class="tile-sub">Start from scratch</span>
-      </button>
-    {/if}
-  </div>
+      </div>
+      <ul class="rows">
+        {#each looseSongs as { entry, item }, i (entry.track.id)}
+          <TrackRow
+            {item}
+            context={looseItems}
+            index={i}
+            showIndex={false}
+            showDownload={false}
+            meta={formatSize(entry.bytes)}
+            onRemove={removeSong}
+          />
+        {/each}
+      </ul>
+    </section>
+  {/if}
 </div>
 
 <style>
@@ -93,6 +206,12 @@
     flex-direction: column;
     gap: 24px;
     padding: 4px 2px 20px;
+  }
+
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
 
   h1 {
@@ -106,6 +225,34 @@
     margin: 0;
     color: var(--text-faint);
     font-size: 12.5px;
+  }
+
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .chip {
+    height: 30px;
+    padding: 0 13px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px var(--stroke);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .chip:hover {
+    background: var(--glass-hover);
+    color: var(--text);
+  }
+
+  .chip.on {
+    background: var(--text);
+    color: #08080b;
+    box-shadow: none;
   }
 
   .grid {
@@ -122,13 +269,23 @@
     text-align: left;
   }
 
-  .tile:hover .art {
+  .tile:hover .art-wrap {
     transform: translateY(-3px);
+  }
+
+  .tile:hover .art-wrap :global(img),
+  .tile:hover .art {
     box-shadow: var(--shadow-card);
   }
 
-  .art {
+  .art-wrap {
     position: relative;
+    width: 152px;
+    height: 152px;
+    transition: transform var(--speed) var(--ease);
+  }
+
+  .art {
     width: 152px;
     height: 152px;
     border-radius: 12px;
@@ -156,15 +313,24 @@
     background: var(--glass-hover);
   }
 
+  .badge-slot {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: flex;
+  }
+
   .tile-title {
     font-size: 13px;
     font-weight: 500;
     margin-top: 4px;
+    max-width: 152px;
   }
 
   .tile-sub {
     font-size: 11.5px;
     color: var(--text-faint);
+    max-width: 152px;
   }
 
   .new {
@@ -221,5 +387,59 @@
   .ghost:hover {
     background: var(--glass-hover);
     color: var(--text);
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 22px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.025);
+    box-shadow: inset 0 0 0 1px var(--stroke);
+    color: var(--text-faint);
+    font-size: 12.5px;
+  }
+
+  .empty-title {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 550;
+  }
+
+  .empty p {
+    margin: 0;
+  }
+
+  .songs {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  h2 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .section-head span {
+    color: var(--text-faint);
+    font-size: 11.5px;
+  }
+
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
 </style>

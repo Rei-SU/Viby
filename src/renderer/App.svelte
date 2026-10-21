@@ -6,7 +6,6 @@
   import PlayerBar from './components/PlayerBar.svelte'
   import HomeView from './components/HomeView.svelte'
   import OfflineHome from './components/OfflineHome.svelte'
-  import DownloadsView from './components/DownloadsView.svelte'
   import SearchView from './components/SearchView.svelte'
   import SearchBar from './components/SearchBar.svelte'
   import DetailView from './components/DetailView.svelte'
@@ -23,6 +22,7 @@
   import Icon from './components/Icon.svelte'
   import { network } from './lib/network.svelte'
   import { downloads } from './lib/downloads.svelte'
+  import { artwork } from './lib/artwork.svelte'
 
   const navItems: {
     id: View
@@ -33,7 +33,6 @@
     { id: 'charts', label: 'Charts', icon: 'chart' },
     { id: 'search', label: 'Search', icon: 'search' },
     { id: 'library', label: 'Library', icon: 'disc' },
-    { id: 'downloads', label: 'Downloads', icon: 'download' },
     { id: 'queue', label: 'Queue', icon: 'list' },
     { id: 'import', label: 'Import', icon: 'plus' },
     { id: 'settings', label: 'Settings', icon: 'gear' }
@@ -65,6 +64,8 @@
       backOnline = true
       if (backOnlineTimer) clearTimeout(backOnlineTimer)
       backOnlineTimer = setTimeout(() => (backOnline = false), 2600)
+      // Artwork that missed while offline can fill in now.
+      artwork.retry()
     }
     wasLocalFirst = local
   })
@@ -186,7 +187,7 @@
               <button
                 onclick={() => {
                   netMenu = false
-                  nav.go('downloads')
+                  nav.go('library')
                 }}
               >
                 Manage downloads
@@ -285,7 +286,7 @@
           <h1>Charts needs a connection</h1>
           <p>{network.detail || 'Reconnect to browse the charts.'} Your downloads still play.</p>
           <div class="offline-actions">
-            <button class="primary" onclick={() => nav.go('downloads')}>Open downloads</button>
+            <button class="primary" onclick={() => nav.go('library')}>Open Library</button>
           </div>
         </div>
       {:else}
@@ -295,8 +296,6 @@
       <SearchView />
     {:else if nav.view === 'library'}
       <LibraryView />
-    {:else if nav.view === 'downloads'}
-      <DownloadsView />
     {:else if nav.view === 'queue'}
       <Queue />
     {:else if nav.view === 'settings'}
@@ -307,7 +306,7 @@
         <h1>Import needs a connection</h1>
         <p>{network.detail || 'Reconnect to import a playlist.'}</p>
         <div class="offline-actions">
-          <button class="primary" onclick={() => nav.go('downloads')}>Open downloads</button>
+          <button class="primary" onclick={() => nav.go('library')}>Open Library</button>
         </div>
       </div>
     {:else}

@@ -72,6 +72,9 @@ const api: VibyApi = {
     stats: () => ipcRenderer.invoke(CH.cacheStats),
     clear: () => ipcRenderer.invoke(CH.cacheClear)
   },
+  images: {
+    cache: (urls: string[]) => ipcRenderer.invoke(CH.imagesCache, urls)
+  },
   network: {
     get: () => ipcRenderer.invoke(CH.networkGet),
     setMode: (mode: OfflineMode) => ipcRenderer.invoke(CH.networkSetMode, mode),

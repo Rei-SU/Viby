@@ -2,8 +2,8 @@ import type { CatalogItem, DownloadCollection, DownloadEntry } from '@shared/typ
 import { trackToItem } from './track'
 
 /**
- * The Downloads page is a library of two things: collections and loose songs.
- * These helpers keep that split (and the offline artwork fallbacks) identical
+ * Downloads are a library of two things: collections and loose songs. These
+ * helpers keep that split (and the offline artwork fallbacks) identical
  * everywhere it is rendered, without any catalog or network access.
  */
 

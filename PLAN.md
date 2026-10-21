@@ -779,7 +779,7 @@ Status: planned, not started (2026-10-21). Scope locked with the product decisio
 | Eviction | LRU under a cap | Never |
 | Clearing | "Clear cache" | "Remove download" |
 
-Downloads are explicit, user-owned and permanent until the user removes them — or until the collection that owns them is deleted and no other reference remains. They are listed in a Downloads view. A download hit is used before the cache; when a track becomes a download its cached copy is removed to avoid double storage (unless it is the file currently playing; then it is left for the next eviction). Clearing the cache never touches downloads, and removing downloads never touches the cache.
+Downloads are explicit, user-owned and permanent until the user removes them — or until the collection that owns them is deleted and no other reference remains. They live in **Library** with a clean badge and a Downloaded filter, Spotify-style; there is no separate Downloads page. A download hit is used before the cache; when a track becomes a download its cached copy is removed to avoid double storage (unless it is the file currently playing; then it is left for the next eviction). Clearing the cache never touches downloads, and removing downloads never touches the cache.
 
 ### 17.2 Locked decisions
 
@@ -809,7 +809,7 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
 
 - A compact titlebar status pill: "Offline", "Offline mode" or "Can't reach YouTube". Click opens a small menu with Manage downloads and, in manual mode, Go online. It is the only persistent offline chrome.
 - Settings gains "Use offline mode" / "Go online" with the current connectivity reason.
-- Sidebar gains **Downloads** (always present). While offline, Charts and Import are disabled with a tooltip; Search works against downloads (phase P7c).
+- Sidebar has **Library** (always present); downloads are part of it rather than a separate page. While offline, Charts and Import are disabled with a tooltip; Search works against downloads (phase P7c).
 
 **Home**
 
@@ -818,22 +818,25 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
   - Sub: "Your downloads are ready to play." (manual mode: "Offline mode is on — using your downloads.")
   - Sections: Continue listening, Downloaded albums, Downloaded playlists, Downloaded songs.
   - Empty state: "Download music while you're online and it'll appear here."
-  - "Manage downloads" link and storage summary.
-- Reconnecting refreshes Home and shows a brief "Back online" confirmation. It never yanks the user off Downloads or Library.
+  - "Manage downloads" link opens Library, with storage summary.
+- Reconnecting refreshes Home and shows a brief "Back online" confirmation. It never yanks the user off a collection or Library.
 
-**Downloads view**
+**Library**
 
-- Header: count, total size, free disk space, "Delete all downloads" (confirmation).
-- Groups: downloaded collections and loose songs. A song that belongs to a downloaded album, playlist or Liked Songs appears only inside that collection, never again under Songs; `n/m` marks incomplete collections.
-- Clicking a collection opens its downloaded collection page (cover, title, Play all, Remove download, per-song size/quality and remove). The play button on the row still plays the whole collection without leaving Downloads.
+- Header filters: **All · Playlists · Albums · Downloaded**, with **New playlist** in All/Playlists.
+- Tiles: Liked Songs, saved playlists, and downloaded albums (plus orphaned downloaded playlist snapshots). Downloaded playlists are not duplicated: their saved tile carries the badge.
+- Badge: a small white check for a fully downloaded item, a progress ring with a download glyph for a partial item, and nothing when not downloaded. The same badge is reused on collection heroes.
+- Downloaded songs section: standalone downloads that no downloaded collection owns, with size and row removal. Collection-owned songs never appear here or in a second list.
+- Clicking a downloaded album opens its local-first collection page (cover, title, Play all, Remove download, per-song size/quality and remove). Clicking a saved playlist/Liked Songs always opens the normal collection page.
 - Renders from snapshots in the download index, so it works offline even though artist/album pages need the network.
-- Song rows: play, remove, size and quality, with artwork (the collection cover when a track has no thumbnail of its own).
+- Opening Library warms every saved cover and track thumbnail into `userData/cache/art`, so a playlist is not a grid of placeholders offline.
 
 **Collection pages**
 
 - Album, playlist and Liked Songs heroes get a Download action with states: Download · Downloading n/m · Downloaded · Update (when tracks are missing).
-- A downloaded collection opens a local-first page with the same hero/play/track-row language as the online page, but marked "Downloaded album/playlist/liked songs" and "Offline ready". It lists only songs actually on disk, with Remove download at the collection and row level; removing a row drops that reference and deletes the file only when nothing else owns it.
-- Track rows get a download action/state in the existing hover cluster: idle, queued, downloading %, done, failed with retry.
+- Offline, a saved playlist/Liked Songs still shows its full track list and cached artwork. Rows that are not downloaded fade to ~38% opacity, show "Not downloaded — unavailable offline" on hover, and are inert. Play all queues only the available rows and is disabled when none are.
+- A downloaded album opens a local-first page with the same hero/play/track-row language as the online page, marked "Downloaded album/playlist/liked songs" and "Offline ready". It lists the songs actually on disk, with Remove download at the collection and row level; removing a row drops that reference and deletes the file only when nothing else owns it.
+- Track rows get a download action/state in the existing hover cluster: idle, queued, downloading %, done, failed with retry. Downloaded rows keep a persistent check even offline.
 - Deleting a playlist, or removing a track from it, prunes that playlist's references. The confirmation states how many downloaded songs will be deleted.
 
 **Player and queue**
@@ -896,10 +899,10 @@ type DownloadJob = {
 ```
 
 - The index is the truth for playback. An entry without a file is healed away; an orphan file with no entry is deleted on the next launch — which also finishes a removal whose file the OS still held open (Windows).
-- References: a direct song download adds `track:<id>`; an album or playlist adds its key to every member; Liked Songs adds the `liked` source. Unfavouriting never prunes, and removing the Liked Songs download deletes only the files no other source still owns. Removing a reference deletes the entry/file only when `sources` is empty. "Remove download" in Downloads clears all sources for that track.
+- References: a direct song download adds `track:<id>`; an album or playlist adds its key to every member; Liked Songs adds the `liked` source. Unfavouriting never prunes, and removing the Liked Songs download deletes only the files no other source still owns. Removing a reference deletes the entry/file only when `sources` is empty. "Remove download" in Library clears all sources for that track.
 - Lyrics are part of a download: fetched when the song finishes and pinned under `downloads/lyrics/`, then served by the lyrics API before its offline check. Downloads made before this existed are backfilled the first time the app is online. Lyrics disappear with their entry.
 - Collection snapshots keep offline grouping working; n/m is computed against the live library where it exists, otherwise the snapshot.
-- Artwork is fetched at enqueue/download time through `net.fetch` (proxy-aware), size-capped, and served locally. A track with no thumbnail of its own borrows its downloaded collection's cover. Extend the media scheme's MIME table for images and restrict served paths to the cache/downloads roots as hardening.
+- Artwork is fetched at enqueue/download time through `net.fetch` (proxy-aware), size-capped, and served locally. A track with no thumbnail of its own borrows its downloaded collection's cover. Saved-library artwork also uses a content-addressed cache under `userData/cache/art` (separate from the audio cache, 256MB cap) and the same `viby-media://` scheme, so playlist covers and row thumbnails survive offline. Extend the media scheme's MIME table for images and restrict served paths to the cache/downloads roots as hardening.
 - One file per track id regardless of how many collections reference it.
 - On successful download, remove the cache entry; `kickOffBackgroundCache` skips downloaded tracks; cache eviction never sees downloads.
 
@@ -931,10 +934,13 @@ type DownloadJob = {
 - `src/main/network.ts` — monitor, probe, manual mode, broadcast
 - `src/main/downloads/store.ts` — index, references, healing, stats
 - `src/main/downloads/manager.ts` — queue, progress, retries, resume, disk guard
-- `src/main/downloads/art.ts` — artwork fetch/cache
+- `src/main/downloads/art.ts` — artwork fetch/cache for pinned downloads
+- `src/main/cache/images.ts` — content-addressed saved-library artwork cache
 - `src/renderer/lib/network.svelte.ts`, `src/renderer/lib/downloads.svelte.ts`
 - `src/renderer/lib/download-groups.ts` — collection/loose-song split and offline artwork fallbacks
-- `src/renderer/components/DownloadsView.svelte`, `DownloadCollectionView.svelte`, `OfflineHome.svelte`, `DownloadButton.svelte`
+- `src/renderer/lib/library-items.ts` — unified Library tiles, download marks and progress
+- `src/renderer/lib/artwork.svelte.ts` — resolve/warm library images through the cache
+- `src/renderer/components/DownloadBadge.svelte`, `DownloadCollectionView.svelte`, `OfflineHome.svelte`, `DownloadButton.svelte`
 
 **Touched**
 
@@ -953,12 +959,12 @@ Monitor, renderer store, manual toggle, offline pill, Offline Home empty state, 
 *Acceptance:* airplane mode at launch shows the offline Home instantly, with no error toast and no yt-dlp delay when pressing play on an uncached track; reconnecting restores Home.
 
 **P7b — Download core.**
-Storage/index, manager, progress, per-song action, Downloads view (songs + storage), playback priority, cache dedupe, persistence/resume, cancel/retry, disk guard, artwork for songs.
-*Acceptance:* download a song, quit, relaunch offline, play it from Downloads; clearing cache leaves it untouched; cancel and retry work.
+Storage/index, manager, progress, per-song action, Library integration (songs + storage), playback priority, cache dedupe, persistence/resume, cancel/retry, disk guard, artwork for songs.
+*Acceptance:* download a song, quit, relaunch offline, play it from Library; clearing cache leaves it untouched; cancel and retry work.
 
 **P7c — Collections and polish.**
-Album/playlist/Liked actions with coverage and Update; grouped Downloads view; reference-based pruning; offline artwork for collections; offline local search; settings copy; low-disk warnings; queue polish.
-*Acceptance:* download a playlist and play it fully offline; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; offline search finds downloads.
+Album/playlist/Liked actions with coverage and Update; grouped Library with downloaded filters and badges; reference-based pruning; offline artwork for saved collections; faded unavailable rows; offline local search; settings copy; low-disk warnings; queue polish.
+*Acceptance:* download a playlist and play it fully offline; a saved but undownloaded playlist still opens offline with cached art, all rows visible and non-downloaded rows faded; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; offline search finds downloads.
 
 **P7d — Hardening.**
 Network flapping, failed-download recovery, quit mid-download, long playlists, Windows/macOS validation, `offline` e2e, docs.

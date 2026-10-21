@@ -5,7 +5,6 @@ export type View =
   | 'charts'
   | 'search'
   | 'library'
-  | 'downloads'
   | 'queue'
   | 'import'
   | 'settings'

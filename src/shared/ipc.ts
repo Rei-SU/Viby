@@ -62,6 +62,7 @@ export const CH = {
 
   cacheStats: 'cache:stats',
   cacheClear: 'cache:clear',
+  imagesCache: 'images:cache',
 
   networkGet: 'network:get',
   networkSetMode: 'network:set-mode',
@@ -159,6 +160,10 @@ export interface VibyApi {
   cache: {
     stats(): Promise<CacheStats>
     clear(): Promise<CacheStats>
+  }
+  images: {
+    /** Cache remote artwork under userData and return URL → local media URL. */
+    cache(urls: string[]): Promise<Record<string, string>>
   }
   network: {
     get(): Promise<NetworkState>

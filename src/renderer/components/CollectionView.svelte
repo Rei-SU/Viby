@@ -5,8 +5,12 @@
   import { playlists } from '../lib/playlists.svelte'
   import { player } from '../lib/player.svelte'
   import { downloads } from '../lib/downloads.svelte'
+  import { network } from '../lib/network.svelte'
+  import { artwork } from '../lib/artwork.svelte'
+  import { markFor } from '../lib/library-items'
   import { trackToItem } from '../lib/track'
   import Cover from './Cover.svelte'
+  import DownloadBadge from './DownloadBadge.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
 
@@ -20,19 +24,45 @@
   const isLiked = $derived(ref.kind === 'liked')
   const playlist = $derived(ref.kind === 'playlist' ? playlists.byId(ref.id) : null)
   const tracks = $derived(isLiked ? liked : (playlist?.tracks ?? []))
-  const items = $derived(tracks.map(trackToItem))
   const title = $derived(isLiked ? 'Liked songs' : (playlist?.name ?? 'Playlist'))
   const cover = $derived(tracks.find((track) => track.thumbnail)?.thumbnail)
+  const coverSrc = $derived(artwork.src(cover))
+  const items = $derived(
+    tracks.map((track) => ({
+      ...trackToItem(track),
+      thumbnail: artwork.src(track.thumbnail ?? cover)
+    }))
+  )
   const total = $derived(tracks.reduce((acc, track) => acc + (track.durationSec ?? 0), 0))
   const collectionKey = $derived(
     isLiked ? 'liked' : playlist ? `playlist:${playlist.id}` : null
   )
   const dlCounts = $derived(downloads.countsFor(tracks))
   const fullyDownloaded = $derived(dlCounts.total > 0 && dlCounts.done === dlCounts.total)
+  const mark = $derived(markFor(dlCounts.done, dlCounts.total))
+  const progress = $derived(dlCounts.total > 0 ? (dlCounts.done / dlCounts.total) * 100 : 0)
+
+  const offline = $derived(network.offline)
+  const downloadedIds = $derived(new Set(downloads.entries.map((entry) => entry.track.id)))
+  const availableCount = $derived(
+    tracks.filter((track) => !offline || downloadedIds.has(track.id)).length
+  )
+  const playableItems = $derived(
+    items.filter((item) => !offline || downloadedIds.has(item.id))
+  )
+  const playIndex = $derived(
+    new Map(playableItems.map((item, index) => [item.id, index]))
+  )
 
   $effect(() => {
     if (isLiked) void loadLiked()
     else void playlists.load()
+  })
+
+  // Cache every image this page can show, not just the hero. Rows only reveal
+  // their art once it is safe to paint offline.
+  $effect(() => {
+    artwork.warm([cover, ...tracks.map((track) => track.thumbnail)], true)
   })
 
   async function loadLiked(): Promise<void> {
@@ -40,7 +70,7 @@
   }
 
   function playAll(): void {
-    if (items.length > 0) void player.playList(items, 0)
+    if (playableItems.length > 0) void player.playList(playableItems, 0)
   }
 
   async function downloadCollection(): Promise<void> {
@@ -108,11 +138,16 @@
 
 <div class="view">
   <header class="hero">
-    {#if isLiked}
-      <span class="art liked"><Icon name="heart" size={48} solid /></span>
-    {:else}
-      <Cover src={cover} size={168} radius={14} alt={title} />
-    {/if}
+    <span class="art-wrap">
+      {#if isLiked}
+        <span class="art liked"><Icon name="heart" size={48} solid /></span>
+      {:else}
+        <Cover src={coverSrc} size={168} radius={14} alt={title} />
+      {/if}
+      <span class="hero-badge">
+        <DownloadBadge {mark} {progress} size={26} />
+      </span>
+    </span>
 
     <div class="hero-text">
       <span class="kind">{isLiked ? 'Collection' : 'Playlist'}</span>
@@ -129,10 +164,18 @@
 
       <p class="meta">
         {tracks.length} {tracks.length === 1 ? 'song' : 'songs'}{total ? ` · ${fmt(total)}` : ''}
+        {#if offline && tracks.length > 0}
+          <span class="offline" class:partial={availableCount < tracks.length}>
+            <Icon name="download" size={11} />
+            {availableCount === tracks.length
+              ? 'Available offline'
+              : `${availableCount} of ${tracks.length} available offline`}
+          </span>
+        {/if}
       </p>
 
       <div class="actions">
-        <button class="play-all" onclick={playAll} disabled={items.length === 0}>
+        <button class="play-all" onclick={playAll} disabled={playableItems.length === 0}>
           <Icon name="play" size={14} solid />
           <span>Play all</span>
         </button>
@@ -141,7 +184,12 @@
           <button
             class="ghost"
             class:on={fullyDownloaded}
-            title={fullyDownloaded ? 'Downloaded — click to remove' : 'Download this collection'}
+            title={offline && !fullyDownloaded
+              ? 'Connect to download'
+              : fullyDownloaded
+                ? 'Downloaded — click to remove'
+                : 'Download this collection'}
+            disabled={offline && !fullyDownloaded}
             onclick={() => void downloadCollection()}
           >
             {#if dlCounts.active > 0}
@@ -187,10 +235,11 @@
       {#each items as item, i (item.id)}
         <TrackRow
           {item}
-          context={items}
+          context={playableItems}
+          contextIndex={playIndex.get(item.id) ?? i}
           index={i}
           showIndex
-          showArt={false}
+          unavailable={offline && !downloadedIds.has(item.id)}
           onQueue={(entry) => player.enqueue(entry)}
           onRemove={remove}
         />
@@ -213,6 +262,14 @@
     align-items: flex-end;
   }
 
+  .art-wrap {
+    position: relative;
+    width: 168px;
+    height: 168px;
+    flex-shrink: 0;
+    display: block;
+  }
+
   .art {
     width: 168px;
     height: 168px;
@@ -220,6 +277,13 @@
     display: grid;
     place-items: center;
     flex-shrink: 0;
+  }
+
+  .hero-badge {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: flex;
   }
 
   .liked {
@@ -251,6 +315,26 @@
     margin: 0;
     color: var(--text-faint);
     font-size: 12px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .offline {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px var(--stroke);
+    color: var(--text-dim);
+    font-size: 10.5px;
+  }
+
+  .offline.partial {
+    color: var(--text-faint);
   }
 
   .actions {
@@ -300,6 +384,13 @@
   .ghost:hover {
     background: var(--glass-hover);
     color: var(--text);
+  }
+
+  .ghost:disabled {
+    opacity: 0.45;
+    cursor: default;
+    background: transparent;
+    color: var(--text-faint);
   }
 
   .ghost.on {
