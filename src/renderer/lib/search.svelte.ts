@@ -8,7 +8,7 @@ import { api } from './api'
  */
 class SearchState {
   query = $state('')
-  filter = $state<SearchFilterName>('songs')
+  filter = $state<SearchFilterName>('all')
   items = $state<CatalogItem[]>([])
   loading = $state(false)
   error = $state<string | null>(null)
@@ -34,6 +34,16 @@ class SearchState {
   setFilter(filter: SearchFilterName): void {
     if (this.filter === filter) return
     this.filter = filter
+    if (this.query.trim()) void this.load()
+  }
+
+  /** Skip the typing debounce — used when Enter commits the search. */
+  submit(filter?: SearchFilterName): void {
+    if (filter) this.filter = filter
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
     if (this.query.trim()) void this.load()
   }
 

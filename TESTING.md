@@ -76,6 +76,7 @@ the app while they run — they own the queue.
 | `library` | playlist create/list/open/delete |
 | `resume` | session save → reload → restored paused at the timestamp |
 | `navigation` | drag strip, full-bleed artist banner, titlebar back/forward, artist page from search, history restore |
+| `quick-search` | centered titlebar field, recents, grouped songs/artists/playlists, show-more filters, Enter routing, song click, arrow navigation |
 | `settings` | sidebar entry, quality/autoplay/cache-cap persist, clear control |
 | `import` | paste a Spotify link, match 50 tracks, create and clean up a playlist |
 
@@ -107,9 +108,9 @@ Find the row for what you changed; run what it lists.
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links` · behaviour |
 | `src/renderer/lib/nav.svelte.ts` | e2e `navigation`, `links` |
+| `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |
 | `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker` | e2e `library` · behaviour |
-| `src/renderer/lib/search.svelte.ts`, `SearchView.svelte` | e2e `navigation` |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics` · visual check |
 | `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics` |

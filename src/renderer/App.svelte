@@ -6,6 +6,7 @@
   import PlayerBar from './components/PlayerBar.svelte'
   import HomeView from './components/HomeView.svelte'
   import SearchView from './components/SearchView.svelte'
+  import SearchBar from './components/SearchBar.svelte'
   import DetailView from './components/DetailView.svelte'
   import TrackView from './components/TrackView.svelte'
   import LibraryView from './components/LibraryView.svelte'
@@ -39,6 +40,16 @@
   function toggleSidebar(): void {
     collapsed = !collapsed
     localStorage.setItem('viby.sidebar', collapsed ? 'collapsed' : 'expanded')
+  }
+
+  // The profile avatar is an intentional placeholder until accounts exist.
+  let profileNote = $state(false)
+  let profileTimer: ReturnType<typeof setTimeout> | null = null
+
+  function showProfileNote(): void {
+    profileNote = true
+    if (profileTimer) clearTimeout(profileTimer)
+    profileTimer = setTimeout(() => (profileNote = false), 2600)
   }
 
   // Remember where you were scrolled in each view, so Back feels like Back.
@@ -86,37 +97,53 @@
   <!-- The window has no native title bar on macOS, so this strip is the only
        draggable area. Everything interactive inside it must opt out. -->
   <header class="titlebar" class:mac={isMac}>
-    <button
-      class="chrome-btn"
-      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      onclick={toggleSidebar}
-    >
-      <Icon name="sidebar" size={16} />
-    </button>
-    <div class="history">
+    <div class="chrome-left">
       <button
         class="chrome-btn"
-        title="Back"
-        aria-label="Back"
-        disabled={!nav.canGoBack}
-        onclick={() => nav.back()}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onclick={toggleSidebar}
       >
-        <Icon name="back" size={16} />
+        <Icon name="sidebar" size={16} />
       </button>
-      <button
-        class="chrome-btn"
-        title="Forward"
-        aria-label="Forward"
-        disabled={!nav.canGoForward}
-        onclick={() => nav.forward()}
-      >
-        <Icon name="forward" size={16} />
-      </button>
+      <div class="history">
+        <button
+          class="chrome-btn"
+          title="Back"
+          aria-label="Back"
+          disabled={!nav.canGoBack}
+          onclick={() => nav.back()}
+        >
+          <Icon name="back" size={16} />
+        </button>
+        <button
+          class="chrome-btn"
+          title="Forward"
+          aria-label="Forward"
+          disabled={!nav.canGoForward}
+          onclick={() => nav.forward()}
+        >
+          <Icon name="forward" size={16} />
+        </button>
+      </div>
+      <span class="brand">Viby</span>
     </div>
-    <span class="brand">Viby</span>
-    {#if !collapsed}
-      <span class="tagline">Listen without the noise</span>
+
+    <div class="search-slot">
+      <SearchBar />
+    </div>
+
+    <button
+      class="profile"
+      title="Profile — coming later"
+      aria-label="Profile — coming later"
+      onclick={showProfileNote}
+    >
+      <Icon name="user" size={15} />
+    </button>
+
+    {#if profileNote}
+      <div class="profile-note" role="status">Profiles are coming later.</div>
     {/if}
   </header>
 
@@ -198,6 +225,10 @@
   }
 
   .titlebar {
+    position: relative;
+    /* Above the lyrics panel (40), below the playlist picker (90). The search
+       palette must be able to float over any page surface. */
+    z-index: 70;
     grid-column: 1 / -1;
     grid-row: 1;
     display: flex;
@@ -214,6 +245,22 @@
 
   .titlebar.mac {
     padding-left: 84px;
+  }
+
+  .chrome-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .search-slot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: clamp(280px, 38vw, 440px);
+    transform: translate(-50%, -50%);
+    -webkit-app-region: no-drag;
   }
 
   .chrome-btn {
@@ -257,10 +304,58 @@
     color: var(--text);
   }
 
-  .tagline {
+  .profile {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    margin-left: auto;
+    flex-shrink: 0;
+    border: 1px solid var(--stroke);
+    border-radius: 50%;
+    color: var(--text-dim);
+    background:
+      radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.16), transparent 62%),
+      var(--glass);
+    -webkit-app-region: no-drag;
+    transition:
+      border-color var(--speed) var(--ease),
+      color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .profile:hover {
+    border-color: var(--stroke-strong);
+    color: var(--text);
+    background:
+      radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.22), transparent 62%),
+      var(--glass-hover);
+  }
+
+  .profile-note {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 16px;
+    z-index: 60;
+    padding: 8px 11px;
+    border: 1px solid var(--stroke);
+    border-radius: 9px;
+    background: var(--glass-strong);
+    backdrop-filter: blur(26px) saturate(150%);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+    color: var(--text-dim);
     font-size: 11.5px;
-    color: var(--text-faint);
-    letter-spacing: 0.01em;
+    box-shadow: var(--shadow-dock);
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+    animation: note-in 130ms var(--ease);
+  }
+
+  @keyframes note-in {
+    from {
+      opacity: 0;
+      transform: translateY(-3px);
+    }
   }
 
   .sidebar {

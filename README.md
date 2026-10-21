@@ -30,7 +30,7 @@ Browse artists, albums, playlists and charts. Build a library that stays on your
 ## What's inside
 
 - **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a local cache that makes replays instant.
-- **A catalogue worth browsing.** Search with filters, home shelves, charts, and artist and album pages with real discographies.
+- **A catalogue worth browsing.** Search from the titlebar as you type (`⌘K` / `Ctrl K`), then open the full results page with filters, home shelves, charts, and artist and album pages with real discographies.
 - **Lyrics that keep up.** Time-synced lyrics from LRCLIB with a fallback, click-to-seek, and a panel that stays out of the way.
 - **A library that stays yours.** Liked songs, playlists and history stored locally. No account, no cloud, no sync.
 - **Import from a link.** Paste a public Spotify, Apple Music, Deezer or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.

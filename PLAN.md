@@ -352,6 +352,10 @@ Still open, none blocking:
 1. ~~**Quality setting options**~~ — settled: best available / data saver (~64kbps).
 2. **Queue behaviour on repeat-one** — restart the track, or stop after the current play? Default: restart.
 3. **History retention** — keep everything, or cap at the last 5,000 plays?
+4. **Profiles / accounts (later)** — the titlebar now has a circular avatar placeholder on the right.
+   Decide whether accounts are optional identity only (sync library/playlists) or required; until then
+   the button is inert apart from a "coming later" note. Do not make accounts a prerequisite for
+   playback or the local library.
 
 ## 11. Build notes and gotchas
 
@@ -547,6 +551,31 @@ Verified against YouTube Music's own structure for Daft Punk: 8 shelves, 70 card
 ### Artist page — audio only
 
 Removed the **Videos**, **Live performances** and **Featured on** shelves from artist pages. They are watching surfaces or playlist filler, and they buried the actual discography. What remains is what a listener needs: *Top songs*, **Albums**, **Singles & EPs**, playlists by the artist, and similar artists. Verified live: sections are exactly `Top songs · Albums · Singles & EPs · Playlists by Daft Punk · Fans might also like`.
+
+### Search from the titlebar (2026-10-20)
+
+Search moved out of the page and into the **center of the titlebar**, with the chrome controls on the
+left and a placeholder profile avatar on the right. The bar stays mounted on every page.
+
+- Focusing the empty field shows **recent searches** (localStorage, last six, clearable).
+- Typing fetches **Songs / Artists / Playlists** in parallel and shows the top five of each, updating
+  each section as its request lands. Every section has **Show more**, which opens the full Search page
+  already filtered to that category.
+- **Enter** with nothing highlighted opens the full Search page; **Enter** on an arrow-key highlighted
+  result opens it. A click starts songs immediately without leaving the page; artists and
+  playlists open their pages. The footer exposes the same "All results" action. A suggested song is
+  played **on its own**: what comes next is the radio autoplay seeded from that track, exactly like
+  YouTube Music — never the rows around it in the results list.
+- The Search page no longer owns a second input. Its header shows the query and the filter chips; the
+  default filter is back to **All** (the Songs-first default was a bad call) so the detailed page can be
+  designed properly next.
+- `Cmd/Ctrl+K` focuses the bar. The bar is a no-drag island inside the draggable titlebar, and its
+  panel sits above the lyrics panel. The panel's glass mirrors the lyrics panel exactly
+  (`rgba(11,11,15,0.78)` + 32px blur + the same 300ms motion family). It mounts through a **portal
+  to `<body>`**: nested under the titlebar's own `backdrop-filter`, the panel's backdrop sampling
+  broke and the glass read lighter than the lyrics panel despite identical values.
+- The profile avatar is a visual placeholder; clicking it says
+  profiles are coming later.
 
 ### Browser-style navigation (2026-10-20)
 
