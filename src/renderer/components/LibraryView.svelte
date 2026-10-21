@@ -40,7 +40,7 @@
 <div class="view">
   <header class="head">
     <h1>Library</h1>
-    <p>Saved on this machine. No account, nothing to sync.</p>
+    <p>Saved on this machine — no sign-in required.</p>
   </header>
 
   <div class="grid">

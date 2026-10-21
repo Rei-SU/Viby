@@ -18,7 +18,7 @@
 
 Viby is a desktop music player for people who just want to press play.
 
-Browse artists, albums, playlists and charts. Build a library that stays on your machine. Follow along with lyrics that move with the song. Nothing to sign up for, nothing to sit through, nothing watching what you listen to.
+Browse artists, albums, playlists and charts. Build a library that stays yours. Follow along with lyrics that move with the song. No subscription, no ads, nothing to sit through. An account is optional — only for keeping your library in sync across devices.
 
 <p align="center">
   <img src="docs/screenshots/artist.png" alt="Viby artist page with a full-width banner and monthly listeners" />
@@ -32,7 +32,7 @@ Browse artists, albums, playlists and charts. Build a library that stays on your
 - **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a local cache that makes replays instant.
 - **A catalogue worth browsing.** Search from the titlebar as you type (`⌘K` / `Ctrl K`), then open the full results page with filters, home shelves, charts, and artist and album pages with real discographies.
 - **Lyrics that keep up.** Time-synced lyrics from LRCLIB with a fallback, click-to-seek, and a panel that stays out of the way.
-- **A library that stays yours.** Liked songs, playlists and history stored locally. No account, no cloud, no sync.
+- **A library that stays yours.** Liked songs, playlists and history stored locally and fully usable signed out. Optional sync keeps them on every device you listen from.
 - **Import from a link.** Paste a public Spotify, Apple Music, Deezer or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.
 - **Quiet by design.** A monochrome interface, a collapsible sidebar, around 300 MB at idle in our macOS tests, and a warm start in under a second.
 
@@ -92,10 +92,11 @@ Viby is a public beta. The core is in place; the edges are still being sanded.
 - Virtualized lists for playlists with thousands of tracks
 - Drag-to-reorder playlists
 - Add to playlist from the player bar
+- Optional accounts with private, end-to-end encrypted backup and sync across devices — planned after the core is fully polished
 
 ## Privacy
 
-No accounts. No analytics. No telemetry. Your library, playlists, history and cache live in your user data folder, and the app only talks to the network to browse, play, fetch lyrics and import a link you paste.
+Accounts are optional. No analytics, no telemetry, no ad tracking. Your library, playlists, history and cache live in your user data folder by default, and the app only talks to the network to browse, play, fetch lyrics and import a link you paste. If you sign in, it also backs up and syncs your library; listening never requires an account.
 
 ## Contributing
 
@@ -104,7 +105,7 @@ Viby is intentionally small and opinionated, and contributions are welcome.
 - Open an issue before a large feature or refactor; small fixes can go straight to a PR.
 - Keep PRs focused, match the existing Svelte/TypeScript style, and keep the UI monochrome.
 - Run `npm run typecheck` and the suites in [TESTING.md](TESTING.md) for the files you changed.
-- No ads, accounts, tracking, telemetry or bundled credentials — ever.
+- No ads, paywalls, tracking, telemetry or bundled credentials — ever. Accounts exist only as an optional home for backup and sync.
 - Don't commit `.env` files, cookies, downloaded audio or the vendored runtime.
 
 The full rules live in [CONTRIBUTING.md](CONTRIBUTING.md). Be decent to each other.

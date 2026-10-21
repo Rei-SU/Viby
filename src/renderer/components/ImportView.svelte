@@ -182,7 +182,7 @@
   <header class="head">
     <h1>Import</h1>
     <p>
-      Paste a playlist link from Spotify, Apple Music, Deezer or SoundCloud. No account needed.
+      Paste a playlist link from Spotify, Apple Music, Deezer or SoundCloud. No sign-in needed.
     </p>
   </header>
 

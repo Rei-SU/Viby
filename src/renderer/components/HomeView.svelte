@@ -86,7 +86,7 @@
 <div class="view">
   <header class="head">
     <h1>{source === 'home' ? 'Home' : 'Charts'}</h1>
-    <p>Global — no region setup, no account.</p>
+    <p>Global — no region setup, no sign-in required.</p>
   </header>
 
   {#if page.error}

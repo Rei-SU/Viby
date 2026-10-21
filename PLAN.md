@@ -1,8 +1,8 @@
 # Viby — Implementation Plan
 
-A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no account required — not even for the app itself, no artificial bitrate ceiling.
+A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-20 (rev 3)
+Last updated: 2026-10-21 (rev 4)
 
 ---
 
@@ -23,7 +23,7 @@ Every decision below came from you, with the technical consequence I derived fro
 | 9 | Unresolvable tracks | Skip + notify | Simple, honest |
 | 10 | Charts | Global only | One less variable, no region config |
 | 11 | Language | English only | No i18n layer, no RTL work in v1 |
-| 12 | Auth | Anonymous, no credentials stored | Nothing touches Keychain/DPAPI. Simpler and safer. |
+| 12 | Playback auth | Anonymous, no credentials stored | Playback needs no login and stores no credentials. The optional account layer (later) is separate. |
 | 13 | Lyrics | Layered fallback chain | lrclib → YouTube timedtext → plain text, all cached |
 | 14 | Shell | Slim sidebar + art-forward heroes | Apple Music feel, still navigable |
 | 15 | OS integration | Media keys + Now Playing, no tray/mini-player | `navigator.mediaSession` — no native code |
@@ -31,10 +31,12 @@ Every decision below came from you, with the technical consequence I derived fro
 | 17 | Delivery | Auto-update via GitHub Releases | Windows: real auto-update. macOS: notify + one-click download (see §2.1) |
 | 18 | Distribution | Me + a few friends | Installers, first-run setup, graceful upstream failure |
 | 19 | Name | Viby | Bundle ID, installers, window title |
-| 20 | Deferred | No EQ, gapless, crossfade, sleep timer, scrobbling, Discord, stats, sync, mobile | Kept out of v1 deliberately |
+| 20 | Deferred | No EQ, gapless, crossfade, sleep timer, scrobbling, Discord, stats, sync, mobile | Kept out of v1 deliberately; accounts/sync and mobile are planned post-v1, not abandoned. |
 | 21 | Phase order | Skip the standalone spike, start on the real player | P1's first task *is* the resolver proof — see §9 |
 | 22 | Front door | Home + Search are the app; links are only for import | Search/browse shipped before anything link-shaped. The paste box moved into an explicit Import tab. |
 | 23 | Player-client rotation | Don't pin clients; let `yt-dlp` choose, pin only as fallback | Measured 2026-10-18: every pinned set was SABR-only or failed. See §2.4. |
+| 24 | Accounts (later) | Optional, local-first, for backup and sync | Never a prerequisite for listening or the local library. Built only after the core is polished, and designed alongside the planned mobile client. See §9 P6 and §10. |
+| 25 | Offline & downloads | Explicit downloads + a first-class offline mode; cache stays invisible | Downloads live in app-managed storage, are never auto-evicted, and belong to the user. Offline mode is automatic with a manual override. See §17. |
 
 ## 2. Reality checks that shaped the design
 
@@ -163,7 +165,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 - Home shelves: recently played, favorites, your playlists, imported playlists.
 
 ### 5.4 Library
-- **Favorites** and **playlists** are local-first. No account, so they never sync and never vanish when upstream changes.
+- **Favorites** and **playlists** are local-first and never vanish when upstream changes. They stay on the machine by default; optional accounts (later) back them up and sync them across devices.
 - **History**: every played track with timestamp and completion ratio; feeds "recently played" and lets the cache policy promote repeatedly-played tracks.
 - Playlist cover = 4-up mosaic from tracks, or user-picked art.
 - Every track row: play, queue-next, add to playlist, favorite, go to album, go to artist.
@@ -194,7 +196,7 @@ The plain-text and CSV paths exist so that **no single company's decision can ma
 **Matcher behaviour** (#8): exact title+artist match on YouTube Music search → auto-accept. Low confidence (fuzzy-only match, duration mismatch >10s, or several close candidates) → the review screen shows side-by-side candidates with artist and duration, and lets you pick, skip, or accept as-is. Nothing is silently wrong. Album-level imports match the whole album, which is far more accurate than track-by-track.
 
 ### 5.7 Not in v1
-Equalizer, gapless, crossfade, sleep timer, scrobbling, Discord presence, mini-player, tray, listening stats, device sync, i18n, mobile, local file playback. Each is a clean addition later; none blocks the core.
+Equalizer, gapless, crossfade, sleep timer, scrobbling, Discord presence, mini-player, tray, listening stats, device sync, i18n, mobile, local file playback. Each is a clean addition later; none blocks the core. Accounts and cross-device sync are also post-v1: local-first stays the default, and listening never requires signing in.
 
 ## 6. Performance budget
 
@@ -344,18 +346,26 @@ Installers (DMG + NSIS), auto-update on Windows, notify-and-download on macOS, f
 
 *Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine.
 
+**P6 — Accounts and sync. Deferred on purpose.**
+Not started. Begins only once P5 is done and the core experience is fully polished — playback correct, the look and feel settled, and no open fundamentals. Until then the profile avatar stays a placeholder.
+
+Scope: optional accounts with end-to-end encrypted backup and sync of favorites, playlists, history and settings across devices, designed alongside the planned Android client. Local-first remains the source of truth; signed-out use is unchanged. Sync must support export, account deletion and transparent conflict handling.
+
+*Acceptance:* two machines signed into the same account converge on the same library after an offline edit, and signing out leaves a complete, usable local library. Export and account deletion need no support ticket.
+
+**P7 — Offline mode and downloads. Planned.**
+The full specification is §17. Three shippable slices: connectivity + offline shell first, then the download engine and visible offline library, then playlists/liked collections and artwork/polish.
+
+*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs.
+
 ## 10. Open items
 
-Settled: cache cap (1GB), quality policy (never downgrade), Spotify (no credentials), phase order (skip spike, straight to P1), language (English), charts (global).
+Settled: cache cap (1GB), quality policy (never downgrade), Spotify (no credentials), phase order (skip spike, straight to P1), language (English), charts (global), accounts (optional, local-first, post-v1 — see §9 P6).
 
 Still open, none blocking:
 1. ~~**Quality setting options**~~ — settled: best available / data saver (~64kbps).
 2. **Queue behaviour on repeat-one** — restart the track, or stop after the current play? Default: restart.
 3. **History retention** — keep everything, or cap at the last 5,000 plays?
-4. **Profiles / accounts (later)** — the titlebar now has a circular avatar placeholder on the right.
-   Decide whether accounts are optional identity only (sync library/playlists) or required; until then
-   the button is inert apart from a "coming later" note. Do not make accounts a prerequisite for
-   playback or the local library.
 
 ## 11. Build notes and gotchas
 
@@ -754,3 +764,228 @@ Shipping contract: install and play. The user never installs Python and never se
 - **Packaging** points `mac.icon` and `win.icon` at those files. The built bundle reports `CFBundleName`/`CFBundleDisplayName = Viby` and `CFBundleIconFile = icon.icns`; the `.icns` in the app matches `resources/icon.icns` byte for byte. The DMG/NSIS artifacts use the same icon.
 - **Development** sets the Dock icon from `resources/icon.png` and installs a custom application menu (`src/main/menu.ts`) instead of Electron's default File/Edit/View menu. Edit roles are preserved so copy/paste still works in the search fields and inputs.
 - **Menu name caveat:** macOS renders the first menu item with the *bundle* name, not the template label. Dev runs the `Electron.app` helper, so it still says "Electron"; the packaged app shows "Viby" (verified by screenshot: Apple / Viby / Edit / View / Window). Windows and Linux get no native menu bar — the custom titlebar is the chrome — and the packaged Windows executable takes its icon from `win.icon`.
+
+## 17. Offline mode and downloads (planned)
+
+Status: planned, not started (2026-10-21). Scope locked with the product decisions below.
+
+### 17.1 The distinction that drives everything
+
+| | Cache | Downloads |
+|---|---|---|
+| Purpose | Speed and bandwidth | Listening without a connection |
+| Visibility | Invisible | Explicit, listed, badged |
+| Control | Automatic | User |
+| Eviction | LRU under a cap | Never |
+| Clearing | "Clear cache" | "Remove download" |
+
+Downloads are explicit, user-owned and permanent until the user removes them — or until the collection that owns them is deleted and no other reference remains. They are listed in a Downloads view. A download hit is used before the cache; when a track becomes a download its cached copy is removed to avoid double storage (unless it is the file currently playing; then it is left for the next eviction). Clearing the cache never touches downloads, and removing downloads never touches the cache.
+
+### 17.2 Locked decisions
+
+- **Storage:** app-managed under `userData/downloads`. No folder picker, no exported files, no tag editing in v1.
+- **Trigger:** automatic offline detection plus a manual offline switch.
+- **Cache offline:** non-downloaded cached tracks play silently. No badge, no listing, no promise.
+- **Scope:** songs, albums, playlists, Liked Songs. Liked Songs is a bulk action that downloads its tracks as individual songs, so unfavouriting never deletes a file.
+- **Playlist deletion:** removes that playlist's download references; files with no remaining reference are deleted.
+- **Defaults chosen for consistency:** no download cap; no auto-download of newly added tracks (explicit Update); download quality follows the playback quality at enqueue; downloads never sync with accounts; no export in v1.
+
+### 17.3 Connectivity model
+
+Main-process `NetworkMonitor`:
+
+- `net.isOnline()` is polled every 5s, on startup and on `powerMonitor` resume; renderer `online`/`offline` events trigger an immediate re-check.
+- `net.isOnline() === false` is authoritative offline. `true` is only a hint, so a transition to online is confirmed by a small `net.fetch` probe to `https://music.youtube.com/` (4s timeout; any HTTP response means reachable).
+- States: `online`, `offline` (no link), `unreachable` (link up, YouTube not answering), `forced-offline` (manual). Both `offline` and `forced-offline` enter offline mode; `unreachable` shows the same local-first layout with a "Can't reach YouTube right now" header and a Retry action, so a YouTube outage does not produce a dead Home.
+- Transitions are debounced (~2s); one failed probe does not flip the app. Failed catalog/resolve requests may report a hint, but HTTP 4xx/5xx and bot checks are not connectivity failures.
+- Broadcast `network:changed` to renderers, with `network:get` and `network:setMode('auto' | 'offline')`. Manual mode persists in settings.
+- A dev-only override forces each state for tests, independent of the machine's real network.
+
+When effective offline and no local file exists, `resolveForPlayback` fails immediately with a `ResolveError('offline', …)` instead of spawning yt-dlp. No 10–60s DNS timeout.
+
+### 17.4 UX specification
+
+**Global**
+
+- A compact titlebar status pill: "Offline", "Offline mode" or "Can't reach YouTube". Click opens a small menu with Manage downloads and, in manual mode, Go online. It is the only persistent offline chrome.
+- Settings gains "Use offline mode" / "Go online" with the current connectivity reason.
+- Sidebar gains **Downloads** (always present). While offline, Charts and Import are disabled with a tooltip; Search works against downloads (phase P7c).
+
+**Home**
+
+- Effective offline replaces Home with the Offline Home:
+  - Heading: "You are not connected to the internet." (`unreachable`: "Can't reach YouTube right now.")
+  - Sub: "Your downloads are ready to play." (manual mode: "Offline mode is on — using your downloads.")
+  - Sections: Continue listening, Downloaded albums, Downloaded playlists, Downloaded songs.
+  - Empty state: "Download music while you're online and it'll appear here."
+  - "Manage downloads" link and storage summary.
+- Reconnecting refreshes Home and shows a brief "Back online" confirmation. It never yanks the user off Downloads or Library.
+
+**Downloads view**
+
+- Header: count, total size, free disk space, "Delete all downloads" (confirmation).
+- Groups: Albums, Playlists, Songs; each can play, remove, and shows n/m when incomplete.
+- Renders from snapshots in the download index, so it works offline even though artist/album pages need the network.
+- Song rows: play, remove, size and quality.
+
+**Collection pages**
+
+- Album, playlist and Liked Songs heroes get a Download action with states: Download · Downloading n/m · Downloaded · Update (when tracks are missing).
+- Track rows get a download action/state in the existing hover cluster: idle, queued, downloading %, done, failed with retry.
+- Deleting a playlist, or removing a track from it, prunes that playlist's references. The confirmation states how many downloaded songs will be deleted.
+
+**Player and queue**
+
+- Offline order: downloaded file → cached file → fail fast.
+- A failed uncached track shows "You're offline. This song isn't downloaded." It does not auto-skip the whole playlist.
+- Autoplay/radio warming is disabled offline; the queue stops at its end.
+- Queue rows never expose cache state; downloads are marked.
+
+**Settings**
+
+- Cache copy becomes automation language: "Cached audio makes replays instant and reduces bandwidth. Managed automatically." The offline promise belongs to downloads.
+- Downloads row: size, free space, Manage.
+- Offline mode row.
+
+### 17.5 Storage and data model
+
+```
+userData/downloads/
+  index.json          entries, collection references, persisted jobs
+  audio/<trackId>.<ext>
+  art/<hash>.<ext>    offline covers
+  tmp/<trackId>/      stable .part location for resume
+```
+
+```ts
+type DownloadEntry = {
+  track: Track              // snapshot: offline UI needs no catalog
+  ext: string
+  bytes: number
+  bitrateKbps?: number
+  art?: string
+  downloadedAt: number
+  quality: 'best' | 'data-saver'
+  /** Reference keys that keep this file alive. */
+  sources: string[]         // 'track:<id>' | 'album:<id>' | 'playlist:<id>' | 'liked'
+}
+
+type DownloadCollection = {
+  key: string               // album:<id> | playlist:<id> | liked
+  kind: 'album' | 'playlist' | 'liked'
+  title: string
+  thumbnail?: string
+  art?: string
+  trackIds: string[]        // snapshot at request time
+  addedAt: number
+}
+
+type DownloadJob = {
+  trackId: string
+  track: Track
+  sources: string[]
+  state: 'queued' | 'downloading' | 'paused' | 'failed'
+  error?: string
+  attempts: number
+}
+```
+
+- The index is the truth for playback. An entry without a file is healed away; a file without an entry is ignored.
+- References: a direct song download adds `track:<id>`; an album or playlist adds its key to every member. Liked Songs also adds `track:<id>`, so unfavouriting keeps the download; its `liked` collection entry exists only for grouping. Removing a reference deletes the entry/file only when `sources` is empty. "Remove download" in Downloads clears all sources for that track.
+- Collection snapshots keep offline grouping working; n/m is computed against the live library where it exists, otherwise the snapshot.
+- Artwork is fetched at enqueue/download time through `net.fetch` (proxy-aware), size-capped, and served locally. Extend the media scheme's MIME table for images and restrict served paths to the cache/downloads roots as hardening.
+- One file per track id regardless of how many collections reference it.
+- On successful download, remove the cache entry; `kickOffBackgroundCache` skips downloaded tracks; cache eviction never sees downloads.
+
+### 17.6 Download engine
+
+- Own module and queue in main, separate from playback's resolver semaphore. Concurrency: **1 active download** in v1, leaving CPU and network to playback; the constant is documented for later tuning.
+- yt-dlp per job:
+  - `--no-playlist --no-warnings --continue --progress` (explicit), `--newline`
+  - `--progress-template "download:VIBY %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s"`
+  - `--print after_move:filepath` for the final absolute path
+  - `-f bestaudio[abr<=64]/bestaudio/best` for data saver, `bestaudio/best` otherwise
+  - `-o <downloads>/tmp/<id>/<id>.%(ext)s`, stable across retries so `.part` resumes
+  - `--socket-timeout 15`, bounded retries
+- Progress and the final path both arrive on **stdout** (verified 2026-10-21): lines starting with `VIBY` are progress, the last other line is the absolute file path. Fields may be `NA`; missing/unknown totals become an indeterminate UI rather than a broken percentage.
+- Progress output is parsed tolerantly and throttled to ~4 events/s.
+- On success: verify exit 0, file exists, nonzero size; move atomically into `downloads/audio`; fetch artwork; write the index; drop the cache copy; emit.
+- Failures: transient network/timeout/5xx retried up to 3× with backoff; permanent (unavailable, private, bot check) marked failed with a readable reason, batch continues.
+- Cancel removes the job and its partial; pause keeps the partial. Going offline pauses running/queued jobs (persisted) and resumes on reconnect.
+- Removing a download that is currently playing pauses playback first; if the OS still holds the file (Windows), deletion is retried on next launch.
+- Quit aborts children and persists jobs as paused; next launch resumes if online.
+- Disk guard: refuse to start below a safety margin (500MB + estimate); ENOSPC during download becomes a per-track failure, never a crash.
+- Keep `powerSaveBlocker('prevent-app-suspension')` active while downloads run, alongside playback.
+- Explicit downloads use yt-dlp's own downloader, so segmented/HLS-only tracks that cannot stream in `<audio>` can still be downloaded.
+
+### 17.7 Code map
+
+**New**
+
+- `src/main/network.ts` — monitor, probe, manual mode, broadcast
+- `src/main/downloads/store.ts` — index, references, healing, stats
+- `src/main/downloads/manager.ts` — queue, progress, retries, resume, disk guard
+- `src/main/downloads/art.ts` — artwork fetch/cache
+- `src/renderer/lib/network.svelte.ts`, `src/renderer/lib/downloads.svelte.ts`
+- `src/renderer/components/DownloadsView.svelte`, `OfflineHome.svelte`, `DownloadButton.svelte`
+
+**Touched**
+
+- `src/shared/types.ts`, `src/shared/ipc.ts`, `src/preload/index.ts` — APIs and events
+- `src/main/ipc.ts` — handlers, offline guard, download-first playback
+- `src/main/library.ts` — prune references on playlist/track/like changes
+- `src/main/cache/*` — skip downloaded; remove cache copy on download
+- `src/renderer/lib/nav.svelte.ts`, `App.svelte`, `HomeView`, `DetailView`, `CollectionView`, `TrackRow`, `SearchBar`, `SettingsView`, `Queue`
+
+Because `src/shared/**` and `src/preload/**` change, TESTING.md's escalation rule applies: targeted suites during development, the full set once before the feature is called done.
+
+### 17.8 Delivery slices
+
+**P7a — Offline awareness (no downloads yet).**
+Monitor, renderer store, manual toggle, offline pill, Offline Home empty state, offline states for Charts/Import/Search, fast offline playback failure, silent cache playback, autoplay off offline.
+*Acceptance:* airplane mode at launch shows the offline Home instantly, with no error toast and no yt-dlp delay when pressing play on an uncached track; reconnecting restores Home.
+
+**P7b — Download core.**
+Storage/index, manager, progress, per-song action, Downloads view (songs + storage), playback priority, cache dedupe, persistence/resume, cancel/retry, disk guard, artwork for songs.
+*Acceptance:* download a song, quit, relaunch offline, play it from Downloads; clearing cache leaves it untouched; cancel and retry work.
+
+**P7c — Collections and polish.**
+Album/playlist/Liked actions with coverage and Update; grouped Downloads view; reference-based pruning; offline artwork for collections; offline local search; settings copy; low-disk warnings; queue polish.
+*Acceptance:* download a playlist and play it fully offline; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; offline search finds downloads.
+
+**P7d — Hardening.**
+Network flapping, failed-download recovery, quit mid-download, long playlists, Windows/macOS validation, `offline` e2e, docs.
+
+### 17.9 Test plan
+
+**Unit (main, no Electron):** index healing; reference add/remove and file deletion; cache/download dedupe; path safety; disk guard; download state machine with a fake runner; network state machine with injected `isOnline`/probe results; progress parser for known and unknown totals.
+
+**E2E (`tests/e2e/offline.mjs`)** using the manual/debug override so it never depends on the machine's real network:
+
+- offline launch → Offline Home, no catalog calls, no error banner;
+- download one short track → progress → entry → file; play offline after relaunch;
+- cached non-downloaded track plays offline; uncached track fails in under a second with friendly copy;
+- delete a playlist → only unreferenced downloads removed;
+- Clear cache leaves downloads; Delete all downloads leaves cache and library;
+- reconnect restores normal Home; manual mode stays until switched off.
+
+**Manual:** airplane mode on both platforms, Wi-Fi drop mid-download, quit mid-download, disk-full simulation, captive portal (`unreachable`).
+
+### 17.10 Risks
+
+| Risk | Mitigation |
+|---|---|
+| Storage bloat | Visible usage and free space, low-disk guard, easy deletion; no silent cap. |
+| Progress format changes | One flag/parser module, tolerant of missing totals, indeterminate fallback, tests. |
+| Offline detection false positives | `isOnline() === false` authoritative; online requires a probe; debounce; manual override. |
+| Manual offline forgotten | Persistent titlebar pill and one-click "Go online". |
+| Playlist deletion surprises | Reference counting and a confirmation that states how many songs will be deleted. |
+| Cache/download duplication | Remove cache copy on download; skip background cache; download-first lookup. |
+| Missing artwork offline | Store thumbnails at download time and serve locally. |
+| yt-dlp failures | Per-track failure with reason, retry, batch continues; segmented formats are downloadable. |
+| Long playlists / quit mid-download | Persisted queue, stable `.part` paths, resume, single concurrency. |
+| Accounts/mobile confusion | Downloads are device-local and never synced; P6 accounts remain separate. |
+
+### 17.11 Explicit non-goals (v1)
+
+Exporting to Music/Finder, tag editing, download caps or quotas, auto-download rules, per-download quality overrides, syncing download state across devices, Android/SD-card storage, one-click artist discography downloads.

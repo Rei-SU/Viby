@@ -123,7 +123,7 @@
 
   <p class="about">
     <Icon name="disc" size={14} />
-    <span>Viby · no ads, no account, nothing to sign up for.</span>
+    <span>Viby · no ads, no subscription, no sign-in required.</span>
   </p>
 </div>
 

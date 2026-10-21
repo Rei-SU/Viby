@@ -165,7 +165,7 @@
     {#if !collapsed}
       <div class="sidebar-foot">
         <span class="rule"></span>
-        <p>No ads. No account.<br />Nothing to sign up for.</p>
+        <p>No ads. No subscription.<br />No sign-in required.</p>
       </div>
     {/if}
   </aside>
