@@ -77,11 +77,6 @@
 </script>
 
 <div class="view">
-  <button class="back" onclick={() => nav.back()}>
-    <Icon name="back" size={16} />
-    <span>Back</span>
-  </button>
-
   <header class="hero">
     {#if track.thumbnail}
       <span class="glow" style="background-image: url({track.thumbnail})"></span>
@@ -137,25 +132,6 @@
     flex-direction: column;
     gap: 22px;
     padding: 2px 2px 20px;
-  }
-
-  .back {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--text-dim);
-    font-size: 12.5px;
-    padding: 5px 10px 5px 6px;
-    border-radius: 999px;
-    transition:
-      background var(--speed) var(--ease),
-      color var(--speed) var(--ease);
-  }
-
-  .back:hover {
-    background: var(--glass-hover);
-    color: var(--text);
   }
 
   .hero {

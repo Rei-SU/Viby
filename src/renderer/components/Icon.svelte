@@ -16,6 +16,7 @@
     | 'search'
     | 'download'
     | 'back'
+    | 'forward'
     | 'close'
     | 'check'
     | 'note'
@@ -52,6 +53,7 @@
     search: { d: 'M11 4a7 7 0 100 14 7 7 0 000-14zM16.5 16.5L21 21' },
     download: { d: 'M12 3v12M7 10l5 5 5-5M5 21h14' },
     back: { d: 'M15 18l-6-6 6-6' },
+    forward: { d: 'M9 18l6-6-6-6' },
     close: { d: 'M18 6L6 18M6 6l12 12' },
     check: { d: 'M5 12.5l4.5 4.5L19 7.5' },
     note: {

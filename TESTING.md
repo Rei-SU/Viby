@@ -75,7 +75,7 @@ the app while they run — they own the queue.
 | `lyrics-change` | a new track's lyrics reset to the top (no inherited scroll) |
 | `library` | playlist create/list/open/delete |
 | `resume` | session save → reload → restored paused at the timestamp |
-| `navigation` | drag strip, artist banner + monthly listeners, artist page from search, Back restores search |
+| `navigation` | drag strip, full-bleed artist banner, titlebar back/forward, artist page from search, history restore |
 | `settings` | sidebar entry, quality/autoplay/cache-cap persist, clear control |
 | `import` | paste a Spotify link, match 50 tracks, create and clean up a playlist |
 

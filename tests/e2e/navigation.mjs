@@ -1,4 +1,4 @@
-export const description = 'Navigation: drag strip, artist page from search, search state restored'
+export const description = 'Navigation: drag strip, titlebar back/forward, artist page from search, search state restored'
 
 export async function run(app, check) {
   const chrome = await app.evaluate(`
@@ -66,19 +66,87 @@ export async function run(app, check) {
   )
   check('only one carousel', artist.rails === 1, `${artist.rails} rails`)
 
+  const layout = await app.evaluate(`
+    (() => {
+      const banner = document.querySelector('.artist-hero .banner')
+      const content = document.querySelector('main.content')
+      if (!banner || !content) return null
+      const b = banner.getBoundingClientRect()
+      const c = content.getBoundingClientRect()
+      return {
+        left: Math.round(b.left - c.left),
+        top: Math.round(b.top - c.top),
+        right: Math.round(c.right - b.right),
+        radius: getComputedStyle(banner).borderTopLeftRadius
+      }
+    })()
+  `)
+  check(
+    'artist banner is full-bleed',
+    Boolean(layout) &&
+      Math.abs(layout.left) <= 1 &&
+      Math.abs(layout.top) <= 1 &&
+      layout.right <= 16 &&
+      layout.radius === '0px',
+    JSON.stringify(layout)
+  )
+
+  const historyControls = await app.evaluate(`
+    (() => ({
+      back: Boolean(document.querySelector('[aria-label="Back"]')),
+      forward: Boolean(document.querySelector('[aria-label="Forward"]')),
+      backDisabled: document.querySelector('[aria-label="Back"]')?.disabled ?? null,
+      forwardDisabled: document.querySelector('[aria-label="Forward"]')?.disabled ?? null
+    }))()
+  `)
+  check(
+    'titlebar back/forward controls are available',
+    historyControls.back &&
+      historyControls.forward &&
+      historyControls.backDisabled === false &&
+      historyControls.forwardDisabled === true,
+    JSON.stringify(historyControls)
+  )
+
   const restored = await app.evaluate(`
     (async () => {
-      document.querySelector('.back')?.click()
+      document.querySelector('[aria-label="Back"]')?.click()
       await new Promise((r) => setTimeout(r, 900))
       return {
         query: document.querySelector('.searchbox input')?.value ?? null,
         rows: document.querySelectorAll('.results .row').length,
-        chip: document.querySelector('.chip.on')?.textContent?.trim() ?? null
+        chip: document.querySelector('.chip.on')?.textContent?.trim() ?? null,
+        forwardDisabled: document.querySelector('[aria-label="Forward"]')?.disabled ?? null
       }
     })()
   `)
   check('back restores the search query', restored.query === 'daft punk', JSON.stringify(restored))
   check('back restores the search results', restored.rows > 0, `${restored.rows} rows`)
+  check('back enables forward', restored.forwardDisabled === false, JSON.stringify(restored))
+
+  const forwarded = await app.evaluate(`
+    (async () => {
+      document.querySelector('[aria-label="Forward"]')?.click()
+      await new Promise((r) => setTimeout(r, 1800))
+      return {
+        kind: window.__viby.nav.detail?.kind ?? null,
+        header: document.querySelector('.artist-hero h1, .hero h1')?.textContent?.trim() ?? null
+      }
+    })()
+  `)
+  check('forward restores the artist page', forwarded.kind === 'artist' && forwarded.header === artist.name, JSON.stringify(forwarded))
+
+  const restoredAgain = await app.evaluate(`
+    (async () => {
+      document.querySelector('[aria-label="Back"]')?.click()
+      await new Promise((r) => setTimeout(r, 900))
+      return {
+        query: document.querySelector('.searchbox input')?.value ?? null,
+        rows: document.querySelectorAll('.results .row').length
+      }
+    })()
+  `)
+  check('back after forward returns to search', restoredAgain.query === 'daft punk' && restoredAgain.rows > 0, JSON.stringify(restoredAgain))
 
   // A known artist has monthly-listener data; small pages (like the one above)
   // may omit it, which is why that line is conditional in the UI.

@@ -2,7 +2,7 @@ import type { CatalogItem, Track } from '@shared/types'
 
 export type View = 'home' | 'charts' | 'search' | 'library' | 'queue' | 'import' | 'settings'
 
-/** A saved collection page: liked songs, or one user playlist. */
+/** A saved collection page: liked songs, or a user playlist. */
 export type CollectionRef = { kind: 'liked' } | { kind: 'playlist'; id: string }
 
 type Snapshot = {
@@ -16,8 +16,9 @@ type Snapshot = {
  * One place for "where am I", so any component — a list row, the player bar —
  * can navigate without threading callbacks through the whole tree.
  *
- * Opening a page pushes onto a small stack so Back returns to where you actually
- * came from (song → artist → back → song → back → search results).
+ * History works like a browser: Back moves through the pages you came from,
+ * Forward replays the ones you backed out of, and a new navigation clears the
+ * forward trail.
  */
 class Navigator {
   view = $state<View>('home')
@@ -27,20 +28,31 @@ class Navigator {
   /** The playlist / liked-songs page. */
   collection = $state<CollectionRef | null>(null)
 
-  private stack: Snapshot[] = []
+  private backStack = $state<Snapshot[]>([])
+  private forwardStack = $state<Snapshot[]>([])
+
+  get canGoBack(): boolean {
+    return this.backStack.length > 0
+  }
+
+  get canGoForward(): boolean {
+    return this.forwardStack.length > 0
+  }
 
   go(view: View): void {
-    // A sidebar tab is a new context, not a step in the current one.
-    this.stack = []
+    // Clicking the tab you are already on should not create a history entry.
+    if (this.view === view && !this.detail && !this.track && !this.collection) return
+    this.record()
+    this.view = view
     this.detail = null
     this.track = null
     this.collection = null
-    this.view = view
   }
 
   open(item: CatalogItem): void {
     if (!item.browseId && !item.id) return
-    this.push()
+    if (this.detail?.kind === item.kind && this.detail?.id === item.id) return
+    this.record()
     this.detail = item
     this.track = null
     this.collection = null
@@ -60,7 +72,8 @@ class Navigator {
 
   /** The song page, reachable from the player bar title. */
   openTrack(track: Track): void {
-    this.push()
+    if (this.track?.id === track.id) return
+    this.record()
     // Copy: the queue holds reactive proxies and the page should keep its own
     // snapshot if the queue moves on.
     this.track = { ...track }
@@ -69,34 +82,64 @@ class Navigator {
   }
 
   openCollection(ref: CollectionRef): void {
-    this.push()
+    if (this.collection && this.collection.kind === ref.kind) {
+      if (ref.kind === 'liked') return
+      if (this.collection.kind === 'playlist' && this.collection.id === ref.id) return
+    }
+    this.record()
     this.collection = ref
     this.detail = null
     this.track = null
   }
 
   back(): void {
-    const previous = this.stack.pop()
-    if (!previous) {
-      this.detail = null
-      this.track = null
-      this.collection = null
-      return
-    }
-    this.view = previous.view
-    this.detail = previous.detail
-    this.track = previous.track
-    this.collection = previous.collection
+    const previous = this.backStack.pop()
+    if (!previous) return
+    this.pushForward(this.snapshot())
+    this.restore(previous)
   }
 
-  private push(): void {
-    this.stack.push({
+  forward(): void {
+    const next = this.forwardStack.pop()
+    if (!next) return
+    this.pushBack(this.snapshot())
+    this.restore(next)
+  }
+
+  /** Drop the forward trail after the page it points at is deleted. */
+  clearForward(): void {
+    this.forwardStack = []
+  }
+
+  private record(): void {
+    this.pushBack(this.snapshot())
+    this.forwardStack = []
+  }
+
+  private pushBack(snapshot: Snapshot): void {
+    this.backStack.push(snapshot)
+    if (this.backStack.length > 40) this.backStack.shift()
+  }
+
+  private pushForward(snapshot: Snapshot): void {
+    this.forwardStack.push(snapshot)
+    if (this.forwardStack.length > 40) this.forwardStack.shift()
+  }
+
+  private snapshot(): Snapshot {
+    return {
       view: this.view,
       detail: this.detail,
       track: this.track,
       collection: this.collection
-    })
-    if (this.stack.length > 40) this.stack.shift()
+    }
+  }
+
+  private restore(snapshot: Snapshot): void {
+    this.view = snapshot.view
+    this.detail = snapshot.detail
+    this.track = snapshot.track
+    this.collection = snapshot.collection
   }
 }
 

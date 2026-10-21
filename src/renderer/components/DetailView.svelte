@@ -9,7 +9,7 @@
   import MediaCard from './MediaCard.svelte'
   import Icon from './Icon.svelte'
 
-  let { item, onBack }: { item: CatalogItem; onBack: () => void } = $props()
+  let { item }: { item: CatalogItem } = $props()
 
   // Enough rows to be useful without putting thousands of nodes in the DOM.
   const PAGE = 120
@@ -161,11 +161,6 @@
 </script>
 
 <div class="view">
-  <button class="back" onclick={onBack}>
-    <Icon name="back" size={16} />
-    <span>Back</span>
-  </button>
-
   {#if isArtist}
     <header class="artist-hero">
       <div class="banner">
@@ -304,25 +299,6 @@
     padding: 2px 2px 20px;
   }
 
-  .back {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--text-dim);
-    font-size: 12.5px;
-    padding: 5px 10px 5px 6px;
-    border-radius: 999px;
-    transition:
-      background var(--speed) var(--ease),
-      color var(--speed) var(--ease);
-  }
-
-  .back:hover {
-    background: var(--glass-hover);
-    color: var(--text);
-  }
-
   .artist-hero {
     display: flex;
     flex-direction: column;
@@ -331,8 +307,11 @@
 
   .banner {
     position: relative;
-    height: clamp(230px, 26vw, 320px);
-    border-radius: 16px;
+    /* Pull the banner through the content padding so it meets the titlebar and
+       the window edges. Everything below it keeps the normal content gutter. */
+    margin: calc(-1 * (var(--content-y, 20px) + 2px)) calc(-1 * (var(--content-x, 26px) + 2px)) 0;
+    height: clamp(250px, 28vw, 360px);
+    border-radius: 0;
     overflow: hidden;
     background: #101014;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);

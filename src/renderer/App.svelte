@@ -94,6 +94,26 @@
     >
       <Icon name="sidebar" size={16} />
     </button>
+    <div class="history">
+      <button
+        class="chrome-btn"
+        title="Back"
+        aria-label="Back"
+        disabled={!nav.canGoBack}
+        onclick={() => nav.back()}
+      >
+        <Icon name="back" size={16} />
+      </button>
+      <button
+        class="chrome-btn"
+        title="Forward"
+        aria-label="Forward"
+        disabled={!nav.canGoForward}
+        onclick={() => nav.forward()}
+      >
+        <Icon name="forward" size={16} />
+      </button>
+    </div>
     <span class="brand">Viby</span>
     {#if !collapsed}
       <span class="tagline">Listen without the noise</span>
@@ -139,7 +159,7 @@
     {#if nav.track}
       <TrackView track={nav.track} />
     {:else if nav.detail}
-      <DetailView item={nav.detail} onBack={() => nav.back()} />
+      <DetailView item={nav.detail} />
     {:else if nav.collection}
       <CollectionView ref={nav.collection} />
     {:else if nav.view === 'home'}
@@ -212,6 +232,22 @@
   .chrome-btn:hover {
     background: var(--glass-hover);
     color: var(--text);
+  }
+
+  .chrome-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .chrome-btn:disabled:hover {
+    background: transparent;
+    color: var(--text-dim);
+  }
+
+  .history {
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
 
   .brand {
@@ -308,10 +344,13 @@
   }
 
   .content {
+    /* Artist banners bleed through these to the titlebar and window edges. */
+    --content-x: 26px;
+    --content-y: 20px;
     grid-column: 2;
     grid-row: 2;
     min-height: 0;
-    padding: 20px 26px 10px;
+    padding: var(--content-y) var(--content-x) 10px;
   }
 
   .notice {

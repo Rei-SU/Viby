@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no account required — not even for the app itself, no artificial bitrate ceiling.
 
-Last updated: 2026-10-18 (rev 2)
+Last updated: 2026-10-20 (rev 3)
 
 ---
 
@@ -547,6 +547,17 @@ Verified against YouTube Music's own structure for Daft Punk: 8 shelves, 70 card
 ### Artist page — audio only
 
 Removed the **Videos**, **Live performances** and **Featured on** shelves from artist pages. They are watching surfaces or playlist filler, and they buried the actual discography. What remains is what a listener needs: *Top songs*, **Albums**, **Singles & EPs**, playlists by the artist, and similar artists. Verified live: sections are exactly `Top songs · Albums · Singles & EPs · Playlists by Daft Punk · Fans might also like`.
+
+### Browser-style navigation (2026-10-20)
+
+Navigation moved out of the page and into the titlebar: the sidebar toggle is followed by **Back** and
+**Forward** buttons with browser semantics. The history stack records detail, song, collection *and* tab
+changes; new navigation clears the forward trail, and deleting a playlist drops the forward entry that
+pointed at it. The in-page Back buttons were removed from artist/album/playlist/song pages.
+
+The artist banner is now **full-bleed**: it meets the titlebar with zero top margin and spans the content
+edge to edge with square corners, while the actions and track list keep the normal 28px gutter. The
+existing inset shadow is unchanged. Verified at 0/0/0 (left/top/right) in the navigation e2e.
 
 ### Artist banner (2026-10-19)
 
