@@ -25,16 +25,19 @@
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@types/node": "^22.10.5",
-    "electron": "^37.0.0",
-    "electron-builder": "^25.1.8",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^3.1.0",
     "svelte": "^5.19.0",
     "svelte-check": "^4.1.4",
     "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "vite": "^6.4.5"
   },
   "allowScripts": {
-    "electron@37.10.3": true,
+    "electron@45.0.0": true,
     "esbuild@0.25.12": true
+  },
+  "overrides": {
+    "global-agent": "^4.1.3"
   }
 }

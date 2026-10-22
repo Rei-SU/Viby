@@ -132,7 +132,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 | Main language | TypeScript on Node | Shared types with renderer; no second language to build |
 | Renderer framework | **Svelte 5** | Compiles away — no virtual DOM, minimal runtime, lowest idle CPU of the mainstream options |
 | Bundler | Vite + electron-vite | Fast HMR, small renderer bundles, one config for all three processes |
-| Persistence | Atomic JSON stores | `node:sqlite` was evaluated and rejected: Electron 37 ships Node 22 where it needs `--experimental-sqlite`. The stores are small (favourites, history, playlists, settings), so synchronous temp-file + rename writes are simpler, crash-safe and dependency-free. |
+| Persistence | Atomic JSON stores | `node:sqlite` was evaluated and rejected: the stores are small (favourites, history, playlists, settings), so synchronous temp-file + rename writes are simpler, crash-safe and dependency-free. |
 | Audio | Single `<audio>` + Chromium decoder | Native decode = no extra CPU; `mediaSession` gives OS integration free |
 | Resolution | Bundled `yt-dlp` (+ PO-token provider) | §2.3, §2.4 |
 | Lyrics | lrclib.net (no key, CORS-enabled) | Verified free, no registration |
@@ -141,6 +141,8 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 **Deliberately not used:** React/Redux (runtime cost buys nothing here), any UI kit, Prisma/TypeORM, `better-sqlite3` (native rebuild risk for no benefit over `node:sqlite`), Web Audio graph (adds CPU until an EQ exists), `hls.js` (extra decode path), Tailwind (a handful of CSS custom properties is lighter).
 
 **Runtime dependencies: exactly one.** `electron-updater`. Everything else is dev-time.
+
+**Dependency security:** Electron 45 and electron-builder 26.15.3 are the security-patched baseline. `npm audit` reports zero vulnerabilities; the `global-agent` override keeps electron-builder's build-time download path on v4 instead of pulling the vulnerable v3/proxy stack.
 
 ## 5. Feature specification
 
