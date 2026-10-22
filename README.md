@@ -18,7 +18,7 @@
 
 Viby is a desktop music player for people who just want to press play.
 
-Browse artists, albums, playlists and charts. Build a library that stays yours. Follow along with lyrics that move with the song. No subscription, no ads, nothing to sit through. An account is optional — only for keeping your library in sync across devices.
+Browse artists, albums, playlists and charts. Build a library that stays yours. Follow along with lyrics that move with the song. Download music for offline listening. No subscription, no ads, nothing to sit through — and no account required.
 
 <p align="center">
   <img src="docs/screenshots/artist.png" alt="Viby artist page with a full-width banner and monthly listeners" />
@@ -31,10 +31,11 @@ Browse artists, albums, playlists and charts. Build a library that stays yours. 
 
 - **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a local cache that makes replays instant.
 - **A catalogue worth browsing.** Search from the titlebar as you type (`⌘K` / `Ctrl K`), then open the full results page with filters, home shelves, charts, and artist and album pages with real discographies.
-- **Lyrics that keep up.** Time-synced lyrics from LRCLIB with a fallback, click-to-seek, and a panel that stays out of the way.
-- **A library that stays yours.** Liked songs, playlists and history stored locally and fully usable signed out. Optional sync keeps them on every device you listen from.
-- **Import from a link.** Paste a public Spotify, Apple Music, Deezer or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.
-- **Quiet by design.** A monochrome interface, a collapsible sidebar, around 300 MB at idle in our macOS tests, and a warm start in under a second.
+- **Lyrics that keep up.** Time-synced lyrics from LRCLIB, with lyrics.ovh as a plain-text fallback, click-to-seek, and a panel that stays out of the way.
+- **A library that stays yours.** Liked songs, playlists and history stored locally and fully usable signed out. Optional encrypted backup and sync is planned after the beta.
+- **Offline when you need it.** Download songs, albums, playlists or Liked Songs and play them without a connection. Search and browsing need the network; your downloads do not.
+- **Import from a link.** Paste a public Spotify, Apple Music, Deezer, YouTube Music or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.
+- **Quiet by design.** A monochrome interface, a collapsible sidebar, a light idle footprint (well under 400 MB in our macOS tests), and a warm start around a second.
 
 ## Look around
 
@@ -54,15 +55,15 @@ Browse artists, albums, playlists and charts. Build a library that stays yours. 
 
 <p align="center">
   <img src="docs/screenshots/search.png" width="49%" alt="Search results with filters for songs, albums, artists and playlists" />
-  <img src="docs/screenshots/settings.png" width="49%" alt="Playback quality, autoplay and cache settings" />
+  <img src="docs/screenshots/settings.png" width="49%" alt="Playback, offline mode, downloads and cache settings" />
 </p>
 <p align="center">
-  <sub>Search across songs, albums, artists and playlists &nbsp;·&nbsp; Quality, autoplay and cache, all local</sub>
+  <sub>Search across songs, albums, artists and playlists &nbsp;·&nbsp; Playback, offline mode and storage, all local</sub>
 </p>
 
 ## Build from source
 
-Requirements: **Node.js 20+**, npm, and the platform you are building for.
+Requirements: **Node.js 22.12+** (required by Electron 45), npm, and the platform you are building for.
 
 ```bash
 git clone https://github.com/Rei-SU/Viby.git
@@ -96,7 +97,7 @@ Viby is a public beta. The core is in place; the edges are still being sanded.
 
 ## Privacy
 
-Accounts are optional. No analytics, no telemetry, no ad tracking. Your library, playlists, history and cache live in your user data folder by default, and the app only talks to the network to browse, play, fetch lyrics and import a link you paste. If you sign in, it also backs up and syncs your library; listening never requires an account.
+No account is required, and this beta has no sign-in. No analytics, no telemetry, no ad tracking. Your library, playlists, history, downloads and cache live in your user data folder by default, and the app only talks to the network to browse, play, fetch lyrics, download music and import a link you paste. If optional accounts ship later, they will only back up and sync your library; listening will never require one.
 
 ## Contributing
 
@@ -105,7 +106,7 @@ Viby is intentionally small and opinionated, and contributions are welcome.
 - Open an issue before a large feature or refactor; small fixes can go straight to a PR.
 - Keep PRs focused, match the existing Svelte/TypeScript style, and keep the UI monochrome.
 - Run `npm run typecheck` and the suites in [TESTING.md](TESTING.md) for the files you changed.
-- No ads, paywalls, tracking, telemetry or bundled credentials — ever. Accounts exist only as an optional home for backup and sync.
+- No ads, paywalls, tracking, telemetry or bundled credentials — ever. Accounts, when they ship, will exist only as an optional home for backup and sync.
 - Don't commit `.env` files, cookies, downloaded audio or the vendored runtime.
 
 The full rules live in [CONTRIBUTING.md](CONTRIBUTING.md). Be decent to each other.

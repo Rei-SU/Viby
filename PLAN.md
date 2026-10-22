@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-21 (rev 4)
+Last updated: 2026-10-22 (rev 5)
 
 ---
 
@@ -18,18 +18,18 @@ Every decision below came from you, with the technical consequence I derived fro
 | 4 | Local data | Stream + smart auto-cache | Bounded LRU cache; cached tracks play offline and instantly |
 | 5 | Cache cap | 1GB default | ~300 tracks at 128–256kbps. Configurable in settings. |
 | 6 | v1 features | Playlists, queue, favorites, history | A real library, not a search box |
-| 7 | Import | Paste share URLs, no credentials, ever | Spotify via embed JSON + anonymous token; Apple Music via share-page JSON; **zero accounts required from you** |
+| 7 | Import | Paste share URLs, no credentials, ever | Spotify via embed bootstrap + anonymous GraphQL, with the embed's first 100 tracks as fallback; Apple Music via share-page JSON; **zero accounts required from you** |
 | 8 | Import conflicts | Auto-match + review screen | No silent wrong-version imports |
 | 9 | Unresolvable tracks | Skip + notify | Simple, honest |
 | 10 | Charts | Global only | One less variable, no region config |
 | 11 | Language | English only | No i18n layer, no RTL work in v1 |
 | 12 | Playback auth | Anonymous, no credentials stored | Playback needs no login and stores no credentials. The optional account layer (later) is separate. |
-| 13 | Lyrics | Layered fallback chain | lrclib → YouTube timedtext → plain text, all cached |
+| 13 | Lyrics | Layered fallback chain | LRCLIB exact → LRCLIB search → lyrics.ovh plain text, all cached |
 | 14 | Shell | Slim sidebar + art-forward heroes | Apple Music feel, still navigable |
 | 15 | OS integration | Media keys + Now Playing, no tray/mini-player | `navigator.mediaSession` — no native code |
 | 16 | Quality | User-selectable, default best, **never auto-downgrade** | Honour the setting exactly; buffer rather than reduce bitrate |
-| 17 | Delivery | Auto-update via GitHub Releases | Windows: real auto-update. macOS: notify + one-click download (see §2.1) |
-| 18 | Distribution | Me + a few friends | Installers, first-run setup, graceful upstream failure |
+| 17 | Delivery | Auto-update via GitHub Releases | Planned, not wired yet. Windows can auto-update unsigned; macOS must notify + one-click download until signing is available (see §2.1) |
+| 18 | Distribution | Public beta on GitHub; built for me and a few friends first | Installers, first-run setup, graceful upstream failure |
 | 19 | Name | Viby | Bundle ID, installers, window title |
 | 20 | Deferred | No EQ, gapless, crossfade, sleep timer, scrobbling, Discord, stats, sync, mobile | Kept out of v1 deliberately; accounts/sync and mobile are planned post-v1, not abandoned. |
 | 21 | Phase order | Skip the standalone spike, start on the real player | P1's first task *is* the resolver proof — see §9 |
@@ -53,10 +53,10 @@ Five assumptions that "obviously work" in most music-app plans do not. Verified 
 | Runner | `--version` | Full resolve |
 |---|---|---|
 | `yt-dlp_macos` (37MB PyInstaller, what the app shipped first) | **25–45s** | 34–70s |
-| zipapp (3MB) under Python 3.14 | 1.9s | 4.7s |
-| zipapp **extracted once** (keeps `__pycache__`) | **0.6s** | **2.9s** |
+| zipapp (3MB) under system Python (dev fallback) | 1.9s | 4.7s |
+| zipapp **extracted once** under vendored CPython 3.12.15 | **0.6s** | **2.9s** |
 
-`spctl -a` **rejects** the PyInstaller binary (ad-hoc signed), so macOS re-assesses it on every launch — the whole 25–45s is Gatekeeper, not YouTube. The app now provisions the zipapp, unpacks it into `userData/bin/yt-dlp-src/`, and runs it with the discovered Python. The PyInstaller binary remains only as a fallback for Windows and for machines with no Python.
+`spctl -a` **rejects** the PyInstaller binary (ad-hoc signed), so macOS re-assesses it on every launch — the whole 25–45s is Gatekeeper, not YouTube. The app now provisions the zipapp, unpacks it into `userData/bin/yt-dlp-src/`, and runs it with the bundled CPython (or a discovered system Python in development). The PyInstaller binary remains only as a fallback for Windows and for machines with no Python.
 
 **2.4 — YouTube enforces PO tokens / SABR on stream URLs, and which clients work changes.** GVS (streaming) requests require a PO token for most clients, and several token-exempt clients now return SABR-only formats with no direct URL at all. This is the project's biggest risk. See R1.
 
@@ -76,7 +76,7 @@ Two conclusions, both now baked into `src/main/ytdlp/resolver.ts`:
 
 Anonymous playback works today with no PO token and no cookies. This is a baseline, not a guarantee, and the pinning fallbacks in `CLIENT_SETS` are the first thing to tune when it breaks.
 
-**2.5 — Spotify needs no account after all.** `open.spotify.com/embed/playlist/{id}` ships the track list as `__NEXT_DATA__` JSON to anonymous visitors, and an anonymous token can be bootstrapped from Spotify's own pages to page through playlists longer than the embed limit. Multiple independent working projects confirm both paths. No credential, no Premium, no dev app.
+**2.5 — Spotify needs no account after all.** `open.spotify.com/embed/playlist/{id}` exposes an anonymous access token and the first 100 tracks to public visitors. That token drives the web player's `fetchPlaylist` GraphQL pathfinder for full pagination, with the embed list as the fallback if the persisted-query hash rotates. Multiple independent working projects confirm the path. No credential, no Premium, no dev app.
 
 ## 3. Architecture
 
@@ -84,7 +84,7 @@ Three processes, strict separation, minimal IPC surface.
 
 ```
 ┌─────────────────────────── Electron main (Node) ───────────────────────────┐
-│  window/lifecycle   IPC router   settings   logger   updater                │
+│  window/lifecycle   IPC router   settings   connectivity   downloads       │
 │                                                                              │
 │  ┌── innertube/ ──────────┐  ┌── ytdlp/ ──────────────────────────────┐     │
 │  │ catalog: search,       │  │ binary provisioning + self-update      │     │
@@ -93,8 +93,8 @@ Three processes, strict separation, minimal IPC surface.
 │  └────────────────────────┘  └────────────────────────────────────────┘     │
 │                                                                              │
 │  ┌── library/ ────────────┐  ┌── cache/ ────────┐  ┌── lyrics/ ──────────┐  │
-│  │ playlists, favorites,  │  │ audio LRU (1GB)  │  │ lrclib → timedtext  │  │
-│  │ history, settings      │  │ art LRU (200MB)  │  │ → plain, all cached │  │
+│  │ playlists, favorites,  │  │ audio LRU (1GB)  │  │ LRCLIB → lyrics.ovh │  │
+│  │ history, downloads     │  │ art LRU (256MB)  │  │ plain, all cached   │  │
 │  └────────────────────────┘  │ policy + eviction│  └─────────────────────┘  │
 │                              └──────────────────┘                            │
 │  ┌── import/ ────────────────────────────────────────────────────────────┐  │
@@ -105,9 +105,9 @@ Three processes, strict separation, minimal IPC surface.
         ▼
 ┌────────────────────────── Renderer (Chromium) ──────────────────────────────┐
 │  Svelte 5 + Vite          single <audio> element      navigator.mediaSession│
-│  player store (runes)     lyrics view                 virtualized lists     │
-│  routes: Home Search Library Playlist Album Artist Charts Settings          │
-│  components: PlayerBar, Queue, Cover, VirtualList, Lyrics, ImportReview     │
+│  player store (runes)     lyrics view                 paged lists            │
+│  routes: Home Search Library Queue Album Artist Track Charts Import Settings│
+│  components: PlayerBar, Queue, Cover, LyricsPanel, DownloadBadge            │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -116,10 +116,10 @@ Three processes, strict separation, minimal IPC surface.
 ### Data flow: playing a track
 
 1. Renderer requests `player.resolve(trackIdOrUrl)`.
-2. Main checks the audio cache. **Hit** → returns a local file path, instant play.
+2. Main checks explicit downloads first, then the audio cache. **Hit** → returns a local file path, instant play; a download always wins over a cached copy.
 3. **Miss** → `yt-dlp -J` resolves a direct audio URL (default client selection; see §2.4). This is the only slow step (~2.9s cold), so it is moved *before* the click wherever intent is visible: hover, the first rows of a list, the next queue track, the top of Recently played.
 4. Renderer sets `audio.src` and plays.
-5. Background: if the track passes the cache-worthiness test (§6), `yt-dlp` downloads it so the next play is a hit.
+5. Background: if the track passes the cache-worthiness test (§6) and is not an explicit download, `yt-dlp` caches it so the next play is a hit.
 6. Format URLs are IP-bound and expire (~6h). A 403 triggers one transparent re-resolve, then a download-to-cache fallback.
 
 ## 4. Tech stack
@@ -128,19 +128,19 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Shell | Electron | Your call; mature packaging and updater story |
+| Shell | Electron | Your call; mature packaging and native media integration |
 | Main language | TypeScript on Node | Shared types with renderer; no second language to build |
 | Renderer framework | **Svelte 5** | Compiles away — no virtual DOM, minimal runtime, lowest idle CPU of the mainstream options |
 | Bundler | Vite + electron-vite | Fast HMR, small renderer bundles, one config for all three processes |
 | Persistence | Atomic JSON stores | `node:sqlite` was evaluated and rejected: the stores are small (favourites, history, playlists, settings), so synchronous temp-file + rename writes are simpler, crash-safe and dependency-free. |
 | Audio | Single `<audio>` + Chromium decoder | Native decode = no extra CPU; `mediaSession` gives OS integration free |
 | Resolution | Bundled `yt-dlp` (+ PO-token provider) | §2.3, §2.4 |
-| Lyrics | lrclib.net (no key, CORS-enabled) | Verified free, no registration |
-| Packaging | electron-builder + electron-updater | NSIS on Windows, DMG/zip on macOS |
+| Lyrics | lrclib.net + lyrics.ovh (no keys, no registration) | Verified free; LRCLIB supplies synced lyrics, lyrics.ovh the plain-text backup |
+| Packaging | electron-builder; electron-updater installed for the planned update flow | NSIS on Windows, DMG/zip on macOS |
 
 **Deliberately not used:** React/Redux (runtime cost buys nothing here), any UI kit, Prisma/TypeORM, `better-sqlite3` (native rebuild risk for no benefit over `node:sqlite`), Web Audio graph (adds CPU until an EQ exists), `hls.js` (extra decode path), Tailwind (a handful of CSS custom properties is lighter).
 
-**Runtime dependencies: exactly one.** `electron-updater`. Everything else is dev-time.
+**Runtime dependencies: exactly one.** `electron-updater`; the update flow itself is still pending in P5. Everything else is dev-time.
 
 **Dependency security:** Electron 45 and electron-builder 26.15.3 are the security-patched baseline. `npm audit` reports zero vulnerabilities; the `global-agent` override keeps electron-builder's build-time download path on v4 instead of pulling the vulnerable v3/proxy stack.
 
@@ -152,50 +152,50 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 - Resume where you left off on relaunch; restore queue.
 - Sleep prevention while playing (Electron `powerSaveBlocker`).
 - Media keys + OS Now Playing via `mediaSession`, with artwork.
-- Settings: quality (best available / data saver ~64kbps, honoured exactly — no auto-downgrade), autoplay, cache cap and clear cache.
+- Settings: quality (best available / data saver ~64kbps, honoured exactly — no auto-downgrade), autoplay, cache cap and clear cache, offline mode, and downloads storage.
 - On a slow network: buffer, never silently reduce quality. If it can't keep up we tell you, we don't decide for you.
 
 ### 5.2 Search
 - Instant search, 250ms debounce, in-flight cancellation (stale responses dropped by request sequence number).
 - Filters: songs, albums, artists, playlists. Charts live in Browse, not search.
-- Results virtualized; artwork lazy-loaded with a low-res placeholder.
+- Results render in pages on long lists; artwork lazy-loads with a low-res placeholder.
+- Search is online-only. When the app is local-first, the titlebar field is disabled and the Search page says “You are not connected to the internet.” (or “Cannot connect to the host right now.” for an unreachable host).
 - Keyboard: `/` focuses search, `↑/↓` navigate, `Enter` plays, `Shift+Enter` queues.
 
 ### 5.3 Browse & categories
 - Global charts (top songs, top albums).
-- Moods & genres from YT Music's Explore surface, drilled into playlists.
-- Home shelves: recently played, favorites, your playlists, imported playlists.
+- Moods & genres from YT Music's surfaces, drilled into playlists.
+- Home: recently played plus YouTube Music's home shelves; artist, album, playlist and song pages open from any card or row.
 
 ### 5.4 Library
 - **Favorites** and **playlists** are local-first and never vanish when upstream changes. They stay on the machine by default; optional accounts (later) back them up and sync them across devices.
-- **History**: every played track with timestamp and completion ratio; feeds "recently played" and lets the cache policy promote repeatedly-played tracks.
-- Playlist cover = 4-up mosaic from tracks, or user-picked art.
-- Every track row: play, queue-next, add to playlist, favorite, go to album, go to artist.
+- **History**: every played track with timestamp and completion ratio, capped at the last 5,000 plays; feeds "recently played" and lets the cache policy promote repeatedly-played tracks.
+- Playlist cover = first track's artwork; user-picked cover art is not in v1.
+- **Downloads** are part of Library, not a separate page: badges, partial-progress rings, a Downloaded filter, and a standalone-songs section. See §17.
+- Every track row: play, queue-next, add to playlist, favorite, download, go to album, go to artist.
 
 ### 5.5 Lyrics
 Layered, in this order, each result cached permanently:
-1. `lrclib /api/get-cached` — internal DB only, fast, no external calls.
-2. `lrclib /api/get` — wider search, slower, may hit external sources.
-3. `lrclib /api/search` with title/artist, best-fuzzy match.
-4. YouTube timedtext via our existing extractor (covers tracks lrclib lacks).
-5. Plain unsynced lyrics, if that's all lrclib has.
+1. LRCLIB `/api/get` with title, artist, album and duration.
+2. LRCLIB `/api/search` with cleaned title and artist, choosing the closest duration and preferring synced lyrics.
+3. `lyrics.ovh` plain text when LRCLIB has nothing.
+4. No lyrics only when both sources come back empty.
 
-Duration is included in the lrclib signature (±2s tolerance) because it sharply improves match accuracy. Synced lyrics get auto-scroll with the active line pinned and click-to-seek on any line. All requests send an identifying `User-Agent`, as lrclib asks.
+Duration is included in the LRCLIB signature (±2s tolerance) because it sharply improves match accuracy. Synced lyrics get auto-scroll with the active line pinned and click-to-seek on any line. All requests send an identifying `User-Agent`, as LRCLIB asks.
 
 ### 5.6 Playlist import — no accounts, no credentials, no exceptions
 
 | Service | Method | Fragility |
 |---|---|---|
-| YouTube Music / YouTube | Resolver we already have | Low |
+| YouTube Music / YouTube | InnerTube playlist reader; exact video ids, no search | Low |
 | Deezer | Public API, no key | Low |
-| Spotify | Embed-page `__NEXT_DATA__` JSON; anonymous token bootstrap for playlists past the embed limit | Medium |
+| Spotify | Embed token bootstrap + anonymous `fetchPlaylist` GraphQL; embed's first 100 tracks as fallback | Medium |
 | SoundCloud | Extract `client_id` from the web player | Medium |
 | Apple Music | Share-page embedded JSON (no free official API exists) | High |
-| Any | Paste plain `Artist - Title` lines, or drop a CSV | None |
 
-The plain-text and CSV paths exist so that **no single company's decision can make importing impossible.** They are the floor, not the fallback of last resort.
+Import is link-only by decision: no CSV or plain-text floor in v1, and only playlist links are accepted.
 
-**Matcher behaviour** (#8): exact title+artist match on YouTube Music search → auto-accept. Low confidence (fuzzy-only match, duration mismatch >10s, or several close candidates) → the review screen shows side-by-side candidates with artist and duration, and lets you pick, skip, or accept as-is. Nothing is silently wrong. Album-level imports match the whole album, which is far more accurate than track-by-track.
+**Matcher behaviour** (#8): exact title+artist match on YouTube Music search → auto-accept. Low confidence (fuzzy-only match, duration mismatch >10s, or several close candidates) → the review screen shows candidate choices with artist and duration, and lets you pick, skip, or leave the row unmatched. Nothing is silently wrong. YouTube playlists bypass matching and use their exact ids; album-level import is not in v1.
 
 ### 5.7 Not in v1
 Equalizer, gapless, crossfade, sleep timer, scrobbling, Discord presence, mini-player, tray, listening stats, device sync, i18n, mobile, local file playback. Each is a clean addition later; none blocks the core. Accounts and cross-device sync are also post-v1: local-first stays the default, and listening never requires signing in.
@@ -212,11 +212,11 @@ The budget is a hard constraint, not an aspiration. If a change breaks it, the c
 | Cold start to interactive | < 2.5s | Instrumented launch-time metric |
 | Renderer bundle | < 400KB gzipped | Build output |
 | Resolve → first audio | < 300ms cached, < 2.5s uncached | In-app timing log |
-| Scrolling | 60fps with a 5,000-row playlist | DevTools performance trace |
+| Scrolling | 60fps while paging a 5,000-row playlist | DevTools performance trace |
 
 **Measured 2026-10-18** (`tests/resolver.test.ts`): warm resolve **0ms** from memory and **0ms** from the persisted URL cache after a restart; cold resolve **2.9s**; process startup **0.6s**. The first version of this measured **25–45s** — see §2.3, it was the `yt-dlp` binary, not the network. Clicks on prefetched rows (the top of every list, the hovered row, the next track) are therefore effectively instant.
 
-**Measured 2026-10-19 on the packaged x64 build** (`npm run measure`, Intel Mac, macOS 15.7.7). RSS is the sum across the Electron process tree; the physical footprint (`vmmap`) is shown because RSS counts shared framework pages once per process.
+**Measured 2026-10-19 on the packaged x64 build** (`npm run measure`, Electron 37, Intel Mac, macOS 15.7.7). These numbers predate the Electron 45 upgrade and should be re-measured when the next release is cut. RSS is the sum across the Electron process tree; the physical footprint (`vmmap`) is shown because RSS counts shared framework pages once per process.
 
 | State | Summed RSS | Physical footprint | CPU |
 |---|---|---|---|
@@ -227,17 +227,17 @@ The budget is a hard constraint, not an aspiration. If a change breaks it, the c
 | Paused after playback | ~305 MB | — | 0.3–0.4% |
 
 - **Startup:** shell 858–902 ms warm; 1.2–1.7 s on the first launch after a build. Home cards render in the same frame when the shelf cache is warm.
-- **Bundle:** 255 KB JS + 50 KB CSS raw = **62 KB gzip**.
+- **Bundle (2026-10-22, Electron 45 build):** 388 KB JS + 85 KB CSS raw = **~92 KB gzip**.
 - **Soak:** +2 MB RSS over 2 minutes of playback, no leak.
 - **Lyrics cost:** the panel's 32px `backdrop-filter` is the biggest GPU consumer. A clean cached-track test went from 12.9% to 10.3% CPU with the panel blur disabled; the dock/titlebar glass showed no measurable cost. The 5% playing target in §6 is therefore **not met on this Intel machine** while the window is visible — it sits at ~9% of one core. The UI is still well inside the RAM ceiling, and idle CPU is effectively zero.
 - **Caveat:** CPU depends heavily on window visibility (macOS throttles an occluded window); samples were taken with the app frontmost via LaunchServices.
 
 Techniques that get us there:
-- **Virtualized lists everywhere.** Never render more than ~40 DOM rows regardless of playlist size. The single biggest win.
-- **Bounded caches with real eviction.** Audio 1GB LRU, art 200MB LRU, eviction in main. Never unbounded.
+- **Paged lists on long collection pages.** Detail pages render 120 rows at a time; full list virtualization is still on the roadmap (README). The single biggest remaining win.
+- **Bounded caches with real eviction.** Audio 1GB LRU, art 256MB LRU, eviction in main. Never unbounded.
 - **Lazy everything.** Art at display size, placeholder first, `loading="lazy"`, off-screen rows never request art.
 - **One decode path.** Chromium's audio pipeline. No Web Audio graph, no transcoding.
-- **No background timers.** No polling, no interval UI refresh. Position updates come from `timeupdate`, only while the lyrics view is visible.
+- **No UI polling or interval refresh.** Connectivity probes only while the monitor is running; downloads report progress from their own queue. Position updates come from `timeupdate`, only while the lyrics view is visible.
 - **Svelte compile-time reactivity** instead of a runtime reconciler.
 - **Renderer stays dumb.** No catalog logic, no caching, no parsing — it renders and requests.
 - **`yt-dlp` concurrency capped at 2**, idle-shutdown so no process lingers after a resolve.
@@ -252,14 +252,14 @@ Cache-worthiness rule (keeps the cache useful instead of full): a track is cache
 | R1 | YouTube PO-token / SABR enforcement blocks anonymous stream URLs | Playback fails for affected tracks | Prefer `yt-dlp`'s default client selection (measured best on 2026-10-18); pin clients only as fallback; accept `https` progressive formats only and fall back to download-to-cache for SABR-only tracks; bundle the `bgutil` PO-token provider so tokens are generated locally; keep `yt-dlp` auto-updating; **break-glass**: optional cookie import in Advanced settings | Medium-high. **Verified working 2026-10-18** with no PO token and no cookies (see §2.4) — but only via the default client selection, and `m3u8_native` audio had to be rejected to keep playback honest. Note the app's managed binary is **2026.08.19**, newer than the 2026.03.17 on `PATH`. Expect occasional multi-day windows needing a plugin update — the provider slot in `resources/yt-dlp-plugins/` is pre-wired for exactly that. Still the single biggest existential risk. |
 | R2 | InnerTube constants (API key, client version) rotate | Search/browse errors | All constants in one patchable config file; fall back to `yt-dlp` metadata for search; overridable without a new build | Low |
 | R3 | IP rate-limiting / bot checks from heavy use | Throttled or blocked | Aggressive caching (2h URL cache, bounded audio cache), a resolve only when playback needs one, prefetch limited to the single next track, polite user agent, request pacing with exponential backoff, concurrency cap | Low for personal use |
-| R4 | macOS auto-update impossible unsigned | No silent updates on your main machine | Windows gets true in-app auto-update; macOS checks GitHub Releases and shows a prominent one-click download. Flipping to signed later enables silent macOS updates with no code change. | Accepted |
-| R5 | Apple Music import depends on scraping | Import breaks | Plain-text/CSV import always available | Accepted |
-| R6 | Spotify embed truncates long playlists | Partial import | Anonymous-token bootstrap pages past the limit; the review screen shows exactly how many tracks were found, and CSV/plain-text is always there | Low |
-| R7 | SoundCloud `client_id` rotation | Import breaks | Re-extract from the web player JS on failure; plain-text fallback | Low |
-| R8 | `electron-builder` requires a signing key for update manifests | Release pipeline fails | Generate a free Ed25519 update-manifest keypair once, store in CI secrets | None |
+| R4 | macOS auto-update impossible unsigned | No silent updates on your main machine | No update path is wired yet. When it is, Windows can auto-update unsigned and macOS must check GitHub Releases and show a one-click download. Flipping to signed later enables silent macOS updates. | Accepted |
+| R5 | Apple Music import depends on scraping | Import breaks | Keep each adapter isolated; failures are per-track and the rest of the import continues. | Accepted |
+| R6 | Spotify embed truncates long playlists | Partial import | Anonymous-token bootstrap pages past the embed limit; the review screen reports the track count, and the embed's first 100 remain a fallback. | Low |
+| R7 | SoundCloud `client_id` rotation | Import breaks | Re-extract from the web-player JS on failure; per-track failures continue the batch. | Low |
+| R8 | Update manifests need a signing key | Release pipeline cannot auto-update | Not wired yet. When update work starts, generate a free Ed25519 keypair once and store it in CI secrets. | None |
 | R9 | ~~`safeStorage` prompts on unsigned builds~~ | — | **Eliminated** — no credentials are stored anywhere | None |
 | R10 | Electron RAM creep | Breaks the core requirement | The budget table is enforced; dependency additions must be justified. Runtime deps: one. | Low |
-| R11 | Legal / ToS | Personal risk | Personal use + a few friends, no public distribution, no monetisation, no DRM circumvention; `yt-dlp` is Unlicense. Public release would invite DMCA pressure — re-plan then. | Accepted, your call |
+| R11 | Legal / ToS | Takedown or account risk | Public beta on GitHub, no monetisation, no DRM circumvention; `yt-dlp` is Unlicense. A wider release would invite DMCA pressure — re-plan then. | Accepted, your call |
 
 ## 8. Repository layout
 
@@ -268,58 +268,56 @@ viby/
 ├── package.json
 ├── electron-builder.yml
 ├── electron.vite.config.ts
-├── PLAN.md
+├── PLAN.md / README.md / TESTING.md
+├── assets/                       # source logo + README artwork
+├── docs/                         # import research, screenshots
 ├── resources/
-│   ├── bin/                      # yt-dlp copied to userData on first run
+│   ├── bin/yt-dlp.pyz            # copied to userData on first run
+│   ├── python/<os>-<arch>/       # vendored CPython runtime
 │   ├── yt-dlp-plugins/           # PO-token provider (R1)
-│   └── icons/
+│   └── icon.icns / icon.ico / icon.png
+├── scripts/                      # fetch-runtime, icons, measure
 ├── src/
 │   ├── main/
-│   │   ├── index.ts              # lifecycle, single-instance lock, powerSaveBlocker
+│   │   ├── index.ts              # lifecycle, single-instance lock, background switches
 │   │   ├── windows.ts
 │   │   ├── ipc.ts                # typed channels + validation
 │   │   ├── settings.ts
 │   │   ├── json-store.ts         # tiny atomic JSON store
-│   │   ├── library.ts            # favorites + history
-│   │   ├── logger.ts
-│   │   ├── updater.ts            # auto-update (Win) / notify (mac)
-│   │   ├── innertube/            # P2 — catalog (shipped for search/browse)
-│   │   │   ├── constants.ts      # single place to patch (R2)
-│   │   │   ├── parse.ts          # tolerant, Electron-free, unit-testable
-│   │   │   └── client.ts
-│   ├── tests/                    # resolver + InnerTube tests, outside Electron
-│   │   ├── electron-stub.ts
-│   │   ├── ytdlp/
-│   │   │   ├── binary.ts         # provision + self-update
-│   │   │   └── resolver.ts       # JSON → stream URL, client rotation
-│   │   ├── cache/
-│   │   │   ├── audio.ts          # LRU + eviction
-│   │   │   └── policy.ts
-│   │   ├── lyrics/               # P3
-│   │   └── import/               # P4
+│   │   ├── library.ts            # favorites, history, playlists
+│   │   ├── session.ts            # resume queue and position
+│   │   ├── media.ts              # viby-media:// scheme
+│   │   ├── menu.ts
+│   │   ├── network.ts            # connectivity monitor + manual mode
+│   │   ├── lyrics.ts             # LRCLIB + lyrics.ovh
+│   │   ├── cache/                # audio LRU, image cache, policy
+│   │   ├── downloads/            # index, engine, artwork
+│   │   ├── innertube/            # catalog: constants, parse, client
+│   │   ├── import/               # Spotify, Apple, Deezer, YouTube, SoundCloud
+│   │   └── ytdlp/                # binary provisioning + resolver
 │   ├── preload/index.ts          # contextBridge, the only exposed API
-│   ├── shared/
-│   │   ├── types.ts
-│   │   └── ipc.ts                # one source of truth for channels
+│   ├── shared/                   # types + IPC channel contract
 │   └── renderer/
 │       ├── index.html
 │       ├── main.ts
 │       ├── App.svelte
-│       ├── lib/api.ts            # typed `window.viby`
-│       ├── lib/player.svelte.ts  # audio element + mediaSession + state
-│       ├── components/
+│       ├── lib/                  # player, network, downloads, nav, artwork...
+│       ├── components/           # views, rows, player, lyrics, downloads
 │       └── styles/
 └── tests/
+    ├── unit.mjs                  # Node-side suites via esbuild
+    ├── e2e/                      # live-app scenarios
+    └── *.test.ts
 ```
 
 ## 9. Delivery phases
 
-**P1 — Playback core. Built, verified, awaiting your play test.**
+**P1 — Playback core. Shipped.**
 Resolver proof first, by design (your call to skip the standalone spike): the very first thing built is `yt-dlp` provisioning plus single-track resolve-and-play, which is exactly the thing the spike would have tested. If PO tokens defeat anonymous playback, we find out in the first hours rather than after the UI exists.
 Then: player bar with seek/volume/shuffle/repeat, queue, media keys, Now Playing, settings, cache with eviction, history and favorites.
 
 *Built and verified:* `yt-dlp` provisioning into userData (with self-update), client-rotation resolver with a S2 concurrency cap, resolve-URL cache with 2h TTL, bounded 1GB LRU audio cache with eviction, download-to-cache fallback for SABR-only tracks, background caching driven by the cache-worthiness rule, local-first favorites and history, JSON settings, a privileged `viby-media://` scheme for serving cached audio without weakening `webSecurity`, and a Svelte 5 player with queue, seek, volume, shuffle, repeat, and full `mediaSession` integration.
-*Typecheck and build are clean; renderer bundle 181KB raw (~55KB gzipped).*
+*Typecheck and build are clean; the current bundle is tracked in §6.*
 
 **P1.5 — Crash fix and honest failures. Done.**
 `yt-dlp` prints the literal string `null` to stdout with exit code 1 when extraction fails; we treated that as data and crashed in `parseTrack` with `Cannot read properties of null (reading 'id')`, discarding the real reason in stderr. Now every failure path is validated (`code !== 0 || !trimmed || trimmed === 'null'`), mapped to a readable message (`unavailable`, `botcheck`, `playlist`, `cancelled`, `unknown`), and shown in the UI. A resolve can also be **cancelled**, so a slow track can no longer hold the window for two minutes. Regression tests: `tests/resolver.test.ts`.
@@ -344,9 +342,9 @@ Not in this slice: moods/genres browsing, private/collaborative Spotify playlist
 CSV/text floor was dropped by decision (link-only interaction).
 
 **P5 — Ship. Partially done.**
-Installers (DMG + NSIS), auto-update on Windows, notify-and-download on macOS, first-run setup, error states for every upstream failure mode, release pipeline.
+Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, and error states for upstream and offline failures are in place. Still missing: signing/notarization, wired in-app updates (`electron-updater` is installed but not called), release automation, and Windows validation on real hardware.
 
-*Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine.
+*Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. Not yet verified.
 
 **P6 — Accounts and sync. Deferred on purpose.**
 Not started. Begins only once P5 is done and the core experience is fully polished — playback correct, the look and feel settled, and no open fundamentals. Until then the profile avatar stays a placeholder.
@@ -355,30 +353,27 @@ Scope: optional accounts with end-to-end encrypted backup and sync of favorites,
 
 *Acceptance:* two machines signed into the same account converge on the same library after an offline edit, and signing out leaves a complete, usable local library. Export and account deletion need no support ticket.
 
-**P7 — Offline mode and downloads. Planned.**
-The full specification is §17. Three shippable slices: connectivity + offline shell first, then the download engine and visible offline library, then playlists/liked collections and artwork/polish.
+**P7 — Offline mode and downloads. Shipped (P7a–P7c); P7d hardening remains.**
+The full specification and current behavior are in §17. Connectivity + offline shell, the download engine, Library integration, collections, artwork and the offline Search notice are all shipped.
 
-*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs.
+*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs. Met in macOS tests; Windows hardware validation remains.
 
 ## 10. Open items
 
-Settled: cache cap (1GB), quality policy (never downgrade), Spotify (no credentials), phase order (skip spike, straight to P1), language (English), charts (global), accounts (optional, local-first, post-v1 — see §9 P6).
+Settled: cache cap (1GB), quality policy (never downgrade), Spotify (no credentials), phase order (skip spike, straight to P1), language (English), charts (global), accounts (optional, local-first, post-v1 — see §9 P6), repeat-one (restarts the track), and history retention (last 5,000 plays).
 
-Still open, none blocking:
-1. ~~**Quality setting options**~~ — settled: best available / data saver (~64kbps).
-2. **Queue behaviour on repeat-one** — restart the track, or stop after the current play? Default: restart.
-3. **History retention** — keep everything, or cap at the last 5,000 plays?
+No blocking product questions remain; P5 and P6 track the remaining work.
 
 ## 11. Build notes and gotchas
 
 Things that cost time, recorded so they don't cost it twice.
 
-- **npm 11 gates install scripts.** `electron` and `esbuild` postinstalls are blocked by default, so Electron silently has no binary and nothing runs. Fix: `npm install-scripts approve electron esbuild`. Expect this on any fresh clone.
-- **No native modules, on purpose.** `better-sqlite3` would need a node-gyp rebuild, and this machine runs Python 3.14, which toolchains lag behind. `node:sqlite` (inside Node 22+) gives the same capability with zero rebuild risk and one less runtime dependency. P1 therefore uses atomic JSON stores.
+- **npm 11 gates install scripts.** The repo's `allowScripts` covers `electron@45.0.0` and `esbuild`, so a fresh `npm install` gets a working Electron binary. Optional `fsevents` and `electron-winstaller` scripts stay blocked; neither is needed for macOS development or NSIS packaging. When Electron moves, update the version-pinned entry.
+- **No native modules, on purpose.** `better-sqlite3` would need a node-gyp rebuild. Electron 45 ships Node 24, so `node:sqlite` is available, but these stores are small and JSON-shaped; atomic JSON remains the simpler, crash-safe fit. P1 therefore uses atomic JSON stores.
 - **Cached audio is served over `viby-media://`, not `file://`.** Chromium blocks `file://` media from an http origin, and the usual workaround is disabling `webSecurity`. Registering a privileged custom scheme avoids that trade entirely — every security flag stays on.
-- **Runtime dependencies: exactly one** (`electron-updater`). Everything else is dev-time, which is what keeps the RAM budget honest.
+- **Runtime dependencies: exactly one** (`electron-updater`, installed but not wired yet). Everything else is dev-time, which is what keeps the RAM budget honest.
 - **Media keys route through `mediaSession`, not `globalShortcut`.** `globalShortcut` media-key registration is broken on macOS (a long-standing Electron bug); everything goes through `navigator.mediaSession`, which also gives us Now Playing and Windows SMTC for free.
-- **The dev log** lives at `/private/var/folders/kl/.../T/opencode/viby-dev.log` while `npm run dev` is running.
+- **The dev log** is the terminal running `npm run dev`; renderer console output is forwarded there by `windows.ts`.
 - **`yt-dlp` exits 1 and prints the string `null` on stdout when a video fails.** Checking `code !== 0 && !stdout.trim()` is not enough — `"null"` is non-empty, so it parses to `null` and crashes the caller. Always treat `code !== 0`, empty output, **or literal `null`** as failure, and read the reason from stderr.
 - **Chromium cannot play HLS in an `<audio>` element.** `yt-dlp` happily offers `m3u8_native` audio at a competitive bitrate; feeding it to the player looks exactly like a broken stream. Filter to `protocol: 'https'|'http'` and fall back to download-to-cache otherwise.
 - **Don't pin `--extractor-args youtube:player_client=…`.** See §2.4: as of 2026-10-18 it is what breaks playback, not what fixes it.
@@ -386,13 +381,10 @@ Things that cost time, recorded so they don't cost it twice.
 - **`python3 -S` breaks HTTPS in yt-dlp** (`CERTIFICATE_VERIFY_FAILED`, because `site` is what sets up certificate paths on the macOS framework build). It saves 300ms of startup and costs you all network access — don't.
 - **Playback speed comes from prefetching, not from a faster resolver.** Catalog metadata is instant (InnerTube), so the app resolves stream URLs ahead of the click: the first few rows of every list, the hovered row, the next queue track, and the top of Recently played. The URL cache is persisted to disk for two hours, so restarts do not repeat work.
 - **Resolve latency breakdown (this machine):** ~0.6s Python startup + ~2.3s yt-dlp network work = ~2.9s cold. Warm is 0ms, so the UX target is met by "resolve before the user asks".
-- **Tests run outside Electron** by aliasing `electron` to a stub, which makes the resolver testable without a GUI:
+- **Tests run outside Electron** by aliasing `electron` to a stub, which makes main-process modules testable without a GUI. The runner bundles each suite with esbuild:
   ```
-  npx esbuild tests/resolver.test.ts --bundle --platform=node --format=esm \
-    --alias:@shared=./src/shared --alias:electron=./tests/electron-stub.ts \
-    --outfile=/tmp/resolver.mjs && node /tmp/resolver.mjs
-  npx esbuild tests/innertube.test.ts --bundle --platform=node --format=esm \
-    --alias:@shared=./src/shared --outfile=/tmp/it.mjs && node /tmp/it.mjs
+  node tests/unit.mjs resolver innertube   # targeted
+  node tests/unit.mjs                      # all Node-side suites
   ```
 
 ## 12. Bug log
@@ -635,10 +627,11 @@ Verified both paths: cached file → `OPUS 131k`, remote stream → `OPUS 132k`;
 **Store fix.** `JsonStore` used to debounce writes by 250ms — a quit inside that window silently lost the last change. It now writes synchronously (temp file + rename, a few KB per change). That also removed the need for the player's settings debounce.
 
 **UI.**
-- New **Library** tab: *Liked songs* tile (with count), one tile per playlist (cover from its first track), and a *New playlist* tile that expands into an inline name field.
+- **Library** tab: *Liked songs* tile (with count), one tile per playlist (cover from its first track), and a *New playlist* tile that expands into an inline name field.
 - **Collection page** for liked songs and each playlist: hero, Play all, Rename, Delete (two-step), track list with remove buttons, and Play all disabled when empty.
 - **Add to playlist** on every track row: a library icon opens a single popover anchored to the row, listing playlists with counts plus "New playlist". One instance lives in the app root, so every surface (search, artist, album, song page) has it with no prop drilling.
 - Deleting a playlist returns to the Library; removing a track from Liked songs unfavourites it.
+- **Downloads live here too.** Downloaded albums appear as tiles, items carry a Downloaded or partial badge, and a **Downloaded** filter narrows the view. Standalone downloaded songs are listed below. See §17 for the full model.
 
 **Verified.** Model test covers create/dedupe/remove/rename/delete, persistence across instances, and self-healing of `null` entries. Drive test creates a playlist, opens it, checks its row, and deletes it. The picker was exercised end to end: search → row button → pick playlist → track stored.
 
@@ -698,7 +691,7 @@ Verified one active row + equalizer on album pages (current `_vOcbrUsmjM`, sourc
 
 **Verified.** 80 synced lines for *Instant Crush*, cache hit in 0ms, unknown track → `none`; UI: panel opens (`open`, 80 lines, 1 active, `LRCLIB`), clicking a lyric seeks, closing slides it out (`translateX(102%)`, pointer-events none).
 
-Deviation from the original plan: the YouTube `timedtext` fallback was dropped — it almost never exists for music, and LRCLIB's plain-text tier already covers what it would.
+Deviation from the original plan: the YouTube `timedtext` fallback was dropped — it almost never exists for music, and `lyrics.ovh` now covers the plain-text backup.
 
 ### Lyrics polish
 
@@ -727,7 +720,7 @@ node tests/unit.mjs lyrics library        # Node-side suites
 
 `tests/drive.mjs` remains as an alias for the full scenario set. `TESTING.md` is the authoritative map: **changed file → suites to run**, plus the escalation rule (changes to `src/shared/**`, `src/preload/**`, `api.ts` or the player state machine mean run everything) and what the suites cannot check (media keys, window drag, RAM/CPU, audible playback).
 
-Scenarios: `images`, `playback`, `reconnect`, `autoplay`, `links`, `lyrics`, `lyrics-change`, `library`, `resume`, `navigation`, `settings`. Each sets up its own state, runs silent, and restores volume/mute afterwards.
+Scenarios: `images`, `playback`, `reconnect`, `autoplay`, `links`, `lyrics`, `lyrics-change`, `library`, `resume`, `navigation`, `settings`, `offline`, `quick-search`, `import`. Each sets up its own state, runs silent, and restores volume/mute afterwards.
 
 
 ### Settings page (2026-10-19)
@@ -767,9 +760,9 @@ Shipping contract: install and play. The user never installs Python and never se
 - **Development** sets the Dock icon from `resources/icon.png` and installs a custom application menu (`src/main/menu.ts`) instead of Electron's default File/Edit/View menu. Edit roles are preserved so copy/paste still works in the search fields and inputs.
 - **Menu name caveat:** macOS renders the first menu item with the *bundle* name, not the template label. Dev runs the `Electron.app` helper, so it still says "Electron"; the packaged app shows "Viby" (verified by screenshot: Apple / Viby / Edit / View / Window). Windows and Linux get no native menu bar — the custom titlebar is the chrome — and the packaged Windows executable takes its icon from `win.icon`.
 
-## 17. Offline mode and downloads (planned)
+## 17. Offline mode and downloads (shipped)
 
-Status: planned, not started (2026-10-21). Scope locked with the product decisions below.
+Status: shipped 2026-10-22 (`2059183`, `86abfe4`). P7a–P7c are complete; P7d hardening and Windows validation remain. The specification below describes the current app.
 
 ### 17.1 The distinction that drives everything
 
@@ -790,7 +783,7 @@ Downloads are explicit, user-owned and permanent until the user removes them —
 - **Cache offline:** non-downloaded cached tracks play silently. No badge, no listing, no promise.
 - **Scope:** songs, albums, playlists, Liked Songs. Liked Songs is a bulk action that downloads its tracks as individual songs, so unfavouriting never deletes a file.
 - **Playlist deletion:** removes that playlist's download references; files with no remaining reference are deleted.
-- **Defaults chosen for consistency:** no download cap; no auto-download of newly added tracks (explicit Update); download quality follows the playback quality at enqueue; downloads never sync with accounts; no export in v1.
+- **Defaults chosen for consistency:** no download cap; no auto-download of newly added tracks (tap Download again to fill gaps); download quality follows the playback quality at enqueue; downloads never sync with accounts; no export in v1.
 
 ### 17.3 Connectivity model
 
@@ -798,10 +791,10 @@ Main-process `NetworkMonitor`:
 
 - `net.isOnline()` is polled every 5s, on startup and on `powerMonitor` resume; renderer `online`/`offline` events trigger an immediate re-check.
 - `net.isOnline() === false` is authoritative offline. `true` is only a hint, so a transition to online is confirmed by a small `net.fetch` probe to `https://music.youtube.com/` (4s timeout; any HTTP response means reachable).
-- States: `online`, `offline` (no link), `unreachable` (link up, host not answering), `forced-offline` (manual). Both `offline` and `forced-offline` enter offline mode; `unreachable` shows the same local-first layout with a "Cannot connect to the host right now" header and a Retry action, so a host outage does not produce a dead Home.
+- States: `online`, `offline` (no link), `unreachable` (link up, host not answering), `forced-offline` (manual). Both `offline` and `forced-offline` enter offline mode. `unreachable` shows the same local-first layout with the "Cannot connect to the host" pill, the detail "Your connection works, but the host isn't responding.", and automatic re-probing — so a host outage does not produce a dead Home.
 - Transitions are debounced (~2s); one failed probe does not flip the app. Failed catalog/resolve requests may report a hint, but HTTP 4xx/5xx and bot checks are not connectivity failures.
 - Broadcast `network:changed` to renderers, with `network:get` and `network:setMode('auto' | 'offline')`. Manual mode persists in settings.
-- A dev-only override forces each state for tests, independent of the machine's real network.
+- A dev-only override (`VIBY_NETWORK_STATE`) forces each state for tests, independent of the machine's real network.
 
 When effective offline and no local file exists, `resolveForPlayback` fails immediately with a `ResolveError('offline', …)` instead of spawning yt-dlp. No 10–60s DNS timeout.
 
@@ -809,18 +802,18 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
 
 **Global**
 
-- A compact titlebar status pill: "Offline", "Offline mode" or "Cannot connect to the host". Click opens a small menu with Manage downloads and, in manual mode, Go online. It is the only persistent offline chrome.
-- Settings gains "Use offline mode" / "Go online" with the current connectivity reason.
-- Sidebar has **Library** (always present); downloads are part of it rather than a separate page. While offline, Charts and Import are disabled with a tooltip, and Search opens an offline notice while the titlebar field is disabled — search needs the catalog.
+- A compact titlebar status pill: "Offline", "Offline mode" or "Cannot connect to the host". Click opens a small menu with **Manage downloads** and either **Go online** (manual mode) or **Offline settings**. It is the only persistent offline chrome.
+- Settings' Connectivity row is labeled **Offline mode** and explains the current state: automatic while connected, automatic with the connectivity reason when not, or manual with "Only downloads play" copy.
+- Sidebar has **Library** (always present); downloads are part of it rather than a separate page. While local-first, Charts and Import are disabled with a tooltip, and Search opens an offline notice while the titlebar field is disabled — search needs the catalog.
 
 **Home**
 
-- Effective offline replaces Home with the Offline Home:
-  - Heading: "You are not connected to the internet." (`unreachable`: "Cannot connect to the host right now.")
-  - Sub: "Your downloads are ready to play." (manual mode: "Offline mode is on — using your downloads.")
-  - Sections: Continue listening, Downloaded albums, Downloaded playlists, Downloaded songs.
-  - Empty state: "Download music while you're online and it'll appear here."
-  - "Manage downloads" link opens Library, with storage summary.
+- Effective local-first replaces Home with the Offline Home. The status eyebrow reads "You're offline", "Offline mode" or "Cannot connect to the host"; the heading stays "Ready when you are."
+- Sub: the download count, total size and free space when downloads exist; otherwise the connectivity detail (or "Downloads are the only things that play without a connection.").
+- Actions: **Play downloads**, **Manage downloads**, and **Go online** in manual mode.
+- Sections: Continue listening, Albums, Playlists, Songs.
+- Empty state: "Nothing downloaded yet" with "Download songs, albums, playlists or Liked songs while online. They stay on this device and play with no connection." The action is **Find something** (or **Go online to download** in manual mode).
+- "Manage downloads" opens Library, with the storage summary.
 - Reconnecting refreshes Home and shows a brief "Back online" confirmation. It never yanks the user off a collection or Library.
 
 **Library**
@@ -835,8 +828,8 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
 
 **Collection pages**
 
-- Album, playlist and Liked Songs heroes get a Download action with states: Download · Downloading n/m · Downloaded · Update (when tracks are missing).
-- Offline, a saved playlist/Liked Songs still shows its full track list and cached artwork. Rows that are not downloaded fade to ~38% opacity, show "Not downloaded — unavailable offline" on hover, and are inert. Play all queues only the available rows and is disabled when none are.
+- Album, playlist and Liked Songs heroes get a Download action with states: Download · Download (n/m) · Downloading n/m · Downloaded. Clicking Downloaded removes the collection download after confirmation.
+- When the link is offline (or manual mode is on), a saved playlist/Liked Songs still shows its full track list and cached artwork. Rows that are not downloaded fade to ~38% opacity, show "Not downloaded — unavailable offline" on hover, and are inert. Play all queues only the available rows and is disabled when none are.
 - A downloaded album opens a local-first page with the same hero/play/track-row language as the online page, marked "Downloaded album/playlist/liked songs" and "Offline ready". It lists the songs actually on disk, with Remove download at the collection and row level; removing a row drops that reference and deletes the file only when nothing else owns it.
 - Track rows get a download action/state in the existing hover cluster: idle, queued, downloading %, done, failed with retry. Downloaded rows keep a persistent check even offline.
 - Deleting a playlist, or removing a track from it, prunes that playlist's references. The confirmation states how many downloaded songs will be deleted.
@@ -850,7 +843,7 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
 
 **Settings**
 
-- Cache copy becomes automation language: "Cached audio makes replays instant and reduces bandwidth. Managed automatically." The offline promise belongs to downloads.
+- Cache copy stays automation language: "A rolling cache keeps playback smooth and sometimes works offline. Clearing it frees space but never touches your downloads."
 - Downloads row: size, free space, Manage.
 - Offline mode row.
 
@@ -904,7 +897,7 @@ type DownloadJob = {
 - References: a direct song download adds `track:<id>`; an album or playlist adds its key to every member; Liked Songs adds the `liked` source. Unfavouriting never prunes, and removing the Liked Songs download deletes only the files no other source still owns. Removing a reference deletes the entry/file only when `sources` is empty. "Remove download" in Library clears all sources for that track.
 - Lyrics are part of a download: fetched when the song finishes and pinned under `downloads/lyrics/`, then served by the lyrics API before its offline check. Downloads made before this existed are backfilled the first time the app is online. Lyrics disappear with their entry.
 - Collection snapshots keep offline grouping working; n/m is computed against the live library where it exists, otherwise the snapshot.
-- Artwork is fetched at enqueue/download time through `net.fetch` (proxy-aware), size-capped, and served locally. A track with no thumbnail of its own borrows its downloaded collection's cover. Saved-library artwork also uses a content-addressed cache under `userData/cache/art` (separate from the audio cache, 256MB cap) and the same `viby-media://` scheme, so playlist covers and row thumbnails survive offline. Extend the media scheme's MIME table for images and restrict served paths to the cache/downloads roots as hardening.
+- Artwork is fetched at enqueue/download time through `net.fetch` (proxy-aware), size-capped, and served locally. A track with no thumbnail of its own borrows its downloaded collection's cover. Saved-library artwork also uses a content-addressed cache under `userData/cache/art` (separate from the audio cache, 256MB cap) and the same `viby-media://` scheme, so playlist covers and row thumbnails survive offline. The media scheme's MIME table includes images and restricts served paths to the cache/downloads roots.
 - One file per track id regardless of how many collections reference it.
 - On successful download, remove the cache entry; `kickOffBackgroundCache` skips downloaded tracks; cache eviction never sees downloads.
 
@@ -931,7 +924,7 @@ type DownloadJob = {
 
 ### 17.7 Code map
 
-**New**
+**Feature modules**
 
 - `src/main/network.ts` — monitor, probe, manual mode, broadcast
 - `src/main/downloads/store.ts` — index, references, healing, stats
@@ -942,9 +935,9 @@ type DownloadJob = {
 - `src/renderer/lib/download-groups.ts` — collection/loose-song split and offline artwork fallbacks
 - `src/renderer/lib/library-items.ts` — unified Library tiles, download marks and progress
 - `src/renderer/lib/artwork.svelte.ts` — resolve/warm library images through the cache
-- `src/renderer/components/DownloadBadge.svelte`, `DownloadCollectionView.svelte`, `OfflineHome.svelte`, `DownloadButton.svelte`
+- `src/renderer/components/DownloadBadge.svelte`, `DownloadCollectionView.svelte`, `OfflineHome.svelte`
 
-**Touched**
+**Integrated files**
 
 - `src/shared/types.ts`, `src/shared/ipc.ts`, `src/preload/index.ts` — APIs and events
 - `src/main/ipc.ts` — handlers, offline guard, download-first playback
@@ -952,39 +945,32 @@ type DownloadJob = {
 - `src/main/cache/*` — skip downloaded; remove cache copy on download
 - `src/renderer/lib/nav.svelte.ts`, `App.svelte`, `HomeView`, `DetailView`, `CollectionView`, `TrackRow`, `SearchBar`, `SettingsView`, `Queue`
 
-Because `src/shared/**` and `src/preload/**` change, TESTING.md's escalation rule applies: targeted suites during development, the full set once before the feature is called done.
+Because this feature touches `src/shared/**` and `src/preload/**`, TESTING.md's escalation rule applies: targeted suites during development, the full set before release.
 
 ### 17.8 Delivery slices
 
-**P7a — Offline awareness (no downloads yet).**
+**P7a — Offline awareness (no downloads yet). Shipped.**
 Monitor, renderer store, manual toggle, offline pill, Offline Home empty state, offline states for Charts/Import/Search, fast offline playback failure, silent cache playback, autoplay off offline.
 *Acceptance:* airplane mode at launch shows the offline Home instantly, with no error toast and no yt-dlp delay when pressing play on an uncached track; reconnecting restores Home.
 
-**P7b — Download core.**
+**P7b — Download core. Shipped.**
 Storage/index, manager, progress, per-song action, Library integration (songs + storage), playback priority, cache dedupe, persistence/resume, cancel/retry, disk guard, artwork for songs.
 *Acceptance:* download a song, quit, relaunch offline, play it from Library; clearing cache leaves it untouched; cancel and retry work.
 
-**P7c — Collections and polish.**
-Album/playlist/Liked actions with coverage and Update; grouped Library with downloaded filters and badges; reference-based pruning; offline artwork for saved collections; faded unavailable rows; Search offline notice; settings copy; low-disk warnings; queue polish.
+**P7c — Collections and polish. Shipped.**
+Album/playlist/Liked actions with coverage and partial re-download; grouped Library with downloaded filters and badges; reference-based pruning; offline artwork for saved collections; faded unavailable rows; Search offline notice; settings copy; low-disk warnings; queue polish.
 *Acceptance:* download a playlist and play it fully offline; a saved but undownloaded playlist still opens offline with cached art, all rows visible and non-downloaded rows faded; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; Search shows the offline notice until the connection returns.
 
-**P7d — Hardening.**
-Network flapping, failed-download recovery, quit mid-download, long playlists, Windows/macOS validation, `offline` e2e, docs.
+**P7d — Hardening. In progress.**
+Offline e2e and docs are in place. Network flapping, failed-download recovery, quit mid-download, long playlists and Windows hardware validation still need the manual/packaged pass.
 
-### 17.9 Test plan
+### 17.9 Test coverage
 
-**Unit (main, no Electron):** index healing; reference add/remove and file deletion; cache/download dedupe; path safety; disk guard; download state machine with a fake runner; network state machine with injected `isOnline`/probe results; progress parser for known and unknown totals.
+**Unit (`node tests/unit.mjs`):** `downloads-store` (index healing, reference add/remove, file deletion, path safety, disk guard), `downloads-manager` (queue state machine, progress parser, unknown totals, cache/download dedupe), `network` (state machine with injected `isOnline`/probe results and debounce), `download-groups`, `library-items`, `player-source`, `images`.
 
-**E2E (`tests/e2e/offline.mjs`)** using the manual/debug override so it never depends on the machine's real network:
+**E2E (`tests/e2e/offline.mjs`)** uses the manual switch, so it never depends on the machine's real network. It covers: local-first Home, the offline pill, disabled Charts/Import, the offline Search page, downloaded playback when the profile has a download, Library filters and badges, and reconnect. It deliberately does not download through yt-dlp.
 
-- offline launch → Offline Home, no catalog calls, no error banner;
-- download one short track → progress → entry → file; play offline after relaunch;
-- cached non-downloaded track plays offline; uncached track fails in under a second with friendly copy;
-- delete a playlist → only unreferenced downloads removed;
-- Clear cache leaves downloads; Delete all downloads leaves cache and library;
-- reconnect restores normal Home; manual mode stays until switched off.
-
-**Manual:** airplane mode on both platforms, Wi-Fi drop mid-download, quit mid-download, disk-full simulation, captive portal (`unreachable`).
+**Manual/packaged pass:** download one short track and a collection, relaunch offline, play both; clear the cache and confirm downloads remain; delete a playlist and confirm only unreferenced files go; airplane mode on both platforms, Wi-Fi drop mid-download, quit mid-download, disk-full simulation, captive portal (`unreachable`). Windows hardware validation is still pending.
 
 ### 17.10 Risks
 
@@ -993,7 +979,7 @@ Network flapping, failed-download recovery, quit mid-download, long playlists, W
 | Storage bloat | Visible usage and free space, low-disk guard, easy deletion; no silent cap. |
 | Progress format changes | One flag/parser module, tolerant of missing totals, indeterminate fallback, tests. |
 | Offline detection false positives | `isOnline() === false` authoritative; online requires a probe; debounce; manual override. |
-| Manual offline forgotten | Persistent titlebar pill and one-click "Go online". |
+| Manual offline forgotten | Persistent titlebar pill, **Go online** in its menu, and the Settings switch. |
 | Playlist deletion surprises | Reference counting and a confirmation that states how many songs will be deleted. |
 | Cache/download duplication | Remove cache copy on download; skip background cache; download-first lookup. |
 | Missing artwork offline | Store thumbnails at download time and serve locally. |
