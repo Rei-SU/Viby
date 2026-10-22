@@ -4,9 +4,7 @@
   import { nav } from '../lib/nav.svelte'
   import { player } from '../lib/player.svelte'
   import { searchState } from '../lib/search.svelte'
-  import { downloads } from '../lib/downloads.svelte'
   import { network } from '../lib/network.svelte'
-  import { trackToItem } from '../lib/track'
   import { openArtist } from '../lib/artist'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -60,6 +58,7 @@
   let timer: ReturnType<typeof setTimeout> | null = null
   let seq = 0
   const cache = new Map<string, QuickGroups>()
+  let wasLocalFirst = network.localFirst
 
   function emptyQuick(): QuickGroups {
     return { songs: [], artists: [], playlists: [] }
@@ -140,7 +139,7 @@
 
   function scheduleQuick(raw: string, immediate = false): void {
     const query = raw.trim()
-    if (!query) {
+    if (!query || network.localFirst) {
       resetQuick()
       return
     }
@@ -148,17 +147,6 @@
     if (timer) {
       clearTimeout(timer)
       timer = null
-    }
-
-    if (network.localFirst) {
-      seq += 1
-      const mine = seq
-      if (quickFor !== query) quick = emptyQuick()
-      quickFor = query
-      quickError = null
-      loading = { songs: true, artists: false, playlists: false }
-      void fetchLocalQuick(query, mine)
-      return
     }
 
     const key = cacheKey(query)
@@ -189,29 +177,10 @@
     timer = setTimeout(() => void fetchQuick(query), immediate ? 0 : 170)
   }
 
-  async function fetchLocalQuick(query: string, mine: number): Promise<void> {
-    await downloads.init()
-    if (mine !== seq) return
-    const needle = query.toLowerCase()
-    const songs = downloads.entries
-      .filter((entry) =>
-        `${entry.track.title} ${entry.track.artist} ${entry.track.album ?? ''}`
-          .toLowerCase()
-          .includes(needle)
-      )
-      .slice(0, QUICK_LIMIT)
-      .map((entry) => ({
-        ...trackToItem(entry.track),
-        thumbnail: entry.artUrl ?? entry.track.thumbnail
-      }))
-    quick = { songs, artists: [], playlists: [] }
-    loading = { songs: false, artists: false, playlists: false }
-  }
-
   async function fetchQuick(query: string): Promise<void> {
     timer = null
     if (network.localFirst) {
-      await fetchLocalQuick(query, ++seq)
+      resetQuick()
       return
     }
     const mine = ++seq
@@ -257,7 +226,7 @@
 
   const groups = $derived.by((): Group[] => {
     const query = searchState.query.trim()
-    if (!query || quickFor !== query) return []
+    if (network.localFirst || !query || quickFor !== query) return []
 
     let offset = 0
     const next: Group[] = []
@@ -295,6 +264,16 @@
   })
 
   $effect(() => {
+    // Results are cached by query, so an online result would otherwise stay
+    // visible after going offline. Drop the cache and close the palette.
+    const local = network.localFirst
+    if (local === wasLocalFirst) return
+    wasLocalFirst = local
+    resetQuick()
+    close()
+  })
+
+  $effect(() => {
     if (active >= options.length) active = -1
   })
 
@@ -307,6 +286,7 @@
   })
 
   function onInput(event: Event): void {
+    if (network.localFirst) return
     const value = (event.currentTarget as HTMLInputElement).value
     searchState.setQuery(value)
     open = true
@@ -315,6 +295,7 @@
   }
 
   function onFocus(): void {
+    if (network.localFirst) return
     open = true
     active = -1
     const query = searchState.query.trim()
@@ -322,6 +303,7 @@
   }
 
   function onInputClick(): void {
+    if (network.localFirst) return
     // Escape can close the panel without moving focus; a second click should
     // bring the suggestions back.
     if (open) return
@@ -346,6 +328,7 @@
   }
 
   function onWindowKeydown(event: KeyboardEvent): void {
+    if (network.localFirst) return
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return
     event.preventDefault()
     input?.focus()
@@ -370,6 +353,7 @@
   }
 
   function commit(): void {
+    if (network.localFirst) return
     const query = searchState.query.trim()
     if (!query) return
     remember(query)
@@ -382,6 +366,7 @@
   }
 
   function useRecent(query: string): void {
+    if (network.localFirst) return
     searchState.setQuery(query)
     searchState.submit('all')
     remember(query)
@@ -391,6 +376,7 @@
   }
 
   function showMore(group: Group): void {
+    if (network.localFirst) return
     const query = searchState.query.trim()
     if (!query) return
     remember(query)
@@ -401,6 +387,7 @@
   }
 
   function choose(option: Option): void {
+    if (network.localFirst) return
     if (option.type === 'recent') {
       useRecent(option.query)
       return
@@ -457,8 +444,12 @@
   function clear(): void {
     searchState.setQuery('')
     resetQuick()
-    open = true
     active = -1
+    if (network.localFirst) {
+      close()
+      return
+    }
+    open = true
     input?.focus()
   }
 
@@ -479,7 +470,7 @@
 <svelte:window onkeydown={onWindowKeydown} onpointerdown={onWindowPointerDown} />
 
 <div class="search-wrap" bind:this={wrapper} onfocusout={onFocusOut}>
-  <div class="searchbox" class:open>
+  <div class="searchbox" class:open class:disabled={network.localFirst}>
     <Icon name="search" size={15} />
     <input
       bind:this={input}
@@ -490,10 +481,11 @@
       onclick={onInputClick}
       onkeydown={onInputKeydown}
       placeholder={network.localFirst
-        ? 'Search your downloads…'
+        ? 'You are not connected to the internet'
         : 'Search songs, artists, playlists…'}
       spellcheck="false"
       autocomplete="off"
+      disabled={network.localFirst}
       role="combobox"
       aria-label="Search"
       aria-expanded={open}
@@ -509,7 +501,7 @@
         <button class="clear" aria-label="Clear search" title="Clear search" onclick={clear}>
           <Icon name="close" size={12} />
         </button>
-      {:else if !open}
+      {:else if !open && !network.localFirst}
         <kbd>{shortcut}</kbd>
       {/if}
     </div>
@@ -607,10 +599,6 @@
               <span class="pip" aria-hidden="true"></span>
               Searching…
             </div>
-          {:else if network.localFirst}
-            <div class="quick-status">
-              No downloaded songs match “{searchState.query.trim()}”.
-            </div>
           {:else if quickError}
             <div class="quick-status error">
               <Icon name="close" size={14} />
@@ -690,6 +678,14 @@
 
   .searchbox input::placeholder {
     color: var(--text-faint);
+  }
+
+  .searchbox.disabled {
+    opacity: 0.72;
+  }
+
+  .searchbox.disabled input {
+    cursor: default;
   }
 
   .trail {

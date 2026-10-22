@@ -796,7 +796,7 @@ Main-process `NetworkMonitor`:
 
 - `net.isOnline()` is polled every 5s, on startup and on `powerMonitor` resume; renderer `online`/`offline` events trigger an immediate re-check.
 - `net.isOnline() === false` is authoritative offline. `true` is only a hint, so a transition to online is confirmed by a small `net.fetch` probe to `https://music.youtube.com/` (4s timeout; any HTTP response means reachable).
-- States: `online`, `offline` (no link), `unreachable` (link up, YouTube not answering), `forced-offline` (manual). Both `offline` and `forced-offline` enter offline mode; `unreachable` shows the same local-first layout with a "Can't reach YouTube right now" header and a Retry action, so a YouTube outage does not produce a dead Home.
+- States: `online`, `offline` (no link), `unreachable` (link up, host not answering), `forced-offline` (manual). Both `offline` and `forced-offline` enter offline mode; `unreachable` shows the same local-first layout with a "Cannot connect to the host right now" header and a Retry action, so a host outage does not produce a dead Home.
 - Transitions are debounced (~2s); one failed probe does not flip the app. Failed catalog/resolve requests may report a hint, but HTTP 4xx/5xx and bot checks are not connectivity failures.
 - Broadcast `network:changed` to renderers, with `network:get` and `network:setMode('auto' | 'offline')`. Manual mode persists in settings.
 - A dev-only override forces each state for tests, independent of the machine's real network.
@@ -807,14 +807,14 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
 
 **Global**
 
-- A compact titlebar status pill: "Offline", "Offline mode" or "Can't reach YouTube". Click opens a small menu with Manage downloads and, in manual mode, Go online. It is the only persistent offline chrome.
+- A compact titlebar status pill: "Offline", "Offline mode" or "Cannot connect to the host". Click opens a small menu with Manage downloads and, in manual mode, Go online. It is the only persistent offline chrome.
 - Settings gains "Use offline mode" / "Go online" with the current connectivity reason.
-- Sidebar has **Library** (always present); downloads are part of it rather than a separate page. While offline, Charts and Import are disabled with a tooltip; Search works against downloads (phase P7c).
+- Sidebar has **Library** (always present); downloads are part of it rather than a separate page. While offline, Charts and Import are disabled with a tooltip, and Search opens an offline notice while the titlebar field is disabled — search needs the catalog.
 
 **Home**
 
 - Effective offline replaces Home with the Offline Home:
-  - Heading: "You are not connected to the internet." (`unreachable`: "Can't reach YouTube right now.")
+  - Heading: "You are not connected to the internet." (`unreachable`: "Cannot connect to the host right now.")
   - Sub: "Your downloads are ready to play." (manual mode: "Offline mode is on — using your downloads.")
   - Sections: Continue listening, Downloaded albums, Downloaded playlists, Downloaded songs.
   - Empty state: "Download music while you're online and it'll appear here."
@@ -963,8 +963,8 @@ Storage/index, manager, progress, per-song action, Library integration (songs + 
 *Acceptance:* download a song, quit, relaunch offline, play it from Library; clearing cache leaves it untouched; cancel and retry work.
 
 **P7c — Collections and polish.**
-Album/playlist/Liked actions with coverage and Update; grouped Library with downloaded filters and badges; reference-based pruning; offline artwork for saved collections; faded unavailable rows; offline local search; settings copy; low-disk warnings; queue polish.
-*Acceptance:* download a playlist and play it fully offline; a saved but undownloaded playlist still opens offline with cached art, all rows visible and non-downloaded rows faded; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; offline search finds downloads.
+Album/playlist/Liked actions with coverage and Update; grouped Library with downloaded filters and badges; reference-based pruning; offline artwork for saved collections; faded unavailable rows; Search offline notice; settings copy; low-disk warnings; queue polish.
+*Acceptance:* download a playlist and play it fully offline; a saved but undownloaded playlist still opens offline with cached art, all rows visible and non-downloaded rows faded; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; Search shows the offline notice until the connection returns.
 
 **P7d — Hardening.**
 Network flapping, failed-download recovery, quit mid-download, long playlists, Windows/macOS validation, `offline` e2e, docs.

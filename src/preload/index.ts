@@ -78,6 +78,7 @@ const api: VibyApi = {
   network: {
     get: () => ipcRenderer.invoke(CH.networkGet),
     setMode: (mode: OfflineMode) => ipcRenderer.invoke(CH.networkSetMode, mode),
+    recheck: () => ipcRenderer.invoke(CH.networkRecheck),
     onChange: (callback: (state: NetworkState) => void) => {
       const handler = (_event: unknown, state: NetworkState): void => callback(state)
       ipcRenderer.on(CH.networkChanged, handler)

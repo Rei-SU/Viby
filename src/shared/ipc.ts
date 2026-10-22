@@ -66,6 +66,7 @@ export const CH = {
 
   networkGet: 'network:get',
   networkSetMode: 'network:set-mode',
+  networkRecheck: 'network:recheck',
   networkChanged: 'network:changed',
 
   downloadsSnapshot: 'downloads:snapshot',
@@ -169,6 +170,8 @@ export interface VibyApi {
     get(): Promise<NetworkState>
     /** Persist the manual switch and return the resulting state. */
     setMode(mode: OfflineMode): Promise<NetworkState>
+    /** Re-probe now, e.g. when the renderer sees an online/offline event. */
+    recheck(): Promise<NetworkState>
     onChange(callback: (state: NetworkState) => void): () => void
   }
   downloads: {

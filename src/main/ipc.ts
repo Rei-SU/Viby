@@ -187,6 +187,13 @@ export function registerIpc(): void {
     networkMonitor.setMode(mode === 'offline' ? 'offline' : 'auto')
   )
 
+  ipcMain.handle(CH.networkRecheck, async (): Promise<NetworkState> => {
+    // The renderer's online/offline event is fresher than the poll timer, so
+    // bypass the two-miss debounce and probe now.
+    await networkMonitor.refresh(true)
+    return networkMonitor.get()
+  })
+
   const snapshot = (): Promise<DownloadsSnapshot> => manager.snapshot()
 
   ipcMain.handle(CH.downloadsSnapshot, () => snapshot())

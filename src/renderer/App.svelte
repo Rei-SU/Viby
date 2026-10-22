@@ -23,6 +23,7 @@
   import { network } from './lib/network.svelte'
   import { downloads } from './lib/downloads.svelte'
   import { artwork } from './lib/artwork.svelte'
+  import { searchState } from './lib/search.svelte'
 
   const navItems: {
     id: View
@@ -60,14 +61,20 @@
   // was on. The pill disappears on its own; this is the only extra chrome.
   $effect(() => {
     const local = network.localFirst
-    if (wasLocalFirst && !local) {
+    const wasLocal = wasLocalFirst
+    wasLocalFirst = local
+
+    // Search needs the catalog. Drop online results as soon as connectivity
+    // changes; they must not linger over the offline Search notice.
+    if (local !== wasLocal) searchState.refreshSource()
+
+    if (wasLocal && !local) {
       backOnline = true
       if (backOnlineTimer) clearTimeout(backOnlineTimer)
       backOnlineTimer = setTimeout(() => (backOnline = false), 2600)
       // Artwork that missed while offline can fill in now.
       artwork.retry()
     }
-    wasLocalFirst = local
   })
 
   function showProfileNote(): void {

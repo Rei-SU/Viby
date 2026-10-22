@@ -3,6 +3,7 @@ import type { NetworkState, NetworkStatus, OfflineMode } from '@shared/types'
 import { settings } from './settings'
 
 const POLL_MS = 5_000
+const RETRY_MS = 2_000
 const PROBE_TIMEOUT_MS = 4_000
 const PROBE_URL = 'https://music.youtube.com/'
 
@@ -23,7 +24,9 @@ const defaultDeps: NetworkDeps = {
   isOnline: () => net.isOnline(),
   probe: async () => {
     try {
-      const res = await net.fetch(PROBE_URL, {
+      // A unique URL keeps a cached 200 from masking a link that has since
+      // dropped. Any HTTP response still means the path works.
+      const res = await net.fetch(`${PROBE_URL}?viby_probe=${Date.now()}`, {
         method: 'HEAD',
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS)
       })
@@ -60,7 +63,7 @@ function unreachableState(): NetworkState {
     status: 'unreachable',
     forcedOffline: false,
     checkedAt: Date.now(),
-    detail: "Can't reach YouTube right now."
+    detail: 'Cannot connect to the host right now.'
   }
 }
 
@@ -79,8 +82,11 @@ export class NetworkMonitor {
   private state: NetworkState = onlineState()
   private listeners = new Set<(state: NetworkState) => void>()
   private timer: ReturnType<typeof setInterval> | null = null
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
   private probing: Promise<void> | null = null
   private failures = 0
+  /** A renderer connectivity event asked to trust the next probe immediately. */
+  private forcePending = false
   private started = false
   /** Bumped on every explicit state change so in-flight probes can be ignored. */
   private generation = 0
@@ -112,6 +118,7 @@ export class NetworkMonitor {
   stop(): void {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
+    this.clearRetry()
     powerMonitor.removeListener('resume', this.onResume)
     this.started = false
   }
@@ -125,7 +132,7 @@ export class NetworkMonitor {
     return this.state.forcedOffline || this.state.status === 'offline'
   }
 
-  /** Show the local-first layout for "can't reach YouTube" as well. */
+  /** Show the local-first layout when the host cannot be reached as well. */
   isLocalFirst(): boolean {
     return this.state.forcedOffline || this.state.status !== 'online'
   }
@@ -140,9 +147,8 @@ export class NetworkMonitor {
     settings().set({ offlineMode: mode })
     // A probe may already be in flight from the poller; this invalidates it so
     // its later result cannot overwrite the switch the user just made.
-    this.generation += 1
+    this.invalidateProbe()
     if (mode === 'offline') {
-      this.failures = 0
       this.set(manualState())
     } else {
       this.state = { ...this.state, forcedOffline: false }
@@ -156,11 +162,10 @@ export class NetworkMonitor {
   applySettings(): void {
     const forced = this.deps.forcedOffline()
     if (forced && !this.state.forcedOffline) {
-      this.generation += 1
-      this.failures = 0
+      this.invalidateProbe()
       this.set(manualState())
     } else if (!forced && this.state.forcedOffline) {
-      this.generation += 1
+      this.invalidateProbe()
       this.state = { ...this.state, forcedOffline: false }
       this.emit()
       void this.check(true)
@@ -180,6 +185,7 @@ export class NetworkMonitor {
 
   private async check(force = false): Promise<void> {
     if (this.deps.forcedOffline()) {
+      this.invalidateProbe()
       this.set(manualState())
       return
     }
@@ -191,18 +197,29 @@ export class NetworkMonitor {
 
     // A dev override short-circuits the real network so e2e is deterministic.
     if (this.deps.override) {
+      this.invalidateProbe()
       this.set(this.overrideState(this.deps.override))
       return
     }
 
     if (!this.deps.isOnline()) {
-      this.failures = 0
+      // The link is gone. Any probe still in flight was started against the
+      // old network and must not be allowed to report the app back online.
+      this.invalidateProbe()
       this.set(severedState())
       return
     }
 
-    if (this.probing) return this.probing
+    if (this.probing) {
+      // A renderer `offline`/`online` event arrived while the poller's probe
+      // was in flight. Let that probe finish, but trust its failure.
+      if (force) this.forcePending = true
+      return this.probing
+    }
+
     const gen = this.generation
+    this.forcePending = false
+    this.clearRetry()
     this.probing = (async () => {
       const reachable = await this.deps.probe()
 
@@ -216,11 +233,19 @@ export class NetworkMonitor {
 
       if (reachable) {
         this.failures = 0
+        this.forcePending = false
         this.set(onlineState())
       } else {
+        const forced = force || this.forcePending
+        this.forcePending = false
         this.failures += 1
-        if (force || this.failures >= 2) {
+        if (forced || this.failures >= 2) {
+          this.clearRetry()
           this.set(unreachableState())
+        } else if (this.started) {
+          // One miss is not enough, but the next poll is five seconds away.
+          // Re-probe quickly so a real loss flips the app in about two seconds.
+          this.scheduleRetry()
         }
       }
     })().finally(() => {
@@ -228,6 +253,26 @@ export class NetworkMonitor {
     })
 
     return this.probing
+  }
+
+  private scheduleRetry(): void {
+    this.clearRetry()
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      void this.check(true)
+    }, RETRY_MS)
+  }
+
+  private clearRetry(): void {
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = null
+  }
+
+  private invalidateProbe(): void {
+    this.generation += 1
+    this.failures = 0
+    this.forcePending = false
+    this.clearRetry()
   }
 
   private set(next: NetworkState): void {

@@ -40,7 +40,7 @@
     network.state.forcedOffline
       ? 'Offline mode'
       : network.state.status === 'unreachable'
-        ? "Can't reach YouTube"
+        ? 'Cannot connect to the host'
         : "You're offline"
   )
 

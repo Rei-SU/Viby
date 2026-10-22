@@ -3,6 +3,7 @@
   import { player } from '../lib/player.svelte'
   import { searchState } from '../lib/search.svelte'
   import { network } from '../lib/network.svelte'
+  import { nav } from '../lib/nav.svelte'
   import TrackRow from './TrackRow.svelte'
 
   const filters: { id: SearchFilterName; label: string }[] = [
@@ -14,28 +15,36 @@
   ]
 
   // State lives in the store, so returning here restores the query and results.
-  const items = $derived(searchState.items)
+  // Search needs the catalog and is unavailable while the app is local-first.
+  const items = $derived(searchState.visibleItems)
 </script>
 
-<div class="view">
-  <header class="head">
-    <h1>Search</h1>
-    {#if searchState.query.trim()}
-      <p class="for">
-        {network.localFirst ? 'Searching your downloads for ' : 'Results for '}“{searchState.query
-          .trim()}”
-      </p>
-    {/if}
-  </header>
-
-  {#if network.localFirst}
-    <div class="chips">
-      <span class="offline-hint">Offline — only downloaded songs can be found.</span>
-      {#if items.length > 0}
-        <span class="count">{items.length} downloads</span>
-      {/if}
+{#if network.localFirst}
+  <div class="offline-page">
+    <p class="eyebrow">Offline</p>
+    <h1>
+      {network.state.status === 'unreachable'
+        ? 'Cannot connect to the host right now.'
+        : 'You are not connected to the internet.'}
+    </h1>
+    <p>
+      {network.state.status === 'unreachable'
+        ? 'Search needs a connection. Your downloads are still available in Library.'
+        : 'Reconnect to search songs, albums, artists and playlists. Your downloads are still available in Library.'}
+    </p>
+    <div class="offline-actions">
+      <button class="primary" onclick={() => nav.go('library')}>Open Library</button>
     </div>
-  {:else}
+  </div>
+{:else}
+  <div class="view">
+    <header class="head">
+      <h1>Search</h1>
+      {#if searchState.query.trim()}
+        <p class="for">Results for “{searchState.query.trim()}”</p>
+      {/if}
+    </header>
+
     <div class="chips">
       {#each filters as f (f.id)}
         <button class="chip" class:on={searchState.filter === f.id} onclick={() => searchState.setFilter(f.id)}>
@@ -46,36 +55,29 @@
         <span class="count">{items.length} results</span>
       {/if}
     </div>
-  {/if}
 
-  {#if searchState.error}
-    <div class="notice">
-      <strong>Search failed</strong>
-      <span>{searchState.error}</span>
-    </div>
-  {/if}
+    {#if searchState.error}
+      <div class="notice">
+        <strong>Search failed</strong>
+        <span>{searchState.error}</span>
+      </div>
+    {/if}
 
-  {#if searchState.loading && items.length === 0}
-    <p class="placeholder">Searching…</p>
-  {:else if !searchState.query.trim()}
-    <p class="placeholder">
-      {network.localFirst
-        ? 'Search your downloads by title, artist or album.'
-        : 'Search from the bar above — songs, artists, albums and playlists.'}
-    </p>
-  {:else if items.length === 0}
-    <p class="placeholder">
-      {network.localFirst ? 'No downloaded songs match' : 'No results for'} “{searchState.query
-        .trim()}”.
-    </p>
-  {:else}
-    <ul class="results">
-      {#each items as item (item.kind + item.id + item.title)}
-        <TrackRow {item} context={[item]} onQueue={(i) => player.enqueue(i)} />
-      {/each}
-    </ul>
-  {/if}
-</div>
+    {#if searchState.loading && items.length === 0}
+      <p class="placeholder">Searching…</p>
+    {:else if !searchState.query.trim()}
+      <p class="placeholder">Search from the bar above — songs, artists, albums and playlists.</p>
+    {:else if items.length === 0}
+      <p class="placeholder">No results for “{searchState.query.trim()}”.</p>
+    {:else}
+      <ul class="results">
+        {#each items as item (item.kind + item.id + item.title)}
+          <TrackRow {item} context={[item]} onQueue={(i) => player.enqueue(i)} />
+        {/each}
+      </ul>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .view {
@@ -112,9 +114,52 @@
     flex-wrap: wrap;
   }
 
-  .offline-hint {
-    color: #f0c477;
-    font-size: 11.5px;
+  .offline-page {
+    max-width: 560px;
+    padding: 48px 0;
+  }
+
+  .eyebrow {
+    margin: 0 0 10px;
+    color: var(--text-faint);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .offline-page h1 {
+    margin: 0 0 10px;
+    font-size: clamp(24px, 3vw, 34px);
+    letter-spacing: -0.035em;
+  }
+
+  .offline-page > p:not(.eyebrow) {
+    margin: 0;
+    max-width: 460px;
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .offline-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  .primary {
+    height: 34px;
+    padding: 0 15px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #08080b;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .primary:hover {
+    background: var(--accent-strong);
   }
 
   .chip {

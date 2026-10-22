@@ -11,6 +11,8 @@ function check(label: string, ok: boolean, detail = ''): void {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`)
 }
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
 function deps(over: Partial<NetworkDeps> = {}): NetworkDeps {
   return {
     isOnline: () => true,
@@ -46,11 +48,46 @@ console.log('\none failed probe does not flip the app:')
   check('still online after the first miss', monitor.get().status === 'online', monitor.get().status)
   await monitor.refresh()
   check('unreachable after a second miss', monitor.get().status === 'unreachable', monitor.get().status)
+  check(
+    'unreachable copy does not name the upstream service',
+    monitor.get().detail === 'Cannot connect to the host right now.',
+    monitor.get().detail
+  )
   check('unreachable is local-first but not offline', monitor.isLocalFirst() && !monitor.isOffline())
 
   reachable = true
   await monitor.refresh()
   check('recovers to online', monitor.get().status === 'online')
+}
+
+console.log('\na failed poll retries quickly instead of waiting for the next poll:')
+{
+  let reachable = true
+  let probes = 0
+  const monitor = new NetworkMonitor(
+    deps({
+      probe: async () => {
+        probes += 1
+        return reachable
+      }
+    })
+  )
+  monitor.start()
+  await sleep(20)
+
+  reachable = false
+  const before = probes
+  await monitor.refresh()
+  check('one miss keeps the app online', monitor.get().status === 'online', monitor.get().status)
+  check('the first miss schedules a retry', probes > before, String(probes - before))
+
+  await sleep(2_200)
+  check(
+    'the retry flips to unreachable without waiting for the 5s poll',
+    monitor.get().status === 'unreachable',
+    monitor.get().status
+  )
+  monitor.stop()
 }
 
 console.log('\nforced offline is a manual mode:')
@@ -75,6 +112,65 @@ console.log('\ndev override short-circuits the network:')
   )
   await forced.refresh()
   check('manual mode still beats the override', forced.get().forcedOffline === true)
+}
+
+console.log('\na forced recheck flips on the first miss:')
+{
+  let reachable = true
+  const monitor = new NetworkMonitor(deps({ probe: async () => reachable }))
+  await monitor.refresh()
+  check('online first', monitor.get().status === 'online', monitor.get().status)
+
+  reachable = false
+  await monitor.refresh(true)
+  check('unreachable after one forced miss', monitor.get().status === 'unreachable', monitor.get().status)
+}
+
+console.log('\na forced recheck during a poll trusts that probe:')
+{
+  let resolveProbe: (reachable: boolean) => void = () => undefined
+  const monitor = new NetworkMonitor(
+    deps({
+      probe: () =>
+        new Promise<boolean>((resolve) => {
+          resolveProbe = resolve
+        })
+    })
+  )
+
+  const poll = monitor.refresh()
+  const recheck = monitor.refresh(true)
+  resolveProbe(false)
+  await Promise.all([poll, recheck])
+  check(
+    'the in-flight probe fails the forced threshold',
+    monitor.get().status === 'unreachable',
+    monitor.get().status
+  )
+}
+
+console.log('\na stale probe cannot resurrect a dropped link:')
+{
+  let online = true
+  let resolveProbe: (reachable: boolean) => void = () => undefined
+  const monitor = new NetworkMonitor(
+    deps({
+      isOnline: () => online,
+      probe: () =>
+        new Promise<boolean>((resolve) => {
+          resolveProbe = resolve
+        })
+    })
+  )
+
+  const poll = monitor.refresh()
+  online = false
+  await monitor.refresh()
+  check('no link wins immediately', monitor.get().status === 'offline', monitor.get().status)
+
+  resolveProbe(true)
+  await poll
+  check('the stale online probe is ignored', monitor.get().status === 'offline', monitor.get().status)
 }
 
 console.log('\nlisteners see transitions:')

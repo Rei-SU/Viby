@@ -5,6 +5,7 @@
   import { openArtist } from '../lib/artist'
   import { playlistPicker } from '../lib/playlist-picker.svelte'
   import { downloads } from '../lib/downloads.svelte'
+  import { network } from '../lib/network.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
 
@@ -47,7 +48,14 @@
   )
   const playing = $derived(active && player.playing)
   const playable = $derived(isPlayable(item))
-  const canPlay = $derived(playable && !unavailable)
+  const downloaded = $derived(downloads.downloaded(item.id))
+  /**
+   * With no usable connection, only explicit downloads are real. The invisible
+   * audio cache is not a download and must never make a row look playable.
+   */
+  const offlineBlocked = $derived(playable && network.offline && !downloaded)
+  const blocked = $derived(unavailable || offlineBlocked)
+  const canPlay = $derived(playable && !blocked)
   const rounded = $derived(item.kind === 'artist')
   const downloadState = $derived(downloads.stateFor(item.id))
   const downloadJob = $derived(downloads.jobFor(item.id))
@@ -86,7 +94,7 @@
   function activate(): void {
     if (canPlay) {
       void player.playList(context ?? [item], contextIndex ?? index ?? 0)
-    } else if (!unavailable) {
+    } else if (!blocked) {
       nav.open(item)
     }
   }
@@ -136,7 +144,7 @@
 <li
   class="row"
   class:active
-  class:unavailable
+  class:unavailable={blocked}
   onpointerenter={hoverStart}
   onpointerleave={hoverEnd}
 >
@@ -144,8 +152,8 @@
     class="main"
     role="button"
     tabindex="0"
-    aria-disabled={unavailable}
-    title={unavailable ? 'Not downloaded — unavailable offline' : playable ? 'Play' : 'Open'}
+    aria-disabled={blocked}
+    title={blocked ? 'Not downloaded — unavailable offline' : playable ? 'Play' : 'Open'}
     onclick={activate}
     onkeydown={(event) => {
       if (event.key === 'Enter' || event.key === ' ') {

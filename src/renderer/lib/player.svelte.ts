@@ -9,6 +9,7 @@ import type {
 import { api } from './api'
 import { network } from './network.svelte'
 import { cacheRadio, cachedRadio } from './catalog-cache.svelte'
+import { sourceAction } from './player-source'
 
 /**
  * The player owns exactly one <audio> element for the whole app (PLAN §6: one
@@ -550,7 +551,9 @@ class Player {
       this.recoverAttempts = 0
     }
 
-    if (this.current?.id === track.id && audio.src) {
+    const action = sourceAction(this.current?.id, this.loadedId, track.id, Boolean(audio.src))
+
+    if (action === 'reuse') {
       // Already loaded: nothing to resolve, and anything older is now irrelevant.
       this.busy = false
       this.stopTimer()
@@ -562,6 +565,18 @@ class Player {
     // audible under a new title is confusing, and it also hides how long the
     // resolve actually takes.
     if (!audio.paused) audio.pause()
+    this.playing = false
+    api.player.setPlaying(false)
+
+    // A failed resolve leaves the previous source in the element while `current`
+    // already shows the new metadata. Detach it before adopting that metadata,
+    // otherwise a retry (or the play button) can play the old audio under the
+    // new title.
+    if (action === 'detach') {
+      audio.removeAttribute('src')
+      audio.load()
+      this.loadedId = null
+    }
 
     // Show the track immediately from catalog metadata; audio follows.
     this.current = track
