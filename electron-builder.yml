@@ -42,7 +42,11 @@ mac:
   gatekeeperAssess: false
 
 dmg:
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  # No version in the filename: the release tag is the version, and the name
+  # should tell a user which Mac they have, not which build they downloaded.
+  # (arm64 -> arm, x64 -> intel happens in the release workflow, since
+  # artifactName templates cannot map arches.)
+  artifactName: ${productName}-macos-${arch}.${ext}
   # No .dmg.blockmap and no latest-mac.yml: macOS auto-update needs signing
   # and a zip target, so until that is wired the release carries the two
   # installers only. Windows keeps its latest.yml — it updates unsigned.
@@ -53,7 +57,8 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  artifactName: ${productName}-${version}-setup.${ext}
+  # User-facing filename: Viby-windows-x64.exe (see CIRULES §3.13).
+  artifactName: ${productName}-windows-${arch}.${ext}
 
 nsis:
   oneClick: false

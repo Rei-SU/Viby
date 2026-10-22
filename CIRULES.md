@@ -389,6 +389,47 @@ reintroduces the bug.
 precedence. Build identity comes from the git SHA, which the workflow already
 has.
 
+### 3.13 Artifact names
+
+Filenames are user-facing text. They answer "which file do I need?" — not
+"which build is this?". The version lives in the tag, the release title and
+`package.json`; repeating it in the filename adds noise, ages badly in links,
+and tells the user nothing they can act on.
+
+| Platform | File |
+| --- | --- |
+| macOS, Apple Silicon | `Viby-macos-arm.dmg` |
+| macOS, Intel | `Viby-macos-intel.dmg` |
+| Windows, x64 | `Viby-windows-x64.exe` |
+
+Rules:
+
+- Pattern: `Viby-<platform>-<arch>.<ext>`. Platform and architecture in words
+  a user recognizes: `macos` / `windows`, and `arm` / `intel` on macOS
+  (`arm64` and `x64` are engineering terms — a Mac user knows whether they
+  bought an Intel or an Apple Silicon machine). Windows keeps `x64` because
+  that is what Windows itself calls it.
+- Lowercase, hyphen-separated, ASCII. No spaces, underscores, `setup`,
+  `installer`, `final`, `latest`, or dates.
+- **No version in the name.** The tag is the version; a file called
+  `0.1.0` is wrong the moment it is copied out of its release.
+- Two consequences, accepted deliberately: separate releases contain
+  identically named files, so a downloaded file alone does not reveal its
+  version (the in-app About screen does), and repeat downloads may become
+  `Viby-macos-arm (1).dmg` in the browser. Both are cheaper than making users
+  decode `arm64` / `x64`.
+- Machine files keep their conventional names and are never renamed:
+  `latest.yml`, `*.blockmap`. They are read by `electron-updater`, not humans.
+- Names MUST be unique within a release. Adding a platform or architecture
+  means adding its name here first.
+- Renaming a published asset breaks every external link that pointed at it;
+  treat it as a user-visible change and say so in the release notes.
+
+Implementation: `win.artifactName` covers Windows directly
+(`${productName}-windows-${arch}.${ext}`). electron-builder cannot map
+`arm64` → `arm` or `x64` → `intel` in a template, so the macOS job renames the
+two DMGs before uploading them (`.github/workflows/release.yml`).
+
 ---
 
 ## 4. Releases
@@ -441,14 +482,16 @@ release.
 
 These are not preferences; the workflow depends on them:
 
-- Tag `v*` is the only trigger. No manual asset uploads, ever.
+- Tag `v*` is the only trigger. Every asset is produced by the workflow: no
+  hand uploads, no hand-renamed files in a release.
 - `prepare-release` verifies `tag == package.json`, then creates or reuses a
   **draft** and clears stale assets.
 - Platform jobs upload into that draft; the release is published only after
   **all** platforms succeed, so a half-built release is never public.
-- macOS ships exactly two DMGs (arm64, x64) and no update artifacts until
-  signing exists. Windows ships the NSIS installer, its `.blockmap` and
-  `latest.yml`.
+- macOS ships exactly two DMGs — `Viby-macos-arm.dmg` (Apple Silicon) and
+  `Viby-macos-intel.dmg` — and no update artifacts until signing exists.
+  Windows ships `Viby-windows-x64.exe`, its `.blockmap` and `latest.yml`
+  (§3.13).
 - The publish step runs `gh release edit … -R "$GITHUB_REPOSITORY"`; that job
   has no checkout, so the explicit repo is required.
 - Re-running a failed platform job is safe and reuses the draft. Re-running is
@@ -614,6 +657,10 @@ node -p "require('./package.json').version"
 | a feature | `0.MINOR.0` |
 | a persisted format or IPC contract | `0.MINOR.0` (`MAJOR` after 1.0) |
 | nothing user-visible, but the release is broken | `0.x.PATCH` |
+
+**Release assets:** `Viby-macos-arm.dmg`, `Viby-macos-intel.dmg`,
+`Viby-windows-x64.exe` (plus `latest.yml` and `.blockmap`, Windows only). No
+version in any filename — the tag is the version (§3.13).
 
 **Release in four lines:**
 

@@ -82,12 +82,25 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # Uploads into the draft prepared above; electron-builder lists releases
-      # first and never calls its own create step when one exists.
-      - name: Build and publish (dmg, x64 and arm64)
-        run: npm run dist:mac -- --publish always
+      - name: Build (dmg, x64 and arm64)
+        run: npm run dist:mac -- --publish never
+
+      # artifactName templates cannot map arm64 -> arm or x64 -> intel, so the
+      # two installers are renamed here, before upload. macOS produces no
+      # update metadata (dmg.writeUpdateInfo: false), so the release receives
+      # exactly these two files.
+      - name: Name installers for humans
+        run: |
+          mv dist/Viby-macos-x64.dmg dist/Viby-macos-intel.dmg
+          mv dist/Viby-macos-arm64.dmg dist/Viby-macos-arm.dmg
+
+      - name: Upload the DMGs to the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            dist/Viby-macos-arm.dmg dist/Viby-macos-intel.dmg \
+            -R "$GITHUB_REPOSITORY" --clobber
 
   windows:
     name: Windows (x64)

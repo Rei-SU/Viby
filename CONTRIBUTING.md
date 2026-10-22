@@ -51,13 +51,15 @@ existing release instead of racing to create one. (electron-builder skips
 uploading into a *published* release older than 2 hours with a warning; for a
 late re-run of a completed tag, delete the old release and re-push the tag.)
 
-macOS publishes exactly the two DMGs (Intel + Apple Silicon) — no zip or
-blockmap artifacts: electron-updater on mac updates from zip, but that
-requires signing and is not wired yet (see PLAN §2.1), so the update assets
-return with that feature. macOS builds are unsigned, so users must
-right-click → Open on first launch. Windows publishes its NSIS installer and
-the `latest.yml` manifest — Windows auto-update works unsigned once in-app
-updates are wired.
+macOS publishes exactly two DMGs — `Viby-macos-arm.dmg` (Apple Silicon) and
+`Viby-macos-intel.dmg` (Intel) — with no zip or blockmap artifacts:
+electron-updater on mac updates from zip, but that requires signing and is not
+wired yet (see PLAN §2.1), so the update assets return with that feature.
+macOS builds are unsigned, so users must right-click → Open on first launch.
+Windows publishes `Viby-windows-x64.exe` and the `latest.yml` manifest —
+Windows auto-update works unsigned once in-app updates are wired. Filenames
+deliberately carry no version; the release tag is the version (see
+[CIRULES.md](CIRULES.md) §3.13).
 
 ## Tests
 
