@@ -448,8 +448,9 @@ npm version 0.2.0 --no-git-tag-version
 git add package.json package-lock.json
 git commit -m "chore(release): 0.2.0"
 
-# 2. tag the tested commit, then push main and the tag together
-git tag -a v0.2.0 -m "Viby 0.2.0"
+# 2. write the notes, tag the tested commit, push main and the tag together
+$EDITOR /tmp/viby-0.2.0-notes.md
+git tag -a v0.2.0 -F /tmp/viby-0.2.0-notes.md
 git push origin main v0.2.0
 ```
 
@@ -461,9 +462,15 @@ Before tagging:
 - [ ] a hands-on pass of the changed flows;
 - [ ] `package.json` version matches the intended tag exactly;
 - [ ] no `wip`/`tmp` commits in the range: `git log --oneline vLAST..HEAD`;
-- [ ] release notes written (see §4.3).
+- [ ] the annotated tag message carries the release notes and reads well
+      (see §4.3).
 
 ### 4.3 Release notes are the changelog
+
+The release notes are the **annotated tag message**. They are written once,
+travel with the exact commit they describe, and become the GitHub release body
+verbatim; there is no separate changelog file to keep in sync. `prepare-release`
+refuses a tag without a grouped section, so a release cannot ship blank.
 
 One line per user-visible change, in user language, grouped as
 **Added / Changed / Fixed / Removed / Security**. No commit hashes, no
@@ -471,10 +478,10 @@ One line per user-visible change, in user language, grouped as
 release.
 
 ```
-## Fixed
+### Fixed
 - Downloads no longer restart from zero after a network drop (#44)
 
-## Changed
+### Changed
 - Library search now includes offline albums
 ```
 
@@ -484,16 +491,18 @@ These are not preferences; the workflow depends on them:
 
 - Tag `v*` is the only trigger. Every asset is produced by the workflow: no
   hand uploads, no hand-renamed files in a release.
-- `prepare-release` verifies `tag == package.json`, then creates or reuses a
-  **draft** and clears stale assets.
+- `prepare-release` verifies `tag == package.json`, extracts the annotated tag
+  message as the release notes, then creates or reuses a **draft** and clears
+  stale assets.
 - Platform jobs upload into that draft; the release is published only after
   **all** platforms succeed, so a half-built release is never public.
 - macOS ships exactly two DMGs — `Viby-macos-arm.dmg` (Apple Silicon) and
   `Viby-macos-intel.dmg` — and no update artifacts until signing exists.
   Windows ships `Viby-windows-x64.exe`, its `.blockmap` and `latest.yml`
   (§3.13).
-- The publish step runs `gh release edit … -R "$GITHUB_REPOSITORY"`; that job
-  has no checkout, so the explicit repo is required.
+- The publish job checks out the repository to sign the update manifest; `gh`
+  calls still pass `-R "$GITHUB_REPOSITORY"` so they cannot act on the wrong
+  repository.
 - Re-running a failed platform job is safe and reuses the draft. Re-running is
   always preferred to deleting the release.
 - electron-builder refuses to upload into a *published* release older than two
@@ -612,7 +621,6 @@ these is ordinary work, not an emergency.
 | No `commitlint` hook | malformed subjects reach `main` | §8 |
 | macOS unsigned | Gatekeeper friction, no auto-update | Developer ID + notarization (PLAN §2.1) |
 | Pre-releases publish as stable | a beta reaches every client | `--prerelease` support before using suffixes |
-| No `CHANGELOG.md` | history lives only in release notes | optional; release notes are canonical today |
 
 ---
 

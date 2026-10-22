@@ -36,7 +36,18 @@ publishes everything to a GitHub Release for that tag via
 [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
 1. Bump `version` in `package.json` and commit — it must match the tag.
-2. Run the relevant tests, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
+2. Run the relevant tests.
+3. Write the release notes in a temporary file and tag the tested commit:
+
+   ```bash
+   git tag -a vX.Y.Z -F /tmp/viby-X.Y.Z-notes.md
+   git push origin main vX.Y.Z
+   ```
+
+The annotated tag message becomes the release body, with a compare link to the
+previous tag appended by the workflow. A tag without a grouped `### ` section
+fails before the draft is created, and there is no separate changelog file to
+keep in sync.
 
 Without update signing (below), no secrets are required: the workflow uses the
 repository's built-in `GITHUB_TOKEN`. If publishing fails with 403, set

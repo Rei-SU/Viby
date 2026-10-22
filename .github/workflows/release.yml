@@ -29,7 +29,10 @@ jobs:
     name: Prepare (verify tag, create draft release)
     runs-on: ubuntu-latest
     steps:
+      # Full history so the release notes can link the previous tag.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Verify the tag matches package.json
         run: |
@@ -39,6 +42,24 @@ jobs:
             echo "::error::Tag $TAG doesn't match package.json version $VERSION. Bump the version, commit, then push a new tag."
             exit 1
           fi
+
+      # The annotated tag carries the release notes: they ship with the exact
+      # commit they describe, with no separate file to maintain. A tag without
+      # a grouped section fails here, before the draft exists.
+      - name: Build release notes from the annotated tag
+        run: |
+          git fetch --tags --force --quiet
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > release-notes.md
+          if ! grep -q '^### ' release-notes.md; then
+            echo "::error::Tag $GITHUB_REF_NAME has no release notes. Re-tag it with -a -F <notes>."
+            exit 1
+          fi
+          PREVIOUS=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          if [ -n "$PREVIOUS" ]; then
+            printf '\n---\n\n**Full changelog:** https://github.com/%s/compare/%s...%s\n' \
+              "$GITHUB_REPOSITORY" "$PREVIOUS" "$GITHUB_REF_NAME" >> release-notes.md
+          fi
+          cat release-notes.md
 
       # Letting each platform job create the release itself would race (the
       # only unsynchronised call in electron-builder's GitHub publisher), and
@@ -50,14 +71,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
           RELEASE_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -1)
           if [ -n "$RELEASE_ID" ]; then
             echo "Draft release for $TAG already exists — reusing it and clearing assets from previous runs."
             for ASSET_ID in $(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --jq '.[].id'); do
               gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > /dev/null
             done
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file release-notes.md
           else
-            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes
+            gh release create "$TAG" --draft --verify-tag --title "Viby $VERSION" --notes-file release-notes.md
           fi
 
   macos:
