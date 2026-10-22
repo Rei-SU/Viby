@@ -43,6 +43,10 @@ mac:
 
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
+  # No .dmg.blockmap and no latest-mac.yml: macOS auto-update needs signing
+  # and a zip target, so until that is wired the release carries the two
+  # installers only. Windows keeps its latest.yml — it updates unsigned.
+  writeUpdateInfo: false
 
 win:
   icon: resources/icon.ico
