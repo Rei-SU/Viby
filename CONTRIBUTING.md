@@ -2,6 +2,10 @@
 
 Thanks for taking the time to make Viby better.
 
+Commit messages, versioning, release and CI rules live in
+[CIRULES.md](CIRULES.md). Read it before your first commit; deviations need a
+reason in the PR.
+
 ## Before you start
 
 - Open an issue before starting a new feature, a refactor or a dependency change. It saves you from building something that doesn't fit.
