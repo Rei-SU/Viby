@@ -11,7 +11,9 @@ export const DEFAULT_SETTINGS: Settings = {
   shuffle: false,
   repeat: 'off',
   autoplay: true,
-  offlineMode: 'auto'
+  offlineMode: 'auto',
+  /** Check GitHub for a newer release on launch. Updates are never silent. */
+  autoUpdateCheck: true
 }
 
 let store: JsonStore<Settings> | null = null

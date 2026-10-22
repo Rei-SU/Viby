@@ -22,7 +22,9 @@ const suites = {
   'library-items': { file: 'library-items.test.ts' },
   'player-source': { file: 'player-source.test.ts' },
   images: { file: 'images.test.ts', electron: true },
-  network: { file: 'network.test.ts', electron: true }
+  network: { file: 'network.test.ts', electron: true },
+  version: { file: 'version.test.ts' },
+  updates: { file: 'updates.test.ts' }
 }
 
 const requested = process.argv.slice(2)

@@ -21,6 +21,7 @@ import type {
   Settings,
   Shelf,
   Track,
+  UpdateState,
   YtDlpInfo
 } from './types'
 
@@ -68,6 +69,12 @@ export const CH = {
   networkSetMode: 'network:set-mode',
   networkRecheck: 'network:recheck',
   networkChanged: 'network:changed',
+
+  updatesGet: 'updates:get',
+  updatesCheck: 'updates:check',
+  updatesDownload: 'updates:download',
+  updatesInstall: 'updates:install',
+  updatesChanged: 'updates:changed',
 
   downloadsSnapshot: 'downloads:snapshot',
   downloadsAddTrack: 'downloads:add-track',
@@ -173,6 +180,19 @@ export interface VibyApi {
     /** Re-probe now, e.g. when the renderer sees an online/offline event. */
     recheck(): Promise<NetworkState>
     onChange(callback: (state: NetworkState) => void): () => void
+  }
+  updates: {
+    get(): Promise<UpdateState>
+    /** Ask GitHub for the latest release. Never downloads on its own. */
+    check(): Promise<UpdateState>
+    /**
+     * Windows: download the installer in the background (then `install`).
+     * macOS: download the correct DMG and open it, since it cannot self-update.
+     */
+    download(): Promise<UpdateState>
+    /** Windows only: quit, install the downloaded update, relaunch. */
+    install(): Promise<UpdateState>
+    onChange(callback: (state: UpdateState) => void): () => void
   }
   downloads: {
     snapshot(): Promise<DownloadsSnapshot>

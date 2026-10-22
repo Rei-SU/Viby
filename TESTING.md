@@ -57,6 +57,8 @@ ones that touch main-process modules.
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
+| `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
+| `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks |
 
 ### E2E scenarios (app must be running)
 

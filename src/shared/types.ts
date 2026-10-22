@@ -66,6 +66,8 @@ export type Settings = {
   autoplay: boolean
   /** `auto` follows connectivity; `offline` is the manual switch. */
   offlineMode: OfflineMode
+  /** Check GitHub for a newer release on launch. Updates are never silent. */
+  autoUpdateCheck: boolean
 }
 
 /** Connectivity as the main process sees it, not just `navigator.onLine`. */
@@ -77,6 +79,38 @@ export type NetworkState = {
   forcedOffline: boolean
   checkedAt: number
   detail?: string
+}
+
+/**
+ * Where the in-app update check is. `manual` means the installer was downloaded
+ * and opened for the user but cannot be applied in place (macOS, unsigned).
+ */
+export type UpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'up-to-date'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'manual'
+  | 'error'
+
+export type UpdateState = {
+  phase: UpdatePhase
+  currentVersion: string
+  /** The version offered by the release feed, once known. */
+  version?: string
+  /** 0..1 while `downloading`. */
+  progress?: number
+  /** User-facing explanation: the failure, or what to do next. */
+  message?: string
+  /**
+   * True when this build can install the update itself (Windows). False means
+   * the installer is downloaded and opened instead — macOS cannot self-update
+   * without a Developer ID signature (PLAN §2.1).
+   */
+  canInstall: boolean
+  checkedAt?: number
 }
 
 export type CatalogKind = 'song' | 'album' | 'artist' | 'playlist' | 'unknown'

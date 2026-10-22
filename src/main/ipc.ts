@@ -45,6 +45,10 @@ import { resolveImport, matchImport } from './import'
 import { networkMonitor } from './network'
 import { DownloadsStore } from './downloads/store'
 import { DownloadManager } from './downloads/manager'
+import { Updater } from './updater'
+import { createNativeUpdater } from './updater-native'
+import { fetchLatestRelease } from './release-feed'
+import { downloadMacInstaller } from './updater-manual'
 
 const resolver = new Resolver()
 const inflightDownloads = new Set<string>()
@@ -152,6 +156,38 @@ export function registerIpc(): void {
   })
   networkMonitor.start()
   manager.start()
+
+  // ---- updates (PLAN §2.1, P5) -------------------------------------------
+  // Windows installs in place through electron-updater (NSIS, per-user).
+  // macOS cannot: its ad-hoc signature cannot satisfy Squirrel.Mac, so the DMG
+  // is downloaded and opened for the user instead. Unpackaged builds have
+  // neither adapter and answer checks with a clear message.
+  const updater = new Updater({
+    currentVersion: app.getVersion(),
+    offline: () => networkMonitor.isOffline(),
+    latestRelease: () => fetchLatestRelease(process.arch),
+    native: app.isPackaged && process.platform === 'win32' ? createNativeUpdater() : undefined,
+    downloadManual: process.platform === 'darwin' ? downloadMacInstaller : undefined,
+    onState: (state) => broadcast(CH.updatesChanged, state)
+  })
+
+  ipcMain.handle(CH.updatesGet, () => updater.get())
+  ipcMain.handle(CH.updatesCheck, () => updater.check())
+  ipcMain.handle(CH.updatesDownload, () => updater.download())
+  ipcMain.handle(CH.updatesInstall, () => updater.install())
+
+  // One quiet check shortly after launch, then every six hours. Auto-checks
+  // skip offline launches and never download anything: only the check runs.
+  // Failures are only surfaced for a check the user asked for.
+  if (app.isPackaged) {
+    const autoCheck = (): void => {
+      if (!settings().get().autoUpdateCheck) return
+      if (networkMonitor.isOffline()) return
+      void updater.check({ quiet: true })
+    }
+    setTimeout(autoCheck, 8_000).unref()
+    setInterval(autoCheck, 6 * 60 * 60_000).unref()
+  }
 
   app.on('before-quit', () => {
     manager.shutdown()

@@ -42,7 +42,7 @@ Every decision below came from you, with the technical consequence I derived fro
 
 Five assumptions that "obviously work" in most music-app plans do not. Verified against upstream docs and working projects, not guessed.
 
-**2.1 — macOS auto-update requires code signing.** Squirrel.Mac refuses to update an unsigned app; Electron's own docs state it as a hard requirement. Auto-update on macOS is therefore not achievable at $0. Windows NSIS auto-update works unsigned.
+**2.1 — macOS in-place auto-update requires code signing.** Squirrel.Mac validates the downloaded app against the running app's designated requirement. Our build is only linker-signed ad-hoc, and its requirement is a `cdhash` that changes with every build (verified: `codesign -d --requirements`), so Squirrel can never accept the next version. Windows NSIS auto-update works unsigned. macOS therefore downloads the correct DMG from GitHub, verifies the digest GitHub reports and opens it — one drag, no release page. In-place macOS updates return with a Developer ID signature and notarization.
 
 **2.2 — Media keys must go through `navigator.mediaSession`.** Electron's `globalShortcut` has a long-standing broken-on-macOS bug for media keys, while `mediaSession` is a standard Chromium feature that populates macOS Now Playing and Windows SMTC with zero native code.
 
@@ -140,7 +140,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 
 **Deliberately not used:** React/Redux (runtime cost buys nothing here), any UI kit, Prisma/TypeORM, `better-sqlite3` (native rebuild risk for no benefit over `node:sqlite`), Web Audio graph (adds CPU until an EQ exists), `hls.js` (extra decode path), Tailwind (a handful of CSS custom properties is lighter).
 
-**Runtime dependencies: exactly one.** `electron-updater`; the update flow itself is still pending in P5. Everything else is dev-time.
+**Runtime dependencies: exactly one.** `electron-updater` drives in-place Windows updates; macOS reads the public GitHub release feed instead (§2.1). Everything else is dev-time.
 
 **Dependency security:** Electron 45 and electron-builder 26.15.3 are the security-patched baseline. `npm audit` reports zero vulnerabilities; the `global-agent` override keeps electron-builder's build-time download path on v4 instead of pulling the vulnerable v3/proxy stack.
 
@@ -342,7 +342,7 @@ Not in this slice: moods/genres browsing, private/collaborative Spotify playlist
 CSV/text floor was dropped by decision (link-only interaction).
 
 **P5 — Ship. Partially done.**
-Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, and release automation (GitHub Actions on `v*` tags) are in place. Still missing: signing/notarization, wired in-app updates (`electron-updater` is installed but not called), and Windows validation on real hardware.
+Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app update checks are in place. Windows checks, downloads and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Still missing: signing/notarization (which also enables in-place macOS updates) and Windows validation on real hardware.
 
 *Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. Not yet verified.
 

@@ -13,7 +13,8 @@ import type {
   PlaybackSession,
   SearchFilterName,
   Settings,
-  Track
+  Track,
+  UpdateState
 } from '@shared/types'
 
 /**
@@ -83,6 +84,17 @@ const api: VibyApi = {
       const handler = (_event: unknown, state: NetworkState): void => callback(state)
       ipcRenderer.on(CH.networkChanged, handler)
       return () => ipcRenderer.removeListener(CH.networkChanged, handler)
+    }
+  },
+  updates: {
+    get: () => ipcRenderer.invoke(CH.updatesGet),
+    check: () => ipcRenderer.invoke(CH.updatesCheck),
+    download: () => ipcRenderer.invoke(CH.updatesDownload),
+    install: () => ipcRenderer.invoke(CH.updatesInstall),
+    onChange: (callback: (state: UpdateState) => void) => {
+      const handler = (_event: unknown, state: UpdateState): void => callback(state)
+      ipcRenderer.on(CH.updatesChanged, handler)
+      return () => ipcRenderer.removeListener(CH.updatesChanged, handler)
     }
   },
   downloads: {

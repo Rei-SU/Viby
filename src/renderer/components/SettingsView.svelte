@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CacheStats, Settings } from '@shared/types'
+  import type { CacheStats, Settings, UpdateState } from '@shared/types'
   import { api } from '../lib/api'
   import { player } from '../lib/player.svelte'
   import { downloads } from '../lib/downloads.svelte'
@@ -16,6 +16,13 @@
 
   let current = $state<Settings | null>(null)
   let stats = $state<CacheStats | null>(null)
+  let update = $state<UpdateState | null>(null)
+
+  $effect(() => {
+    const off = api.updates.onChange((state) => (update = state))
+    void api.updates.get().then((state) => (update = state))
+    return off
+  })
 
   $effect(() => {
     void load()
@@ -44,6 +51,64 @@
 
   async function clearCache(): Promise<void> {
     stats = await api.cache.clear()
+  }
+
+  async function checkUpdates(): Promise<void> {
+    update = await api.updates.check()
+  }
+
+  async function downloadUpdate(): Promise<void> {
+    update = await api.updates.download()
+  }
+
+  async function installUpdate(): Promise<void> {
+    update = await api.updates.install()
+  }
+
+  type UpdateAction = { label: string; disabled: boolean; run: () => Promise<void> }
+
+  function actionFor(state: UpdateState): UpdateAction {
+    switch (state.phase) {
+      case 'checking':
+        return { label: 'Checking…', disabled: true, run: checkUpdates }
+      case 'downloading':
+        return { label: 'Downloading…', disabled: true, run: downloadUpdate }
+      case 'available':
+        return { label: 'Download', disabled: false, run: downloadUpdate }
+      case 'ready':
+        return { label: 'Restart & install', disabled: false, run: installUpdate }
+      case 'manual':
+        return { label: 'Download again', disabled: false, run: downloadUpdate }
+      default:
+        return { label: 'Check for updates', disabled: false, run: checkUpdates }
+    }
+  }
+
+  let updateAction = $derived(
+    update ? actionFor(update) : { label: 'Check for updates', disabled: true, run: checkUpdates }
+  )
+
+  function updateHint(state: UpdateState): string {
+    switch (state.phase) {
+      case 'idle':
+        return `Viby ${state.currentVersion}. Checks GitHub when you ask — no account, no telemetry.`
+      case 'checking':
+        return 'Checking GitHub…'
+      case 'up-to-date':
+        return `You're up to date (${state.currentVersion}).`
+      case 'available':
+        return state.canInstall
+          ? `Version ${state.version} is available. It downloads in the background and installs when you restart.`
+          : `Version ${state.version} is available. Viby downloads the installer for this Mac and opens it.`
+      case 'downloading':
+        return `Downloading ${state.version ?? 'the update'}… ${Math.round((state.progress ?? 0) * 100)}%`
+      case 'ready':
+        return `Version ${state.version} is ready. Restart Viby to finish.`
+      case 'manual':
+        return state.message ?? 'Installer opened. Drag Viby into Applications, then reopen it.'
+      case 'error':
+        return state.message ?? 'Could not check for updates.'
+    }
   }
 
   function size(bytes: number): string {
@@ -123,6 +188,42 @@
         aria-checked={current?.offlineMode === 'offline'}
         aria-label="Offline mode"
         onclick={toggleOffline}
+      >
+        <span class="thumb"></span>
+      </button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Updates</h2>
+
+    <div class="row">
+      <div class="label">
+        <span>Viby {update?.currentVersion ?? ''}</span>
+        <span class="hint">
+          {update ? updateHint(update) : 'Reading the current version…'}
+        </span>
+      </div>
+      <button class="ghost" onclick={updateAction.run} disabled={updateAction.disabled}>
+        {updateAction.label}
+      </button>
+    </div>
+
+    <div class="row">
+      <div class="label">
+        <span>Check automatically</span>
+        <span class="hint">
+          Checks GitHub shortly after launch, at most every six hours. Nothing is downloaded
+          until you ask.
+        </span>
+      </div>
+      <button
+        class="switch"
+        class:on={current?.autoUpdateCheck}
+        role="switch"
+        aria-checked={current?.autoUpdateCheck}
+        aria-label="Check for updates automatically"
+        onclick={() => patch({ autoUpdateCheck: !current?.autoUpdateCheck })}
       >
         <span class="thumb"></span>
       </button>
