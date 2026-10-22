@@ -56,10 +56,13 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
 
-# Update feed. Replace owner/repo with your GitHub repo before the first release.
+# Update feed + release target, published by .github/workflows/release.yml when
+# a v* tag is pushed. releaseType: release publishes immediately — the default
+# draft never comes out on its own.
 # Windows: true in-app auto-update. macOS: notify + download (unsigned builds cannot
 # self-update — Squirrel.Mac requires a code signature).
 publish:
   provider: github
-  owner: CHANGE_ME
-  repo: viby
+  owner: Rei-SU
+  repo: Viby
+  releaseType: release

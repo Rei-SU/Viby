@@ -1,0 +1,123 @@
+name: Release
+
+# Push a v* tag -> build macOS (Intel + Apple Silicon) and Windows and publish
+# everything to a GitHub Release for that tag. To cut a release:
+#   1. Bump version in package.json and commit (it must match the tag).
+#   2. git tag vX.Y.Z && git push origin vX.Y.Z
+#
+# Race-free publish: prepare-release creates the release as a DRAFT first; the
+# platform jobs then *find* it (never create) and upload into it; the release
+# goes live only after both platforms finish. Uses the repository's built-in
+# GITHUB_TOKEN — no secrets to create. If a publish step fails with 403, switch
+# Actions -> General -> Workflow permissions to "Read and write".
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    name: Prepare (verify tag, create draft release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify the tag matches package.json
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Tag $TAG doesn't match package.json version $VERSION. Bump the version, commit, then push a new tag."
+            exit 1
+          fi
+
+      # Creating is the only unsynchronised call in electron-builder's GitHub
+      # publisher, so it must happen exactly once (see the comment above).
+      - name: Create the draft release (reuse on re-runs)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -Fxq "$GITHUB_REF_NAME"; then
+            echo "Release $GITHUB_REF_NAME already exists (draft or published) — reusing it."
+          else
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
+  macos:
+    name: macOS (Intel + Apple Silicon)
+    needs: prepare-release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/electron
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Uploads into the draft prepared above; electron-builder lists releases
+      # first and never calls its own create step when one exists.
+      - name: Build and publish (dmg + zip, x64 and arm64)
+        run: npm run dist:mac -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows:
+    name: Windows (x64)
+    needs: prepare-release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/electron/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Uploads into the draft prepared above; electron-builder lists releases
+      # first and never calls its own create step when one exists.
+      - name: Build and publish (NSIS installer, x64)
+        run: npm run dist:win -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release:
+    name: Publish the finished release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Flip the draft release live (gh release edit --draft=false)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest

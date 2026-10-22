@@ -28,7 +28,7 @@ Every decision below came from you, with the technical consequence I derived fro
 | 14 | Shell | Slim sidebar + art-forward heroes | Apple Music feel, still navigable |
 | 15 | OS integration | Media keys + Now Playing, no tray/mini-player | `navigator.mediaSession` — no native code |
 | 16 | Quality | User-selectable, default best, **never auto-downgrade** | Honour the setting exactly; buffer rather than reduce bitrate |
-| 17 | Delivery | Auto-update via GitHub Releases | Planned, not wired yet. Windows can auto-update unsigned; macOS must notify + one-click download until signing is available (see §2.1) |
+| 17 | Delivery | Auto-update via GitHub Releases | Release builds are automated: pushing a `v*` tag builds macOS (Intel + Apple Silicon) and Windows and publishes to GitHub Releases. In-app updates are still not wired: Windows can auto-update unsigned; macOS must notify + one-click download until signing is available (see §2.1) |
 | 18 | Distribution | Public beta on GitHub; built for me and a few friends first | Installers, first-run setup, graceful upstream failure |
 | 19 | Name | Viby | Bundle ID, installers, window title |
 | 20 | Deferred | No EQ, gapless, crossfade, sleep timer, scrobbling, Discord, stats, sync, mobile | Kept out of v1 deliberately; accounts/sync and mobile are planned post-v1, not abandoned. |
@@ -342,7 +342,7 @@ Not in this slice: moods/genres browsing, private/collaborative Spotify playlist
 CSV/text floor was dropped by decision (link-only interaction).
 
 **P5 — Ship. Partially done.**
-Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, and error states for upstream and offline failures are in place. Still missing: signing/notarization, wired in-app updates (`electron-updater` is installed but not called), release automation, and Windows validation on real hardware.
+Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, and release automation (GitHub Actions on `v*` tags) are in place. Still missing: signing/notarization, wired in-app updates (`electron-updater` is installed but not called), and Windows validation on real hardware.
 
 *Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. Not yet verified.
 

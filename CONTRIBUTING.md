@@ -25,6 +25,32 @@ npm run dist:mac
 npm run dist:win
 ```
 
+## Releases
+
+Pushing a `v*` tag builds macOS (Intel + Apple Silicon) and Windows and
+publishes everything to a GitHub Release for that tag via
+[`.github/workflows/release.yml`](.github/workflows/release.yml).
+
+1. Bump `version` in `package.json` and commit — it must match the tag.
+2. Run the relevant tests, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+No secrets to configure: the workflow uses the repository's built-in
+`GITHUB_TOKEN`. If publishing fails with 403, set Actions → General →
+Workflow permissions to "Read and write".
+
+The workflow first creates the release as a draft, both platform jobs then
+upload into it, and the release publishes only when every platform finishes —
+so a half-built release is never public. If a platform job fails mid-run,
+re-run just that job; everything uploads into the existing draft and the
+release goes live when it succeeds. Re-running the whole workflow reuses the
+existing release instead of racing to create one. (electron-builder skips
+uploading into a *published* release older than 2 hours with a warning; for a
+late re-run of a completed tag, delete the old release and re-push the tag.)
+
+macOS builds are unsigned (see PLAN §2.1), so users must right-click → Open
+on first launch. Windows NSIS auto-update works unsigned once in-app updates
+are wired.
+
 ## Tests
 
 [TESTING.md](TESTING.md) maps changed files to the suites that matter. Run the targeted suites for what you touched; run everything before a release or when you change a shared contract.
