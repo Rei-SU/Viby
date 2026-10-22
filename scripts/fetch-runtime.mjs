@@ -53,7 +53,7 @@ const suffix =
   platform === 'darwin'
     ? 'apple-darwin-install_only.tar.gz'
     : platform === 'win32'
-      ? 'pc-windows-msvc-install_only.zip'
+      ? 'pc-windows-msvc-install_only_stripped.tar.gz' // no .pdb debug symbols
       : 'unknown-linux-gnu-install_only.tar.gz'
 
 const asset = `cpython-${PYTHON}+${RELEASE}-${assetArch}-${suffix}`
@@ -78,25 +78,13 @@ const response = await fetch(url, {
 if (!response.ok || !response.body) throw new Error(`HTTP ${response.status} for ${url}`)
 
 const work = mkdtempSync(join(tmpdir(), 'viby-python-'))
-const archive = join(work, platform === 'win32' ? 'python.zip' : 'python.tar.gz')
+const archive = join(work, 'python.tar.gz')
 
 try {
   await pipeline(Readable.fromWeb(response.body), createWriteStream(archive))
 
   console.log('extracting')
-  if (platform === 'win32') {
-    execFileSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `Expand-Archive -LiteralPath '${archive}' -DestinationPath '${work}' -Force`
-      ],
-      { stdio: 'inherit' }
-    )
-  } else {
-    execFileSync('tar', ['-xzf', archive, '-C', work], { stdio: 'inherit' })
-  }
+  execFileSync('tar', ['-xzf', archive, '-C', work], { stdio: 'inherit' })
 
   rmSync(dest, { recursive: true, force: true })
   mkdirSync(dirname(dest), { recursive: true })
