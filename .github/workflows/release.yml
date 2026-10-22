@@ -38,16 +38,24 @@ jobs:
             exit 1
           fi
 
-      # Creating is the only unsynchronised call in electron-builder's GitHub
-      # publisher, so it must happen exactly once (see the comment above).
-      - name: Create the draft release (reuse on re-runs)
+      # Letting each platform job create the release itself would race (the
+      # only unsynchronised call in electron-builder's GitHub publisher), and
+      # re-runs would leave stale artifacts from changed targets behind. So
+      # the draft is created here, and existing asset rows are cleared so
+      # every run publishes exactly the current artifact set.
+      - name: Create the draft release (re-runs reuse and clear it)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release list --limit 200 --json tagName --jq '.[].tagName' | grep -Fxq "$GITHUB_REF_NAME"; then
-            echo "Release $GITHUB_REF_NAME already exists (draft or published) — reusing it."
+          TAG="${GITHUB_REF_NAME}"
+          RELEASE_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -1)
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Draft release for $TAG already exists — reusing it and clearing assets from previous runs."
+            for ASSET_ID in $(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" --jq '.[].id'); do
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > /dev/null
+            done
           else
-            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes
           fi
 
   macos:
@@ -76,7 +84,7 @@ jobs:
 
       # Uploads into the draft prepared above; electron-builder lists releases
       # first and never calls its own create step when one exists.
-      - name: Build and publish (dmg + zip, x64 and arm64)
+      - name: Build and publish (dmg, x64 and arm64)
         run: npm run dist:mac -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

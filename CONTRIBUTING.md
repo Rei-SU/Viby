@@ -47,8 +47,11 @@ existing release instead of racing to create one. (electron-builder skips
 uploading into a *published* release older than 2 hours with a warning; for a
 late re-run of a completed tag, delete the old release and re-push the tag.)
 
-macOS builds are unsigned (see PLAN §2.1), so users must right-click → Open
-on first launch. Windows NSIS auto-update works unsigned once in-app updates
+macOS publishes only the two DMGs (Intel + Apple Silicon) plus the update
+manifest — the zip artifacts macOS auto-update needs (electron-updater on mac
+updates from zip, not dmg) get added back when that feature is wired. macOS
+builds are unsigned (see PLAN §2.1), so users must right-click → Open on
+first launch. Windows NSIS auto-update works unsigned once in-app updates
 are wired.
 
 ## Tests

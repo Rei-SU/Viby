@@ -29,9 +29,10 @@ asar: true
 mac:
   icon: resources/icon.icns
   target:
+    # DMG only: the zip artifacts macOS auto-update needs (electron-updater on
+    # mac updates from zip, not dmg) will be added back when in-app updates
+    # are wired — which also requires code signing, see PLAN §2.1.
     - target: dmg
-      arch: [x64, arm64]
-    - target: zip
       arch: [x64, arm64]
   category: public.app-category.music
   # Unsigned on purpose: signing needs a paid Apple Developer account.
