@@ -68,6 +68,8 @@ export type Settings = {
   offlineMode: OfflineMode
   /** Check GitHub for a newer release on launch. Updates are never silent. */
   autoUpdateCheck: boolean
+  /** A version the user chose not to be offered again. Empty when none. */
+  skippedUpdateVersion: string
 }
 
 /** Connectivity as the main process sees it, not just `navigator.onLine`. */
@@ -111,6 +113,8 @@ export type UpdateState = {
    */
   canInstall: boolean
   checkedAt?: number
+  /** True when the offered version is one the user skipped. */
+  skipped?: boolean
 }
 
 export type CatalogKind = 'song' | 'album' | 'artist' | 'playlist' | 'unknown'

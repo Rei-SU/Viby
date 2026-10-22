@@ -42,7 +42,9 @@ Every decision below came from you, with the technical consequence I derived fro
 
 Five assumptions that "obviously work" in most music-app plans do not. Verified against upstream docs and working projects, not guessed.
 
-**2.1 — macOS in-place auto-update requires code signing.** Squirrel.Mac validates the downloaded app against the running app's designated requirement. Our build is only linker-signed ad-hoc, and its requirement is a `cdhash` that changes with every build (verified: `codesign -d --requirements`), so Squirrel can never accept the next version. Windows NSIS auto-update works unsigned. macOS therefore downloads the correct DMG from GitHub, verifies the digest GitHub reports and opens it — one drag, no release page. In-place macOS updates return with a Developer ID signature and notarization.
+**2.1 — macOS in-place auto-update requires code signing.** Squirrel.Mac validates the downloaded app against the running app's designated requirement. Our build is only linker-signed ad-hoc, and its requirement is a `cdhash` that changes with every build (verified: `codesign -d --requirements`), so Squirrel can never accept the next version. Windows NSIS auto-update works unsigned. macOS therefore downloads the correct DMG from GitHub and opens it — one drag, no release page. In-place macOS updates return with a Developer ID signature and notarization.
+
+Updates are integrity-checked on both platforms: when a release carries `update-manifest.json`, its Ed25519 signature is verified against a key compiled into the app, and the installer's sha256 must match the signed manifest. Once a key is pinned, a missing manifest, bad signature or hash mismatch fails closed (CONTRIBUTING explains the one-time key setup). Until then the GitHub asset digest over TLS is the fallback.
 
 **2.2 — Media keys must go through `navigator.mediaSession`.** Electron's `globalShortcut` has a long-standing broken-on-macOS bug for media keys, while `mediaSession` is a standard Chromium feature that populates macOS Now Playing and Windows SMTC with zero native code.
 
@@ -342,7 +344,7 @@ Not in this slice: moods/genres browsing, private/collaborative Spotify playlist
 CSV/text floor was dropped by decision (link-only interaction).
 
 **P5 — Ship. Partially done.**
-Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app update checks are in place. Windows checks, downloads and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Still missing: signing/notarization (which also enables in-place macOS updates) and Windows validation on real hardware.
+Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. Still missing: signing/notarization (which also enables in-place macOS updates), the one-time update-signing key setup, and Windows validation on real hardware.
 
 *Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. Not yet verified.
 

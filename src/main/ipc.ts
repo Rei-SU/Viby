@@ -168,12 +168,15 @@ export function registerIpc(): void {
     latestRelease: () => fetchLatestRelease(process.arch),
     native: app.isPackaged && process.platform === 'win32' ? createNativeUpdater() : undefined,
     downloadManual: process.platform === 'darwin' ? downloadMacInstaller : undefined,
+    quit: () => app.quit(),
+    skippedVersion: () => settings().get().skippedUpdateVersion,
     onState: (state) => broadcast(CH.updatesChanged, state)
   })
 
   ipcMain.handle(CH.updatesGet, () => updater.get())
   ipcMain.handle(CH.updatesCheck, () => updater.check())
   ipcMain.handle(CH.updatesDownload, () => updater.download())
+  ipcMain.handle(CH.updatesCancel, () => updater.cancel())
   ipcMain.handle(CH.updatesInstall, () => updater.install())
 
   // One quiet check shortly after launch, then every six hours. Auto-checks

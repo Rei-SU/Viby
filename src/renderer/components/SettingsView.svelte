@@ -5,6 +5,7 @@
   import { downloads } from '../lib/downloads.svelte'
   import { network } from '../lib/network.svelte'
   import { nav } from '../lib/nav.svelte'
+  import { updates } from '../lib/updates.svelte'
   import Icon from './Icon.svelte'
 
   const CAPS = [
@@ -16,13 +17,7 @@
 
   let current = $state<Settings | null>(null)
   let stats = $state<CacheStats | null>(null)
-  let update = $state<UpdateState | null>(null)
-
-  $effect(() => {
-    const off = api.updates.onChange((state) => (update = state))
-    void api.updates.get().then((state) => (update = state))
-    return off
-  })
+  let update = $derived(updates.state)
 
   $effect(() => {
     void load()
@@ -54,15 +49,32 @@
   }
 
   async function checkUpdates(): Promise<void> {
-    update = await api.updates.check()
+    await updates.check()
   }
 
   async function downloadUpdate(): Promise<void> {
-    update = await api.updates.download()
+    await updates.download()
+  }
+
+  async function cancelDownload(): Promise<void> {
+    await updates.cancel()
   }
 
   async function installUpdate(): Promise<void> {
-    update = await api.updates.install()
+    await updates.install()
+  }
+
+  async function skipUpdate(): Promise<void> {
+    const version = update?.version
+    if (!version) return
+    await patch({ skippedUpdateVersion: version })
+    await updates.check()
+  }
+
+  async function clearSkipped(): Promise<void> {
+    if (!current?.skippedUpdateVersion) return
+    await patch({ skippedUpdateVersion: '' })
+    await updates.check()
   }
 
   type UpdateAction = { label: string; disabled: boolean; run: () => Promise<void> }
@@ -78,7 +90,7 @@
       case 'ready':
         return { label: 'Restart & install', disabled: false, run: installUpdate }
       case 'manual':
-        return { label: 'Download again', disabled: false, run: downloadUpdate }
+        return { label: 'Quit Viby', disabled: false, run: installUpdate }
       default:
         return { label: 'Check for updates', disabled: false, run: checkUpdates }
     }
@@ -95,7 +107,7 @@
       case 'checking':
         return 'Checking GitHub…'
       case 'up-to-date':
-        return `You're up to date (${state.currentVersion}).`
+        return state.message ?? `You're up to date (${state.currentVersion}).`
       case 'available':
         return state.canInstall
           ? `Version ${state.version} is available. It downloads in the background and installs when you restart.`
@@ -204,9 +216,18 @@
           {update ? updateHint(update) : 'Reading the current version…'}
         </span>
       </div>
-      <button class="ghost" onclick={updateAction.run} disabled={updateAction.disabled}>
-        {updateAction.label}
-      </button>
+      <div class="actions">
+        <button class="ghost" onclick={updateAction.run} disabled={updateAction.disabled}>
+          {updateAction.label}
+        </button>
+        {#if update?.phase === 'downloading'}
+          <button class="ghost" onclick={cancelDownload}>Cancel</button>
+        {:else if update?.phase === 'available'}
+          <button class="ghost" onclick={skipUpdate}>Skip this version</button>
+        {:else if update?.phase === 'manual'}
+          <button class="ghost" onclick={downloadUpdate}>Download again</button>
+        {/if}
+      </div>
     </div>
 
     <div class="row">
@@ -228,6 +249,18 @@
         <span class="thumb"></span>
       </button>
     </div>
+
+    {#if current?.skippedUpdateVersion}
+      <div class="row">
+        <div class="label">
+          <span>Skipped version</span>
+          <span class="hint">
+            {current.skippedUpdateVersion} will not be offered again. Newer releases still will.
+          </span>
+        </div>
+        <button class="ghost" onclick={clearSkipped}>Offer it again</button>
+      </div>
+    {/if}
   </section>
 
   <section>
@@ -355,6 +388,13 @@
     flex-shrink: 0;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
   }
 
   .segmented button {

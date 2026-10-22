@@ -90,6 +90,7 @@ const api: VibyApi = {
     get: () => ipcRenderer.invoke(CH.updatesGet),
     check: () => ipcRenderer.invoke(CH.updatesCheck),
     download: () => ipcRenderer.invoke(CH.updatesDownload),
+    cancel: () => ipcRenderer.invoke(CH.updatesCancel),
     install: () => ipcRenderer.invoke(CH.updatesInstall),
     onChange: (callback: (state: UpdateState) => void) => {
       const handler = (_event: unknown, state: UpdateState): void => callback(state)

@@ -21,6 +21,7 @@
   import Queue from './components/Queue.svelte'
   import Icon from './components/Icon.svelte'
   import { network } from './lib/network.svelte'
+  import { updates } from './lib/updates.svelte'
   import { downloads } from './lib/downloads.svelte'
   import { artwork } from './lib/artwork.svelte'
   import { searchState } from './lib/search.svelte'
@@ -128,6 +129,7 @@
     void network.init()
     void downloads.init()
     void player.init()
+    updates.init()
   })
 </script>
 
@@ -237,14 +239,20 @@
         <button
           class="nav"
           class:on={nav.view === item.id && !nav.detail && !nav.track && !nav.collection}
-          title={network.localFirst && (item.id === 'charts' || item.id === 'import')
-            ? `${item.label} needs a connection`
-            : item.label}
+          title={item.id === 'settings' && updates.pending
+            ? 'Settings — update available'
+            : network.localFirst && (item.id === 'charts' || item.id === 'import')
+              ? `${item.label} needs a connection`
+              : item.label}
           disabled={network.localFirst && (item.id === 'charts' || item.id === 'import')}
           onclick={() => nav.go(item.id)}
         >
           <Icon name={item.icon} size={17} />
           <span>{item.label}</span>
+          {#if item.id === 'settings' && updates.pending}
+            <span class="update-dot" aria-hidden="true"></span>
+            <span class="sr-only">Update available</span>
+          {/if}
         </button>
       {/each}
     </nav>
@@ -639,14 +647,46 @@
     color: var(--text);
   }
 
+  .update-dot {
+    width: 7px;
+    height: 7px;
+    margin-left: auto;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--text);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+  }
+
   .collapsed .nav {
     justify-content: center;
     padding: 10px 0;
     gap: 0;
+    position: relative;
   }
 
   .collapsed .nav span {
     display: none;
+  }
+
+  .collapsed .nav .update-dot {
+    display: block;
+    position: absolute;
+    top: 7px;
+    right: 9px;
+    margin: 0;
+  }
+
+  /* Hide visually but keep the dot's meaning in the button's accessible name. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .sidebar-foot {

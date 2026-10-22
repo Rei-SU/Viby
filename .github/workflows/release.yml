@@ -7,9 +7,11 @@ name: Release
 #
 # Race-free publish: prepare-release creates the release as a DRAFT first; the
 # platform jobs then *find* it (never create) and upload into it; the release
-# goes live only after both platforms finish. Uses the repository's built-in
-# GITHUB_TOKEN — no secrets to create. If a publish step fails with 403, switch
-# Actions -> General -> Workflow permissions to "Read and write".
+# goes live only after both platforms finish and (optionally) the update
+# manifest is signed. Uses the built-in GITHUB_TOKEN, plus VIBY_UPDATE_KEY when
+# update signing is configured (see CONTRIBUTING.md). If a publish step fails
+# with 403, switch Actions -> General -> Workflow permissions to
+# "Read and write".
 on:
   push:
     tags:
@@ -138,8 +140,39 @@ jobs:
     needs: [macos, windows]
     runs-on: ubuntu-latest
     steps:
-      # This job has no checkout, so gh needs an explicit repo (-R) to resolve
-      # the tag — without it, gh errors out before touching the API.
+      # Checkout is only needed for the signing script. `-R` keeps gh's target
+      # explicit, so the job cannot act on the wrong repository.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download the installers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p artifacts
+          gh release download "$GITHUB_REF_NAME" --dir artifacts \
+            --pattern "Viby-*" -R "$GITHUB_REPOSITORY"
+
+      # Releases are signed when the signing key secret exists. If the public
+      # key is committed in src/main/update-key.ts but this secret is missing,
+      # installed builds will reject the release — that is the point: a release
+      # without a manifest must not be able to bypass verification.
+      - name: Sign the update manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VIBY_UPDATE_KEY: ${{ secrets.VIBY_UPDATE_KEY }}
+        run: |
+          if [ -z "$VIBY_UPDATE_KEY" ]; then
+            echo "::warning::VIBY_UPDATE_KEY is not set — publishing without a signed update manifest."
+            exit 0
+          fi
+          node scripts/update-manifest.mjs sign artifacts
+          gh release upload "$GITHUB_REF_NAME" artifacts/update-manifest.json \
+            -R "$GITHUB_REPOSITORY" --clobber
+
       - name: Flip the draft release live
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

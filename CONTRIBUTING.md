@@ -38,9 +38,33 @@ publishes everything to a GitHub Release for that tag via
 1. Bump `version` in `package.json` and commit — it must match the tag.
 2. Run the relevant tests, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-No secrets to configure: the workflow uses the repository's built-in
-`GITHUB_TOKEN`. If publishing fails with 403, set Actions → General →
-Workflow permissions to "Read and write".
+Without update signing (below), no secrets are required: the workflow uses the
+repository's built-in `GITHUB_TOKEN`. If publishing fails with 403, set
+Actions → General → Workflow permissions to "Read and write".
+
+### Signed updates (one-time setup, recommended)
+
+The app can verify an Ed25519 signature over the installer hashes, so a
+compromised GitHub account cannot publish a malicious update. Generate a
+keypair once:
+
+```bash
+node scripts/update-manifest.mjs generate
+```
+
+That writes the public key into `src/main/update-key.ts` (commit it) and the
+private key to `~/.config/viby/update-key.pem` (never commit it). Add the
+private key's contents as the repository secret `VIBY_UPDATE_KEY`
+(Settings → Secrets and variables → Actions). The `publish-release` job then
+uploads `update-manifest.json`, signed over every installer.
+
+Order matters: add the secret **before** tagging a release from a commit that
+contains the public key. Once a build pins a key it fails closed — a release
+with no manifest, a bad signature, or a hash mismatch is refused. Rotating the
+key (`generate --force`) strands installed builds, so don't.
+
+Until the key is configured, releases publish without a manifest and the app
+falls back to GitHub's asset digest over TLS.
 
 The workflow first creates the release as a draft, both platform jobs then
 upload into it, and the release publishes only when every platform finishes —
@@ -61,8 +85,10 @@ right-click bypass). Windows publishes `Viby-windows-x64.exe` and the
 `latest.yml` manifest — Windows auto-update works unsigned and is wired:
 installed builds check GitHub, download and install in place. On macOS the same
 check downloads the matching DMG and opens it, since an ad-hoc-signed build
-cannot replace itself. Filenames deliberately carry no version; the release tag
-is the version (see [CIRULES.md](CIRULES.md) §3.13).
+cannot replace itself. When update signing is configured the release also
+carries a small `update-manifest.json`; it is published after the installers
+are uploaded and before the release goes live. Filenames deliberately carry no
+version; the release tag is the version (see [CIRULES.md](CIRULES.md) §3.13).
 
 ## Tests
 

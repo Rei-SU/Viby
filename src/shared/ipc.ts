@@ -73,6 +73,7 @@ export const CH = {
   updatesGet: 'updates:get',
   updatesCheck: 'updates:check',
   updatesDownload: 'updates:download',
+  updatesCancel: 'updates:cancel',
   updatesInstall: 'updates:install',
   updatesChanged: 'updates:changed',
 
@@ -190,6 +191,8 @@ export interface VibyApi {
      * macOS: download the correct DMG and open it, since it cannot self-update.
      */
     download(): Promise<UpdateState>
+    /** Abort an in-progress download; the update stays offered. */
+    cancel(): Promise<UpdateState>
     /** Windows only: quit, install the downloaded update, relaunch. */
     install(): Promise<UpdateState>
     onChange(callback: (state: UpdateState) => void): () => void

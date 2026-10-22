@@ -1,33 +1,56 @@
 import type { UpdateState } from '@shared/types'
 import { isNewer } from './version'
 
+/** Signature or digest verification failed: never install past this. */
+export class UpdateIntegrityError extends Error {}
+
 export type ReleaseInfo = {
   version: string
   /** Human-facing release page. */
   url: string
   /** Direct installer for this machine, when the release has one. */
   installerUrl?: string
-  /** Expected sha256 (hex) of the installer, when GitHub reports one. */
+  /** Expected sha256 (hex) from the GitHub asset digest, when reported. */
   installerSha256?: string
+  /**
+   * `name -> sha256` from the Ed25519-signed manifest, when the release carries
+   * one. Preferred over the GitHub digest: it is pinned to a key in the app, so
+   * a compromised GitHub account cannot forge it.
+   */
+  artifacts?: Record<string, string>
+  /** Internal: where the signed manifest lives, if the release has one. */
+  manifestUrl?: string
 }
 
 /** Windows: electron-updater + NSIS, which installs per-user (no admin). */
 export type NativeUpdater = {
   /** The newer version, or null when already up to date. */
   check(): Promise<string | null>
-  download(onProgress: (fraction: number) => void): Promise<void>
+  download(
+    onProgress: (fraction: number) => void,
+    signal: AbortSignal,
+    expectedSha256?: string
+  ): Promise<void>
   install(): void
 }
 
 export type UpdaterDeps = {
   currentVersion: string
   offline: () => boolean
-  /** Public release feed. Used by macOS, and by unpackaged builds. */
+  /** Public release feed. Used by macOS, and for update metadata on Windows. */
   latestRelease: () => Promise<ReleaseInfo>
   /** Present only where in-place installs are possible (packaged Windows). */
   native?: NativeUpdater
   /** macOS: download and open the installer, returning a user-facing note. */
-  downloadManual?: (release: ReleaseInfo, onProgress: (fraction: number) => void) => Promise<string>
+  downloadManual?: (
+    release: ReleaseInfo,
+    onProgress: (fraction: number) => void,
+    signal: AbortSignal
+  ) => Promise<string>
+  /** Quit so the user can replace the app (macOS manual updates only). */
+  quit?: () => void
+  /** The version the user asked not to be offered again. */
+  skippedVersion?: () => string
   onState: (state: UpdateState) => void
 }
 
@@ -39,6 +62,7 @@ export type UpdaterDeps = {
 export class Updater {
   private state: UpdateState
   private release: ReleaseInfo | null = null
+  private controller: AbortController | null = null
 
   constructor(private readonly deps: UpdaterDeps) {
     this.state = {
@@ -65,23 +89,47 @@ export class Updater {
       return options.quiet ? previous : this.fail('Updates are only available in the packaged app.')
     }
 
-    this.set({ phase: 'checking', version: undefined, message: undefined, progress: undefined })
+    this.set({
+      phase: 'checking',
+      version: undefined,
+      message: undefined,
+      progress: undefined,
+      skipped: false
+    })
+
+    const skipped = this.deps.skippedVersion?.() ?? ''
 
     try {
       if (this.deps.native) {
         const version = await this.deps.native.check()
         if (!version) return this.set({ phase: 'up-to-date', checkedAt: Date.now() })
+        if (skipped && version === skipped) return this.skippedState(version)
+
+        // The signed manifest is optional here: electron-updater already
+        // verifies latest.yml's sha512. Only a bad signature blocks the update.
+        try {
+          const release = await this.deps.latestRelease()
+          if (release.version === version) this.release = release
+        } catch (error) {
+          if (error instanceof UpdateIntegrityError) throw error
+        }
         return this.set({ phase: 'available', version, checkedAt: Date.now() })
       }
 
       const release = await this.deps.latestRelease()
       this.release = release
       const newer = isNewer(release.version, this.deps.currentVersion)
-      return this.set({
-        phase: newer ? 'available' : 'up-to-date',
-        version: newer ? release.version : undefined,
-        checkedAt: Date.now()
-      })
+      if (!newer) return this.set({ phase: 'up-to-date', version: undefined, checkedAt: Date.now() })
+      if (skipped && release.version === skipped) return this.skippedState(release.version)
+
+      // A release can exist without an installer for this machine (a Windows-only
+      // release, or a partially failed asset upload). Say so instead of offering
+      // a download that cannot work.
+      if (!release.installerUrl) {
+        const message = `Version ${release.version} has no installer for this Mac yet.`
+        return options.quiet ? this.set(previous) : this.fail(message)
+      }
+      return this.set({ phase: 'available', version: release.version, checkedAt: Date.now() })
     } catch (error) {
       // A background check must never turn Settings red because GitHub was
       // briefly unreachable; it leaves the last known state alone.
@@ -94,13 +142,20 @@ export class Updater {
     // `manual` is retryable: the DMG may have been closed or deleted.
     if (this.state.phase !== 'available' && this.state.phase !== 'manual') return this.state
 
-    this.set({ phase: 'downloading', progress: 0, message: undefined })
+    const controller = new AbortController()
+    this.controller = controller
+    this.set({ phase: 'downloading', progress: 0, message: undefined, skipped: false })
 
     try {
       if (this.deps.native) {
-        await this.deps.native.download((fraction) => {
-          this.set({ phase: 'downloading', progress: clamp(fraction) })
-        })
+        const expected = this.release?.artifacts?.['Viby-windows-x64.exe']
+        await this.deps.native.download(
+          (fraction) => {
+            this.set({ phase: 'downloading', progress: clamp(fraction) })
+          },
+          controller.signal,
+          expected
+        )
         return this.set({ phase: 'ready', progress: 1 })
       }
 
@@ -108,21 +163,55 @@ export class Updater {
       if (!this.deps.downloadManual || !release) {
         return this.fail('Check for updates again before downloading.')
       }
-      const note = await this.deps.downloadManual(release, (fraction) => {
-        this.set({ phase: 'downloading', progress: clamp(fraction) })
-      })
+      const note = await this.deps.downloadManual(
+        release,
+        (fraction) => {
+          this.set({ phase: 'downloading', progress: clamp(fraction) })
+        },
+        controller.signal
+      )
       return this.set({ phase: 'manual', progress: 1, message: note })
     } catch (error) {
+      if (controller.signal.aborted) {
+        return this.set({
+          phase: 'available',
+          version: this.state.version,
+          progress: undefined,
+          message: 'Download cancelled.'
+        })
+      }
       return this.fail(messageFor(error))
+    } finally {
+      if (this.controller === controller) this.controller = null
     }
   }
 
+  /** Abort a transfer. The state returns to `available` when it unwinds. */
+  cancel(): UpdateState {
+    if (this.state.phase === 'downloading') this.controller?.abort()
+    return this.state
+  }
+
   install(): UpdateState {
-    // macOS has nothing to install: the renderer never offers this action
-    // there, but the handler must stay harmless.
+    // macOS: the user must quit before replacing the app, so the manual phase
+    // offers "Quit Viby" through this same channel.
+    if (this.state.phase === 'manual') {
+      this.deps.quit?.()
+      return this.state
+    }
     if (this.state.phase !== 'ready' || !this.deps.native) return this.state
     this.deps.native.install()
     return this.state
+  }
+
+  private skippedState(version: string): UpdateState {
+    return this.set({
+      phase: 'up-to-date',
+      version: undefined,
+      skipped: true,
+      checkedAt: Date.now(),
+      message: `Version ${version} is skipped.`
+    })
   }
 
   private set(patch: Partial<UpdateState>): UpdateState {

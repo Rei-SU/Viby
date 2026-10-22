@@ -566,7 +566,7 @@ product. Treat them as a public API.
   how fork PRs get your token. Use `pull_request` for untrusted code.
 - **Secrets** come from `secrets.*`, are never echoed, and are absent from
   fork PR runs by design. The release path uses the built-in `GITHUB_TOKEN`;
-  no extra secret must be configured.
+  update signing, when enabled, adds `VIBY_UPDATE_KEY` (see CONTRIBUTING.md).
 - Workflow files are production code: they get the same review, and a change
   to publishing MUST be tested on a throwaway tag before the real release.
 

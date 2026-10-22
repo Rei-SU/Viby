@@ -58,7 +58,32 @@ ones that touch main-process modules.
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
-| `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks |
+| `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks, cancel, skipped versions, Ed25519 manifest verification, signed-hash hand-off |
+
+### Manual update smoke test (Windows, real hardware)
+
+The unit suite proves the state machine; only this proves NSIS can replace a
+running per-user install on a real machine.
+
+1. Install the current release (`Viby-windows-x64.exe`) and launch it.
+2. Open Settings → Updates → **Check for updates**. With no newer release it
+   must say "You're up to date".
+3. Bump `package.json`, tag and push a newer `v*` release; wait for it to go
+   live.
+4. In the installed 0.1.0: check → **Download**. The progress bar must advance
+   and reach 100%, then **Restart & install**.
+5. Confirm Viby quits, NSIS installs silently, and Viby reopens on the new
+   version (`Settings → Updates` shows the new current version).
+6. Open `%APPDATA%\Viby\logs\updater.log`; it must contain the check, download
+   and install entries with no verification errors.
+7. Cancel path: start a download, click **Cancel**, then download again. The
+   first attempt must stop and the second must complete.
+8. Integrity path: publish a build whose `update-manifest.json` does not match
+   its installer (or temporarily edit the manifest asset); the download must be
+   deleted and the state must show the verification failure, never install.
+
+Until someone runs this, "Windows installs in place" is a design claim, not a
+verified fact.
 
 ### E2E scenarios (app must be running)
 
@@ -113,6 +138,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/session.ts` | e2e `resume` |
 | `src/main/cache/**`, `src/main/media.ts`, `viby-media://` handler | e2e `playback`, `resume` |
 | `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | e2e `settings`, `playback` (volume restore) · behaviour |
+| `src/main/updater*.ts`, `release-feed.ts`, `update-manifest.ts`, `src/renderer/lib/updates.svelte.ts` | unit `version`, `updates` · manual update smoke test (Windows) |
 | `src/main/json-store.ts` | unit `library` · e2e `library`, `resume` |
 | `src/main/downloads/**`, `src/main/network.ts` | unit `downloads-store`, `downloads-manager`, `network` · e2e `offline`, `playback` |
 | `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `OfflineHome` | e2e `offline`, `playback`, `navigation` · unit `download-groups` |
@@ -147,3 +173,5 @@ Find the row for what you changed; run what it lists.
   track, and confirm `ps` shows `Viby.app/Contents/Resources/python/bin/python3`
   running `yt-dlp-src/__main__.py`. That is the "no system Python" proof.
 - **Audio actually audible** — tests mute; a human must listen.
+- **In-place Windows updates** — the state machine is unit-tested with fakes;
+  NSIS replacing a running install needs the manual smoke test above.

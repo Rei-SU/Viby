@@ -13,7 +13,9 @@ export const DEFAULT_SETTINGS: Settings = {
   autoplay: true,
   offlineMode: 'auto',
   /** Check GitHub for a newer release on launch. Updates are never silent. */
-  autoUpdateCheck: true
+  autoUpdateCheck: true,
+  /** Empty means no version is skipped. */
+  skippedUpdateVersion: ''
 }
 
 let store: JsonStore<Settings> | null = null
