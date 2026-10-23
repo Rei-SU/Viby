@@ -21,7 +21,7 @@ Every decision below came from you, with the technical consequence I derived fro
 | 7 | Import | Paste share URLs, no credentials, ever | Spotify via embed bootstrap + anonymous GraphQL, with the embed's first 100 tracks as fallback; Apple Music via share-page JSON; **zero accounts required from you** |
 | 8 | Import conflicts | Auto-match + review screen | No silent wrong-version imports |
 | 9 | Unresolvable tracks | Skip + notify | Simple, honest |
-| 10 | Charts | Global only | One less variable, no region config |
+| 10 | Charts | Removed | The dedicated page duplicated Home shelves; chart carousels still appear inside Home where YouTube Music surfaces them. |
 | 11 | Language | English only | No i18n layer, no RTL work in v1 |
 | 12 | Playback auth | Anonymous, no credentials stored | Playback needs no login and stores no credentials. The optional account layer (later) is separate. |
 | 13 | Lyrics | Layered fallback chain | LRCLIB exact → LRCLIB search → lyrics.ovh plain text, all cached |
@@ -90,7 +90,7 @@ Three processes, strict separation, minimal IPC surface.
 │                                                                              │
 │  ┌── innertube/ ──────────┐  ┌── ytdlp/ ──────────────────────────────┐     │
 │  │ catalog: search,       │  │ binary provisioning + self-update      │     │
-│  │ browse, charts,        │  │ resolve stream URL (JSON)              │     │
+│  │ browse, home,          │  │ resolve stream URL (JSON)              │     │
 │  │ album/artist/playlist  │  │ download-to-cache (fallback path)      │     │
 │  └────────────────────────┘  └────────────────────────────────────────┘     │
 │                                                                              │
@@ -108,7 +108,7 @@ Three processes, strict separation, minimal IPC surface.
 ┌────────────────────────── Renderer (Chromium) ──────────────────────────────┐
 │  Svelte 5 + Vite          single <audio> element      navigator.mediaSession│
 │  player store (runes)     lyrics view                 paged lists            │
-│  routes: Home Search Library Queue Album Artist Track Charts Import Settings│
+│  routes: Home Search Library Queue Album Artist Track Import Settings        │
 │  components: PlayerBar, Queue, Cover, LyricsPanel, DownloadBadge            │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -159,13 +159,13 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 
 ### 5.2 Search
 - Instant search, 250ms debounce, in-flight cancellation (stale responses dropped by request sequence number).
-- Filters: songs, albums, artists, playlists. Charts live in Browse, not search.
+- Filters: songs, albums, artists, playlists.
 - Results render in pages on long lists; artwork lazy-loads with a low-res placeholder.
 - Search is online-only. When the app is local-first, the titlebar field is disabled and the Search page says “You are not connected to the internet.” (or “Cannot connect to the host right now.” for an unreachable host).
 - Keyboard: `/` focuses search, `↑/↓` navigate, `Enter` plays, `Shift+Enter` queues.
 
 ### 5.3 Browse & categories
-- Global charts (top songs, top albums).
+- Home shelves from YouTube Music, including chart and mood carousels when they are surfaced.
 - Moods & genres from YT Music's surfaces, drilled into playlists.
 - Home: recently played plus YouTube Music's home shelves; artist, album, playlist and song pages open from any card or row.
 
@@ -325,7 +325,7 @@ Then: player bar with seek/volume/shuffle/repeat, queue, media keys, Now Playing
 `yt-dlp` prints the literal string `null` to stdout with exit code 1 when extraction fails; we treated that as data and crashed in `parseTrack` with `Cannot read properties of null (reading 'id')`, discarding the real reason in stderr. Now every failure path is validated (`code !== 0 || !trimmed || trimmed === 'null'`), mapped to a readable message (`unavailable`, `botcheck`, `playlist`, `cancelled`, `unknown`), and shown in the UI. A resolve can also be **cancelled**, so a slow track can no longer hold the window for two minutes. Regression tests: `tests/resolver.test.ts`.
 
 **P2 — Search + browse + library. Shipped.**
-Shipped: the InnerTube catalog client (`WEB_REMIX`, one constants file for R2), tolerant cross-container response parsing, search with filters (All/Songs/Albums/Artists/Playlists), home shelves, global charts, album/artist/playlist detail pages, and click-to-play straight from any of them.
+Shipped: the InnerTube catalog client (`WEB_REMIX`, one constants file for R2), tolerant cross-container response parsing, search with filters (All/Songs/Albums/Artists/Playlists), home shelves (including chart carousels), album/artist/playlist detail pages, and click-to-play straight from any of them.
 Shipped after the first pass: likes, playlists and history built on the atomic JSON stores (not `node:sqlite`), collection pages, the add-to-playlist picker, and artist discography tabs.
 
 *Acceptance:* find a song, play it, favourite it, build a playlist, restart, everything is still there. **Met.**
@@ -806,7 +806,7 @@ When effective offline and no local file exists, `resolveForPlayback` fails imme
 
 - A compact titlebar status pill: "Offline", "Offline mode" or "Cannot connect to the host". Click opens a small menu with **Manage downloads** and either **Go online** (manual mode) or **Offline settings**. It is the only persistent offline chrome.
 - Settings' Connectivity row is labeled **Offline mode** and explains the current state: automatic while connected, automatic with the connectivity reason when not, or manual with "Only downloads play" copy.
-- Sidebar has **Library** (always present); downloads are part of it rather than a separate page. While local-first, Charts and Import are disabled with a tooltip, and Search opens an offline notice while the titlebar field is disabled — search needs the catalog.
+- Sidebar has **Library** (always present); downloads are part of it rather than a separate page. While local-first, Import is disabled with a tooltip, and Search opens an offline notice while the titlebar field is disabled — search needs the catalog.
 
 **Home**
 
@@ -952,7 +952,7 @@ Because this feature touches `src/shared/**` and `src/preload/**`, TESTING.md's 
 ### 17.8 Delivery slices
 
 **P7a — Offline awareness (no downloads yet). Shipped.**
-Monitor, renderer store, manual toggle, offline pill, Offline Home empty state, offline states for Charts/Import/Search, fast offline playback failure, silent cache playback, autoplay off offline.
+Monitor, renderer store, manual toggle, offline pill, Offline Home empty state, offline states for Import/Search, fast offline playback failure, silent cache playback, autoplay off offline.
 *Acceptance:* airplane mode at launch shows the offline Home instantly, with no error toast and no yt-dlp delay when pressing play on an uncached track; reconnecting restores Home.
 
 **P7b — Download core. Shipped.**
@@ -970,7 +970,7 @@ Offline e2e and docs are in place. Network flapping, failed-download recovery, q
 
 **Unit (`node tests/unit.mjs`):** `downloads-store` (index healing, reference add/remove, file deletion, path safety, disk guard), `downloads-manager` (queue state machine, progress parser, unknown totals, cache/download dedupe), `network` (state machine with injected `isOnline`/probe results and debounce), `download-groups`, `library-items`, `player-source`, `images`.
 
-**E2E (`tests/e2e/offline.mjs`)** uses the manual switch, so it never depends on the machine's real network. It covers: local-first Home, the offline pill, disabled Charts/Import, the offline Search page, downloaded playback when the profile has a download, Library filters and badges, and reconnect. It deliberately does not download through yt-dlp.
+**E2E (`tests/e2e/offline.mjs`)** uses the manual switch, so it never depends on the machine's real network. It covers: local-first Home, the offline pill, disabled Import, the Charts page staying gone, the offline Search page, downloaded playback when the profile has a download, Library filters and badges, and reconnect. It deliberately does not download through yt-dlp.
 
 **Manual/packaged pass:** download one short track and a collection, relaunch offline, play both; clear the cache and confirm downloads remain; delete a playlist and confirm only unreferenced files go; airplane mode on both platforms, Wi-Fi drop mid-download, quit mid-download, disk-full simulation, captive portal (`unreachable`). Windows hardware validation is still pending.
 

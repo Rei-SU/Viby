@@ -412,16 +412,6 @@ export function registerIpc(): void {
     }
   })
 
-  ipcMain.handle(CH.catalogCharts, async (): Promise<Result<Shelf[]>> => {
-    try {
-      const blocked = offline()
-      if (blocked) return blocked
-      return ok(await innertube.charts())
-    } catch (err) {
-      return fail(err)
-    }
-  })
-
   ipcMain.handle(CH.catalogRadio, async (_e, videoId: string): Promise<Result<CatalogItem[]>> => {
     try {
       const blocked = offline()

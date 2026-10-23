@@ -3,36 +3,33 @@
   import { api } from '../lib/api'
   import { isPlayable, player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
-  import { shelfStates } from '../lib/catalog-cache.svelte'
+  import { homeShelves } from '../lib/catalog-cache.svelte'
   import MediaCard from './MediaCard.svelte'
 
-  let { source }: { source: 'home' | 'charts' } = $props()
-
-  // Shelves live in a store so switching tabs (or visiting a page) does not
+  // Shelves live in a store so leaving Home (or visiting a page) does not
   // refetch and flash a loading state every time.
-  const page = $derived(shelfStates[source])
+  const page = homeShelves
 
   let recent = $state<CatalogItem[]>([])
 
   $effect(() => {
-    if (!page.attempted && !page.loading) void load(source)
+    if (!page.attempted && !page.loading) void load()
   })
 
-  async function load(which: 'home' | 'charts'): Promise<void> {
-    const target = shelfStates[which]
-    target.attempted = true
-    target.loading = true
-    target.error = null
+  async function load(): Promise<void> {
+    page.attempted = true
+    page.loading = true
+    page.error = null
 
-    const res = which === 'home' ? await api.catalog.home() : await api.catalog.charts()
+    const res = await api.catalog.home()
     if (res.ok) {
-      target.shelves = res.data.filter((s) => s.items.length > 0)
-      player.prefetchList(target.shelves[0]?.items ?? [], 2)
+      page.shelves = res.data.filter((s) => s.items.length > 0)
+      player.prefetchList(page.shelves[0]?.items ?? [], 2)
     } else {
-      target.error = res.error
-      target.shelves = []
+      page.error = res.error
+      page.shelves = []
     }
-    target.loading = false
+    page.loading = false
   }
 
   async function loadRecent(): Promise<void> {
@@ -85,17 +82,17 @@
 
 <div class="view">
   <header class="head">
-    <h1>{source === 'home' ? 'Home' : 'Charts'}</h1>
+    <h1>Home</h1>
     <p>Global — no region setup, no sign-in required.</p>
   </header>
 
   {#if page.error}
     <div class="notice">
       <div>
-        <strong>Could not load {source}</strong>
+        <strong>Could not load Home</strong>
         <span>{page.error}</span>
       </div>
-      <button class="link" onclick={() => load(source)}>Retry</button>
+      <button class="link" onclick={() => load()}>Retry</button>
     </div>
   {/if}
 
@@ -103,7 +100,7 @@
     <p class="placeholder">Loading…</p>
   {/if}
 
-  {#if source === 'home' && recent.length > 0}
+  {#if recent.length > 0}
     <section class="shelf">
       <h2>Recently played</h2>
       <div class="rail">

@@ -18,7 +18,7 @@
 
 Viby is a desktop music player for people who just want to press play.
 
-Browse artists, albums, playlists and charts. Build a library that stays yours. Follow along with lyrics that move with the song. Download music for offline listening. No subscription, no ads, nothing to sit through — and no account required.
+Browse artists, albums and playlists. Build a library that stays yours. Follow along with lyrics that move with the song. Download music for offline listening. No subscription, no ads, nothing to sit through — and no account required.
 
 <p align="center">
   <img src="docs/screenshots/artist.png" alt="Viby artist page with a full-width banner and monthly listeners" />
@@ -30,7 +30,7 @@ Browse artists, albums, playlists and charts. Build a library that stays yours. 
 ## What's inside
 
 - **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a local cache that makes replays instant.
-- **A catalogue worth browsing.** Search from the titlebar as you type (`⌘K` / `Ctrl K`), then open the full results page with filters, home shelves, charts, and artist and album pages with real discographies.
+- **A catalogue worth browsing.** Search from the titlebar as you type (`⌘K` / `Ctrl K`), then open the full results page with filters, home shelves, and artist and album pages with real discographies.
 - **Lyrics that keep up.** Time-synced lyrics from LRCLIB, with lyrics.ovh as a plain-text fallback, click-to-seek, and a panel that stays out of the way.
 - **A library that stays yours.** Liked songs, playlists and history stored locally and fully usable signed out. Optional encrypted backup and sync is planned after the beta.
 - **Offline when you need it.** Download songs, albums, playlists or Liked Songs and play them without a connection. Search and browsing need the network; your downloads do not.

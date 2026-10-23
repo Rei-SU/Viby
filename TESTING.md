@@ -112,7 +112,7 @@ the app while they run — they own the queue.
 | `navigation` | drag strip, full-bleed artist banner, titlebar back/forward, artist page from search, history restore |
 | `quick-search` | centered titlebar field, recents, grouped songs/artists/playlists, show-more filters, Enter routing, song click, arrow navigation |
 | `settings` | sidebar entry, quality/autoplay/cache-cap persist, clear control |
-| `offline` | manual offline: local-first Home, titlebar pill, gated Charts/Import, Library stays and opens, separate Downloads page is gone, auto restores |
+| `offline` | manual offline: local-first Home, titlebar pill, gated Import, Charts page stays gone, Library stays and opens, separate Downloads page is gone, auto restores |
 | `import` | paste a Spotify link, match 50 tracks, create and clean up a playlist |
 
 ### Behaviour suite (separate)

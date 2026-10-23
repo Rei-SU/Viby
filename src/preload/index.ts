@@ -45,7 +45,6 @@ const api: VibyApi = {
       ipcRenderer.invoke(CH.catalogSearch, query, filter),
     browse: (browseId: string) => ipcRenderer.invoke(CH.catalogBrowse, browseId),
     home: () => ipcRenderer.invoke(CH.catalogHome),
-    charts: () => ipcRenderer.invoke(CH.catalogCharts),
     radio: (videoId: string) => ipcRenderer.invoke(CH.catalogRadio, videoId),
     audioTrack: (videoId: string, title: string, artist: string) =>
       ipcRenderer.invoke(CH.catalogAudioTrack, videoId, title, artist)

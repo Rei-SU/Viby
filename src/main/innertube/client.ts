@@ -183,8 +183,3 @@ export async function home(): Promise<Shelf[]> {
   const response = await call('browse', { browseId: 'FEmusic_home' })
   return extractShelves(response)
 }
-
-export async function charts(): Promise<Shelf[]> {
-  const response = await call('browse', { browseId: 'FEmusic_charts' })
-  return extractShelves(response)
-}

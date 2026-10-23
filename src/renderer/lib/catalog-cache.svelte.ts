@@ -15,10 +15,7 @@ export class ShelfState {
   attempted = false
 }
 
-export const shelfStates: Record<'home' | 'charts', ShelfState> = {
-  home: new ShelfState(),
-  charts: new ShelfState()
-}
+export const homeShelves = new ShelfState()
 
 const detailCache = new Map<string, { data: BrowseResult; at: number }>()
 

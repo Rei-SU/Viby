@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { extractItems, extractShelves } from '../src/main/innertube/parse'
-import { browse, charts, home, search } from '../src/main/innertube/client'
+import { browse, home, search } from '../src/main/innertube/client'
 import type { CatalogItem } from '../src/shared/types'
 
 let failures = 0
@@ -56,20 +56,15 @@ check(
   homeShelves.filter((s) => s.title.trim()).length >= Math.max(1, homeShelves.length - 2)
 )
 
-const chartShelves = await charts()
-console.log(`\nLIVE charts: ${chartShelves.length} shelves`)
-for (const shelf of chartShelves.slice(0, 4)) {
-  console.log(`  "${shelf.title}" — ${shelf.items.length} items`)
-}
-
-// Album/playlist pages reuse the same parser, so open whatever charts gave us.
-const playlist = chartShelves.flatMap((s) => s.items).find((i) => i.kind === 'playlist' && i.browseId)
+// Album/playlist pages reuse the same parser, so open a search result.
+const playlists = await search('daft punk', 'playlists')
+const playlist = playlists.find((i) => i.kind === 'playlist' && i.browseId)
 if (playlist) {
   const { items: tracks } = await browse(playlist.browseId!)
   show(`\nLIVE browse playlist "${playlist.title.slice(0, 30)}"`, tracks)
   check('browse returns tracks', tracks.length > 3, `${tracks.length}`)
 } else {
-  check('found a playlist to browse', false, 'none in charts')
+  check('found a playlist to browse', false, 'none in search')
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)

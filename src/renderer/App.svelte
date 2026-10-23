@@ -29,10 +29,9 @@
   const navItems: {
     id: View
     label: string
-    icon: 'home' | 'chart' | 'search' | 'disc' | 'list' | 'download' | 'gear' | 'plus'
+    icon: 'home' | 'search' | 'disc' | 'list' | 'download' | 'gear' | 'plus'
   }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
-    { id: 'charts', label: 'Charts', icon: 'chart' },
     { id: 'search', label: 'Search', icon: 'search' },
     { id: 'library', label: 'Library', icon: 'disc' },
     { id: 'queue', label: 'Queue', icon: 'list' },
@@ -48,7 +47,7 @@
 
   function labelFor(item: (typeof navItems)[number]): string {
     if (item.id === 'settings' && updates.pending) return 'Settings — update available'
-    if (network.localFirst && (item.id === 'charts' || item.id === 'import')) {
+    if (network.localFirst && item.id === 'import') {
       return `${item.label} needs a connection`
     }
     return item.label
@@ -242,7 +241,7 @@
           class:on={active}
           aria-current={active ? 'page' : undefined}
           aria-label={label}
-          disabled={network.localFirst && (item.id === 'charts' || item.id === 'import')}
+          disabled={network.localFirst && item.id === 'import'}
           onclick={() => nav.go(item.id)}
         >
           <Icon name={item.icon} size={18} />
@@ -282,20 +281,7 @@
       {#if network.localFirst}
         <OfflineHome />
       {:else}
-        <HomeView source="home" />
-      {/if}
-    {:else if nav.view === 'charts'}
-      {#if network.localFirst}
-        <div class="offline-page">
-          <p class="eyebrow">Offline</p>
-          <h1>Charts needs a connection</h1>
-          <p>{network.detail || 'Reconnect to browse the charts.'} Your downloads still play.</p>
-          <div class="offline-actions">
-            <button class="primary" onclick={() => nav.go('library')}>Open Library</button>
-          </div>
-        </div>
-      {:else}
-        <HomeView source="charts" />
+        <HomeView />
       {/if}
     {:else if nav.view === 'search'}
       <SearchView />

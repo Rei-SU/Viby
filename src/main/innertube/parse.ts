@@ -446,7 +446,7 @@ function runsOf(node: AnyObj | undefined | null): AnyObj[] {
 function bestThumbnail(renderer: AnyObj): string | undefined {
   // List rows put art under `thumbnail`; carousel cards (albums, playlists,
   // artists) put it under `thumbnailRenderer`. Missing the second path is why
-  // every card on Home and Charts rendered blank.
+  // every card on Home rendered blank.
   const node = renderer?.thumbnailRenderer ?? renderer?.thumbnail
   const thumbs = node?.musicThumbnailRenderer?.thumbnail?.thumbnails ?? node?.thumbnails
   if (!Array.isArray(thumbs) || thumbs.length === 0) return undefined

@@ -2,7 +2,6 @@ import type { CatalogItem, Track } from '@shared/types'
 
 export type View =
   | 'home'
-  | 'charts'
   | 'search'
   | 'library'
   | 'queue'

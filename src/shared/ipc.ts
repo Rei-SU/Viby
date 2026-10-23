@@ -57,7 +57,6 @@ export const CH = {
   catalogSearch: 'catalog:search',
   catalogBrowse: 'catalog:browse',
   catalogHome: 'catalog:home',
-  catalogCharts: 'catalog:charts',
   catalogRadio: 'catalog:radio',
   catalogAudioTrack: 'catalog:audio-track',
 
@@ -144,7 +143,6 @@ export interface VibyApi {
     search(query: string, filter?: SearchFilterName): Promise<Result<CatalogItem[]>>
     browse(browseId: string): Promise<Result<BrowseResult>>
     home(): Promise<Result<Shelf[]>>
-    charts(): Promise<Result<Shelf[]>>
     /** Related tracks for autoplay, seeded by a video id. */
     radio(videoId: string): Promise<Result<CatalogItem[]>>
     /** The released audio track for a music video, when YouTube knows one. */

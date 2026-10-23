@@ -27,7 +27,7 @@ export async function run(app, check) {
           pill: pill?.textContent?.trim() ?? null,
           home,
           eyebrow: document.querySelector('.content .status, .content .eyebrow')?.textContent?.trim() ?? null,
-          chartsDisabled: navButton('Charts')?.disabled ?? null,
+          chartsPresent: Boolean(navButton('Charts')),
           importDisabled: navButton('Import')?.disabled ?? null,
           libraryPresent: Boolean(navButton('Library')),
           downloadsPresent: Boolean(navButton('Downloads')),
@@ -41,7 +41,7 @@ export async function run(app, check) {
     check('manual mode is reported', offline.state?.forcedOffline === true, JSON.stringify(offline.state))
     check('titlebar shows the offline pill', Boolean(offline.pill), String(offline.pill))
     check('offline Home replaces Home', offline.home === 'Ready when you are.', String(offline.home))
-    check('Charts is disabled offline', offline.chartsDisabled === true, String(offline.chartsDisabled))
+    check('Charts page is gone', offline.chartsPresent === false)
     check('Import is disabled offline', offline.importDisabled === true, String(offline.importDisabled))
     check('Library stays available', offline.libraryPresent === true)
     check('the separate Downloads page is gone', offline.downloadsPresent === false)
@@ -263,7 +263,7 @@ export async function run(app, check) {
           state,
           home: document.querySelector('.content h1')?.textContent?.trim() ?? null,
           pill: Boolean(document.querySelector('.net-pill')),
-          chartsDisabled: navButton('Charts')?.disabled ?? null
+          chartsPresent: Boolean(navButton('Charts'))
         }
       })()
     `,
@@ -272,7 +272,7 @@ export async function run(app, check) {
     check('auto mode clears the manual flag', online.state?.forcedOffline === false, JSON.stringify(online.state))
     check('normal Home returns', online.home === 'Home', String(online.home))
     check('offline pill is gone when connected', online.pill === false)
-    check('Charts is enabled again', online.chartsDisabled === false, String(online.chartsDisabled))
+    check('Charts page stays gone after reconnect', online.chartsPresent === false)
 
     const searchOnline = await app.evaluate(
       `(async () => {

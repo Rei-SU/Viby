@@ -12,7 +12,6 @@
     | 'plus'
     | 'list'
     | 'home'
-    | 'chart'
     | 'search'
     | 'download'
     | 'back'
@@ -50,7 +49,6 @@
     plus: { d: 'M12 5v14M5 12h14' },
     list: { d: 'M4 6h16M4 12h16M4 18h10' },
     home: { d: 'M3 10.5L12 3l9 7.5V21H3zM9 21v-7h6v7' },
-    chart: { d: 'M5 20v-6M11 20V8M17 20v-9M3 20h18' },
     search: { d: 'M11 4a7 7 0 100 14 7 7 0 000-14zM16.5 16.5L21 21' },
     download: { d: 'M12 3v12M7 10l5 5 5-5M5 21h14' },
     back: { d: 'M15 18l-6-6 6-6' },

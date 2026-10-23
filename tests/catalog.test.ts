@@ -4,7 +4,7 @@
  *   npx esbuild tests/catalog.test.ts --bundle --platform=node --format=esm \
  *     --alias:@shared=./src/shared --outfile=/tmp/catalog.mjs && node /tmp/catalog.mjs
  */
-import { audioTrackFor, browse, charts, home, radio, search } from '../src/main/innertube/client'
+import { audioTrackFor, browse, home, radio, search } from '../src/main/innertube/client'
 import type { CatalogItem, SearchFilterName } from '../src/shared/types'
 
 let failures = 0
@@ -216,20 +216,6 @@ if (playlist) {
   check('playlist page gives playable tracks', items.filter((t) => t.kind === 'song').length > 0)
 } else {
   check('found a playlist to open', false)
-}
-
-// Charts is the other entry point, and its items are mostly artists.
-const chartItems = (await charts()).flatMap((s) => s.items)
-console.log(`\n  charts: ${chartItems.length} items — ${kinds(chartItems)}`)
-check('charts returns items', chartItems.length > 0)
-const chartArtist = chartItems.find((i) => i.kind === 'artist' && i.browseId)
-if (chartArtist) {
-  const { items } = await browse(chartArtist.browseId!)
-  check(
-    'chart artist page gives playable songs',
-    items.some((t) => t.kind === 'song' && t.id.length === 11),
-    `${items.length} items — ${kinds(items)}`
-  )
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)

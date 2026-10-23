@@ -5,7 +5,7 @@
  *   npx esbuild tests/thumbs.test.ts --bundle --platform=node --format=esm \
  *     --alias:@shared=./src/shared --outfile=/tmp/thumbs.mjs && node /tmp/thumbs.mjs
  */
-import { browse, charts, home, search } from '../src/main/innertube/client'
+import { browse, home, search } from '../src/main/innertube/client'
 import type { CatalogItem } from '../src/shared/types'
 
 const UA =
@@ -48,10 +48,7 @@ function report(name: string, items: CatalogItem[]): void {
 report('SEARCH songs', songs)
 report('HOME', homeItems)
 
-const chartItems = (await charts()).flatMap((s) => s.items)
-report('CHARTS', chartItems)
-
-const playlist = [...homeItems, ...chartItems].find((i) => i.kind === 'playlist' && i.browseId)
+const playlist = homeItems.find((i) => i.kind === 'playlist' && i.browseId)
 if (playlist) {
   const { items: tracks } = await browse(playlist.browseId!)
   report(`BROWSE "${playlist.title.slice(0, 24)}"`, tracks)
