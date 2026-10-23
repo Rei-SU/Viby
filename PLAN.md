@@ -527,11 +527,11 @@ The UI is built from a small set of decisions rather than per-component styling.
 
 **Components.** `Icon.svelte` replaces every emoji with a 24px stroked glyph set. `PlayerBar` is a floating dock with an accent play button and a filled scrubber. `HomeView` cards lift 3px on hover with a play badge and a slight image dim. `TrackRow` shows a three-bar equaliser on the playing row and surfaces artist/album links on hover. Detail and song pages add an artwork bloom (`filter: blur(70px)`, 30% opacity) behind the header.
 
-### Design revision — monochrome, flat, collapsible
+### Design revision — monochrome, flat, icon rail
 
 - **No colour accent.** White is the accent: primary buttons are white with black glyphs, the playing row and active nav are plain white, the scrubber fills white, and the ambient wash is neutral (`rgba(255,255,255,0.045)`). Red remains for errors only.
 - **No rounded panels.** Sidebar, titlebar and player dock are flush edge-to-edge with hairline dividers (`border-right` / `border-top`). Only content elements keep radii (cards 12px, rows 10px, controls 8px, actions pill).
-- **Collapsible sidebar.** A titlebar button toggles 218px ⇄ 66px (icon rail) with a 220ms grid transition; the state persists in `localStorage` (`viby.sidebar`). Verified: default expanded, click → 66px + persisted, reload → collapsed.
+- **Fixed icon rail.** The 68px sidebar shows only icons, vertically centred in the available height. Hovering or keyboard-focusing an icon reveals its name in a themed glass label; the labels are also the buttons' accessible names. There is no expand/collapse state or persisted sidebar width — the titlebar keeps its extra room.
 - **Breathing room.** Dock height 84px, control column padding 8px, 9px gap to the scrubber; the primary play button is 38px with 6px side margins. Card play badges inset 11px.
 
 ### Round thirteen — the freeze, finally
@@ -585,8 +585,8 @@ left and a placeholder profile avatar on the right. The bar stays mounted on eve
 
 ### Browser-style navigation (2026-10-20)
 
-Navigation moved out of the page and into the titlebar: the sidebar toggle is followed by **Back** and
-**Forward** buttons with browser semantics. The history stack records detail, song, collection *and* tab
+Navigation moved out of the page and into the titlebar: **Back** and **Forward** buttons
+with browser semantics. The history stack records detail, song, collection *and* tab
 changes; new navigation clears the forward trail, and deleting a playlist drops the forward entry that
 pointed at it. The in-page Back buttons were removed from artist/album/playlist/song pages.
 

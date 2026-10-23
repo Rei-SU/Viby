@@ -42,11 +42,16 @@
 
   const isMac = api.platform === 'darwin'
 
-  let collapsed = $state(localStorage.getItem('viby.sidebar') === 'collapsed')
+  function isActive(id: View): boolean {
+    return nav.view === id && !nav.detail && !nav.track && !nav.collection
+  }
 
-  function toggleSidebar(): void {
-    collapsed = !collapsed
-    localStorage.setItem('viby.sidebar', collapsed ? 'collapsed' : 'expanded')
+  function labelFor(item: (typeof navItems)[number]): string {
+    if (item.id === 'settings' && updates.pending) return 'Settings — update available'
+    if (network.localFirst && (item.id === 'charts' || item.id === 'import')) {
+      return `${item.label} needs a connection`
+    }
+    return item.label
   }
 
   // The profile avatar is an intentional placeholder until accounts exist.
@@ -135,19 +140,11 @@
 
 <svelte:window onclick={() => (netMenu = false)} />
 
-<div class="layout" class:collapsed>
+<div class="layout">
   <!-- The window has no native title bar on macOS, so this strip is the only
        draggable area. Everything interactive inside it must opt out. -->
   <header class="titlebar" class:mac={isMac}>
     <div class="chrome-left">
-      <button
-        class="chrome-btn"
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        onclick={toggleSidebar}
-      >
-        <Icon name="sidebar" size={16} />
-      </button>
       <div class="history">
         <button
           class="chrome-btn"
@@ -233,36 +230,29 @@
     {/if}
   </header>
 
+  <!-- Fixed icon rail: the label doubles as the hover tooltip, and the button
+       carries the same text as its accessible name. -->
   <aside class="sidebar">
-    <nav>
+    <nav aria-label="Primary">
       {#each navItems as item (item.id)}
+        {@const active = isActive(item.id)}
+        {@const label = labelFor(item)}
         <button
           class="nav"
-          class:on={nav.view === item.id && !nav.detail && !nav.track && !nav.collection}
-          title={item.id === 'settings' && updates.pending
-            ? 'Settings — update available'
-            : network.localFirst && (item.id === 'charts' || item.id === 'import')
-              ? `${item.label} needs a connection`
-              : item.label}
+          class:on={active}
+          aria-current={active ? 'page' : undefined}
+          aria-label={label}
           disabled={network.localFirst && (item.id === 'charts' || item.id === 'import')}
           onclick={() => nav.go(item.id)}
         >
-          <Icon name={item.icon} size={17} />
-          <span>{item.label}</span>
+          <Icon name={item.icon} size={18} />
+          <span class="nav-label" aria-hidden="true">{label}</span>
           {#if item.id === 'settings' && updates.pending}
             <span class="update-dot" aria-hidden="true"></span>
-            <span class="sr-only">Update available</span>
           {/if}
         </button>
       {/each}
     </nav>
-
-    {#if !collapsed}
-      <div class="sidebar-foot">
-        <span class="rule"></span>
-        <p>No ads. No subscription.<br />No sign-in required.</p>
-      </div>
-    {/if}
   </aside>
 
   <main class="content scroll" bind:this={main} onscroll={onScroll}>
@@ -346,11 +336,6 @@
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
     grid-template-rows: var(--titlebar-h) minmax(0, 1fr) var(--player-h);
     height: 100vh;
-    transition: grid-template-columns 220ms var(--ease);
-  }
-
-  .layout.collapsed {
-    --sidebar-w: 66px;
   }
 
   .titlebar {
@@ -589,11 +574,14 @@
   .sidebar {
     grid-column: 1;
     grid-row: 2;
+    position: relative;
+    z-index: 20;
     display: flex;
     flex-direction: column;
-    padding: 10px 8px;
+    justify-content: center;
+    padding: 14px 0;
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
     background: var(--glass);
     backdrop-filter: blur(26px) saturate(150%);
     -webkit-backdrop-filter: blur(26px) saturate(150%);
@@ -603,20 +591,18 @@
   nav {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 8px;
   }
 
   .nav {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-    padding: 9px 11px;
-    border-radius: 8px;
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
     color: var(--text-dim);
-    font-size: 13.5px;
-    text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
     transition:
       background var(--speed) var(--ease),
       color var(--speed) var(--ease);
@@ -628,84 +614,68 @@
   }
 
   .nav:disabled {
-    opacity: 0.34;
     cursor: default;
+    color: var(--text-faint);
   }
 
   .nav:disabled:hover {
     background: transparent;
-    color: var(--text-dim);
+    color: var(--text-faint);
   }
 
   .nav.on {
     background: var(--glass-active);
     color: var(--text);
-    font-weight: 500;
   }
 
-  .nav.on :global(svg) {
+  /* The label doubles as the hover/focus tooltip. It stays in the DOM (and in
+     the button's text for tests), but is only painted when the icon is active. */
+  .nav-label {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 12px);
+    z-index: 5;
+    padding: 6px 9px;
+    border: 1px solid var(--stroke);
+    border-radius: 7px;
+    background: var(--glass-strong);
+    backdrop-filter: blur(26px) saturate(150%);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+    box-shadow: var(--shadow-dock);
     color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-4px, -50%);
+    transition:
+      opacity 120ms var(--ease),
+      transform 120ms var(--ease);
+  }
+
+  .nav:hover .nav-label {
+    opacity: 1;
+    transform: translate(0, -50%);
+    transition-delay: 120ms;
+  }
+
+  .nav:focus-visible .nav-label {
+    opacity: 1;
+    transform: translate(0, -50%);
+    transition-delay: 0ms;
   }
 
   .update-dot {
+    position: absolute;
+    top: 7px;
+    right: 7px;
     width: 7px;
     height: 7px;
-    margin-left: auto;
-    flex-shrink: 0;
     border-radius: 50%;
     background: var(--text);
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
-  }
-
-  .collapsed .nav {
-    justify-content: center;
-    padding: 10px 0;
-    gap: 0;
-    position: relative;
-  }
-
-  .collapsed .nav span {
-    display: none;
-  }
-
-  .collapsed .nav .update-dot {
-    display: block;
-    position: absolute;
-    top: 7px;
-    right: 9px;
-    margin: 0;
-  }
-
-  /* Hide visually but keep the dot's meaning in the button's accessible name. */
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .sidebar-foot {
-    margin-top: auto;
-    padding: 12px 11px 4px;
-  }
-
-  .rule {
-    display: block;
-    height: 1px;
-    background: var(--stroke);
-    margin-bottom: 12px;
-  }
-
-  .sidebar-foot p {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.55;
-    color: var(--text-faint);
   }
 
   .content {

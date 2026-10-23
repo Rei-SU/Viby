@@ -35,7 +35,7 @@ Browse artists, albums, playlists and charts. Build a library that stays yours. 
 - **A library that stays yours.** Liked songs, playlists and history stored locally and fully usable signed out. Optional encrypted backup and sync is planned after the beta.
 - **Offline when you need it.** Download songs, albums, playlists or Liked Songs and play them without a connection. Search and browsing need the network; your downloads do not.
 - **Import from a link.** Paste a public Spotify, Apple Music, Deezer, YouTube Music or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.
-- **Quiet by design.** A monochrome interface, a collapsible sidebar, a light idle footprint (well under 400 MB in our macOS tests), and a warm start around a second.
+- **Quiet by design.** A monochrome interface, a slim icon sidebar, a light idle footprint (well under 400 MB in our macOS tests), and a warm start around a second.
 
 ## Look around
 
