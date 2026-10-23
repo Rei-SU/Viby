@@ -31,7 +31,7 @@ Browse artists, albums and playlists. Build a library that stays yours. Follow a
 
 - **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a local cache that makes replays instant.
 - **A catalogue worth browsing.** Search from the titlebar as you type (`⌘K` / `Ctrl K`), then open the full results page with filters, home shelves, and artist and album pages with real discographies.
-- **Lyrics that keep up.** Time-synced lyrics from LRCLIB, with lyrics.ovh as a plain-text fallback, click-to-seek, and a panel that stays out of the way.
+- **Lyrics that keep up.** Time-synced lyrics from LRCLIB, with lyrics.ovh as a plain-text fallback, click-to-seek, and a docked sidebar that leaves the page usable.
 - **A library that stays yours.** Liked songs, playlists and history stored locally and fully usable signed out. Optional encrypted backup and sync is planned after the beta.
 - **Offline when you need it.** Download songs, albums, playlists or Liked Songs and play them without a connection. Search and browsing need the network; your downloads do not.
 - **Import from a link.** Paste a public Spotify, Apple Music, Deezer, YouTube Music or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.
@@ -47,10 +47,10 @@ Browse artists, albums and playlists. Build a library that stays yours. Follow a
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/lyrics.png" alt="Time-synced lyrics panel over an artist page" />
+  <img src="docs/screenshots/lyrics.png" alt="Time-synced lyrics docked beside an artist page" />
 </p>
 <p align="center">
-  <sub>Time-synced lyrics; click any line to seek.</sub>
+  <sub>Time-synced lyrics docked beside the page; click any line to seek.</sub>
 </p>
 
 <p align="center">

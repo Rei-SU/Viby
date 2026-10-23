@@ -61,86 +61,77 @@
 </script>
 
 <aside class="panel" class:open={lyrics.open} aria-hidden={!lyrics.open} aria-label="Lyrics">
-  <header>
-    <span class="eyebrow">Lyrics</span>
-    {#if lyrics.data?.source}
-      <span class="source">{lyrics.data.source}</span>
-    {/if}
-    <button class="close" onclick={() => lyrics.close()} aria-label="Close lyrics">
-      <Icon name="close" size={15} />
-    </button>
-  </header>
+  <div class="panel-inner">
+    <header>
+      <span class="eyebrow">Lyrics</span>
+      {#if lyrics.data?.source}
+        <span class="source">{lyrics.data.source}</span>
+      {/if}
+      <button class="close" onclick={() => lyrics.close()} aria-label="Close lyrics">
+        <Icon name="close" size={15} />
+      </button>
+    </header>
 
-  <div class="body">
-    {#if lyrics.loading}
-      <p class="status">Finding lyrics…</p>
-    {:else if lyrics.error}
-      <p class="status">{lyrics.error}</p>
-    {:else if !lyrics.data || lyrics.data.kind === 'none'}
-      <p class="status">No lyrics for this track.</p>
-    {:else if lyrics.data.kind === 'instrumental'}
-      <p class="status">Instrumental.</p>
-    {:else if lyrics.data.kind === 'plain'}
-      <div class="plain scroll">{lyrics.data.plain}</div>
-    {:else}
-      <div class="lines scroll" bind:this={listEl}>
-        {#each lines as line, i (i)}
-          <button
-            class="line"
-            class:active={i === activeIndex}
-            class:past={i < activeIndex}
-            bind:this={lineEls[i]}
-            onclick={() => seek(i)}
-          >
-            {line.text}
-          </button>
-        {/each}
-      </div>
-    {/if}
+    <div class="body">
+      {#if lyrics.loading}
+        <p class="status">Finding lyrics…</p>
+      {:else if lyrics.error}
+        <p class="status">{lyrics.error}</p>
+      {:else if !lyrics.data || lyrics.data.kind === 'none'}
+        <p class="status">No lyrics for this track.</p>
+      {:else if lyrics.data.kind === 'instrumental'}
+        <p class="status">Instrumental.</p>
+      {:else if lyrics.data.kind === 'plain'}
+        <div class="plain scroll">{lyrics.data.plain}</div>
+      {:else}
+        <div class="lines scroll" bind:this={listEl}>
+          {#each lines as line, i (i)}
+            <button
+              class="line"
+              class:active={i === activeIndex}
+              class:past={i < activeIndex}
+              bind:this={lineEls[i]}
+              onclick={() => seek(i)}
+            >
+              {line.text}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
 </aside>
 
 <style>
   .panel {
-    position: fixed;
-    top: var(--titlebar-h);
-    right: 0;
-    bottom: var(--player-h);
-    width: min(380px, 44vw);
-    z-index: 40;
-    display: flex;
-    flex-direction: column;
-    background: rgba(11, 11, 15, 0.78);
-    backdrop-filter: blur(32px) saturate(150%);
-    -webkit-backdrop-filter: blur(32px) saturate(150%);
+    grid-column: 3;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--bg);
     border-left: 1px solid var(--stroke);
-    box-shadow: -30px 0 60px rgba(0, 0, 0, 0.35);
-    transform: translateX(102%);
-    opacity: 0;
     pointer-events: none;
-    /* `visibility` waits for the slide to finish, so the panel is out of the
-       tab order when closed without cutting the animation short. (`inert`
-       froze the transition mid-flight in this Chromium build.) */
     visibility: hidden;
-    /* Closing is the entrance played backwards: the panel slides right for the
-       same 300ms. The fade is linear over the whole slide so the motion stays
-       visible; the old ease-out fade dropped to 17% opacity in 60ms, which read
-       as the panel blinking out rather than leaving. */
-    transition:
-      transform 300ms var(--ease),
-      opacity 300ms linear,
-      visibility 0s linear 300ms;
+    /* The grid track collapses over 300ms. Keep the panel visible until the
+       collapse finishes so the content is clipped rather than disappearing. */
+    transition: visibility 0s linear 300ms;
   }
 
   .panel.open {
-    transform: translateX(0);
-    opacity: 1;
     pointer-events: auto;
     visibility: visible;
-    transition:
-      transform 300ms var(--ease),
-      opacity 220ms var(--ease),
-      visibility 0s;
+    transition: visibility 0s;
+  }
+
+  /* Keep the inner panel at a stable width while the grid track animates. If
+     the panel itself narrowed, every lyric line would reflow during the
+     expansion. */
+  .panel-inner {
+    width: var(--lyrics-w);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   header {

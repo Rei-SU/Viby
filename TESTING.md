@@ -100,12 +100,12 @@ the app while they run — they own the queue.
 
 | Scenario | Covers |
 |---|---|
-| `images` | Home artwork actually renders, no broken images |
+| `images` | Home artwork actually renders, home carousels stay inside the docked page, no broken images |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |
 | `links` | player-bar title → song page, artist link, related list |
-| `lyrics` | panel opens, synced active line, click-to-seek, closes |
+| `lyrics` | panel opens docked beside the page, page width shrinks and restores, synced active line, click-to-seek, closes |
 | `lyrics-change` | a new track's lyrics reset to the top (no inherited scroll) |
 | `library` | playlist create/list/open/delete |
 | `resume` | session save → reload → restored paused at the timestamp |

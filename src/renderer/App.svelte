@@ -41,6 +41,18 @@
 
   const isMac = api.platform === 'darwin'
 
+  // The lyrics sidebar is sized in viewport units. Disable the grid transition
+  // while the window is being resized, otherwise the track chases the pointer
+  // for 300ms and the page feels laggy.
+  let resizing = $state(false)
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null
+
+  function onResize(): void {
+    resizing = true
+    if (resizeTimer) clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(() => (resizing = false), 180)
+  }
+
   function isActive(id: View): boolean {
     return nav.view === id && !nav.detail && !nav.track && !nav.collection
   }
@@ -137,9 +149,9 @@
   })
 </script>
 
-<svelte:window onclick={() => (netMenu = false)} />
+<svelte:window onclick={() => (netMenu = false)} onresize={onResize} />
 
-<div class="layout">
+<div class="layout" class:lyrics-open={lyrics.open} class:resizing>
   <!-- The window has no native title bar on macOS, so this strip is the only
        draggable area. Everything interactive inside it must opt out. -->
   <header class="titlebar" class:mac={isMac}>
@@ -305,9 +317,9 @@
     {/if}
   </main>
 
+  <LyricsPanel />
   <PlayerBar />
   <PlaylistPicker />
-  <LyricsPanel />
 
   {#if backOnline}
     <div class="toast" role="status">
@@ -319,15 +331,26 @@
 <style>
   .layout {
     display: grid;
-    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 0px;
     grid-template-rows: var(--titlebar-h) minmax(0, 1fr) var(--player-h);
     height: 100vh;
+    transition: grid-template-columns 300ms var(--ease);
+  }
+
+  /* The lyrics panel lives in the third column. The titlebar and player stay
+     full width; only the content row gives up space. */
+  .layout.lyrics-open {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--lyrics-w);
+  }
+
+  /* Window resizes should reflow immediately, not animate behind the pointer. */
+  .layout.resizing {
+    transition: none;
   }
 
   .titlebar {
     position: relative;
-    /* Above the lyrics panel (40), below the playlist picker (90). The search
-       palette must be able to float over any page surface. */
+    /* Above the page content and below the playlist picker (90). */
     z-index: 70;
     grid-column: 1 / -1;
     grid-row: 1;
