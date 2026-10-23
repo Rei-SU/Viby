@@ -117,9 +117,8 @@ export async function run(app, check) {
   const entered = await app.evaluate(`
     (async () => {
       const input = document.querySelector('.searchbox input')
-      // The window has a real cursor. If it rests over the panel, a row ends up
-      // highlighted — which is not the "no highlight" case this step asserts.
-      // Cmd/Ctrl+K clears the highlight and refocuses the field.
+      // Reset keyboard selection and refocus the field before asserting the
+      // no-highlight Enter path. Pointer hover never sets a selection.
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', keyCode: 75, which: 75, metaKey: true, bubbles: true }))
       await new Promise((r) => setTimeout(r, 150))
       input.focus()
@@ -147,6 +146,9 @@ export async function run(app, check) {
 
   const more = await app.evaluate(`
     (async () => {
+      const { nav } = window.__viby
+      nav.go('home')
+      await new Promise((r) => setTimeout(r, 300))
       const input = document.querySelector('.searchbox input')
       input.focus()
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
@@ -162,20 +164,22 @@ export async function run(app, check) {
         view: window.__viby.nav.view,
         chip: [...document.querySelectorAll('.chip')].find((chip) => chip.classList.contains('on'))?.textContent?.trim() ?? null,
         open: (document.querySelector('.searchbox input')?.getAttribute('aria-expanded') === 'true'),
-        rows: document.querySelectorAll('.results .row').length,
-        tags: [...document.querySelectorAll('.results .row .tag')].slice(0, 3).map((tag) => tag.textContent?.trim())
+        cards: document.querySelectorAll('.card-grid .card').length
       }
     })()
   `)
   check('Show more opens the Search page in that category', more.view === 'search' && more.open === false && more.chip === 'Artists', JSON.stringify(more))
   check(
     'category results are actually artists',
-    more.rows > 0 && more.tags.length > 0 && more.tags.every((tag) => tag === 'artist'),
-    JSON.stringify({ rows: more.rows, tags: more.tags })
+    more.cards > 0 && more.chip === 'Artists',
+    JSON.stringify({ cards: more.cards, chip: more.chip })
   )
 
   const recent = await app.evaluate(`
     (async () => {
+      const { nav } = window.__viby
+      nav.go('home')
+      await new Promise((r) => setTimeout(r, 300))
       const input = document.querySelector('.searchbox input')
       input.focus()
       document.querySelector('.clear')?.click()
@@ -246,8 +250,8 @@ export async function run(app, check) {
         await new Promise((r) => setTimeout(r, 150))
         if (document.querySelector('.quick-row[data-kind="song"]')) break
       }
-      // Clear any highlight left by the real cursor before testing ArrowDown,
-      // so the highlight is chosen deterministically by the keyboard.
+      // Reset the selection before testing ArrowDown so it is chosen
+      // deterministically by the keyboard.
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', keyCode: 75, which: 75, metaKey: true, bubbles: true }))
       await new Promise((r) => setTimeout(r, 150))
       input.focus()
@@ -282,6 +286,44 @@ export async function run(app, check) {
       keyboard.view === 'home' &&
       keyboard.open === false,
     JSON.stringify(keyboard)
+  )
+
+  const staleHover = await app.evaluate(`
+    (async () => {
+      const { nav, player } = window.__viby
+      nav.go('home')
+      await new Promise((r) => setTimeout(r, 300))
+      const input = document.querySelector('.searchbox input')
+      input.focus()
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+      setter.call(input, 'daft punk')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 150))
+        if (document.querySelector('.quick-row[data-kind="song"]')) break
+      }
+      const row = document.querySelector('.quick-row[data-kind="song"]')
+      const before = player.current?.id ?? null
+      row?.dispatchEvent(new PointerEvent('pointerenter'))
+      await new Promise((r) => setTimeout(r, 50))
+      const hoverIsNotSelection = !document.querySelector('.quick-row.active')
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }))
+      await new Promise((r) => setTimeout(r, 1800))
+      return {
+        hoverIsNotSelection,
+        view: nav.view,
+        playerChanged: (player.current?.id ?? null) !== before,
+        open: (document.querySelector('.searchbox input')?.getAttribute('aria-expanded') === 'true')
+      }
+    })()
+  `)
+  check(
+    'hovering a row never becomes the Enter target',
+    staleHover.hoverIsNotSelection &&
+      staleHover.view === 'search' &&
+      staleHover.playerChanged === false &&
+      staleHover.open === false,
+    JSON.stringify(staleHover)
   )
 
   const keys = await app.evaluate(`

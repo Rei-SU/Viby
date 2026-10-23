@@ -40,8 +40,13 @@ class SearchState {
   }
 
   setFilter(filter: SearchFilterName): void {
-    if (this.filter === filter || network.localFirst) return
+    if (this.filter === filter) return
     this.filter = filter
+    if (network.localFirst) return
+    // Drop the previous category's rows at once so a back-to-back switch
+    // does not keep showing stale names while the new request is in flight.
+    this.items = []
+    this.loading = true
     if (this.query.trim()) void this.load()
   }
 
@@ -85,6 +90,34 @@ class SearchState {
     // Never keep rows from the other source on screen while this one answers.
     if (this.source !== 'online') this.items = []
     this.source = 'online'
+
+    // The "All" view is built from the same per-category searches the titlebar
+    // dropdown uses, so a song row on the page is identical to one in the
+    // dropdown (same metadata, same ordering rules) — only the presentation
+    // differs.
+    if (this.filter === 'all') {
+      const [songs, artists, albums, playlists] = await Promise.all([
+        api.catalog.search(query, 'songs'),
+        api.catalog.search(query, 'artists'),
+        api.catalog.search(query, 'albums'),
+        api.catalog.search(query, 'playlists')
+      ])
+      if (mine !== this.seq) return
+      if (songs.ok || artists.ok || albums.ok || playlists.ok) {
+        this.items = [
+          ...(songs.ok ? songs.data : []),
+          ...(artists.ok ? artists.data : []),
+          ...(albums.ok ? albums.data : []),
+          ...(playlists.ok ? playlists.data : [])
+        ]
+        this.error = null
+      } else {
+        this.items = []
+        this.error = songs.error ?? artists.error ?? albums.error ?? playlists.error ?? null
+      }
+      this.loading = false
+      return
+    }
 
     const res = await api.catalog.search(query, this.filter)
     // A newer query already superseded this one.

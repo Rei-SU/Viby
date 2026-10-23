@@ -42,6 +42,8 @@
   let input: HTMLInputElement | undefined = $state()
 
   let open = $state(false)
+  // Keyboard selection only. Hover is visual (CSS); it must never become the
+  // Enter target, otherwise the cursor's resting position can hijack a submit.
   let active = $state(-1)
 
   let quick = $state<QuickGroups>(emptyQuick())
@@ -139,7 +141,7 @@
 
   function scheduleQuick(raw: string, immediate = false): void {
     const query = raw.trim()
-    if (!query || network.localFirst) {
+    if (!query || network.localFirst || isSearchPage()) {
       resetQuick()
       return
     }
@@ -289,6 +291,11 @@
     if (network.localFirst) return
     const value = (event.currentTarget as HTMLInputElement).value
     searchState.setQuery(value)
+    if (isSearchPage()) {
+      close()
+      resetQuick()
+      return
+    }
     open = true
     active = -1
     scheduleQuick(value)
@@ -296,6 +303,11 @@
 
   function onFocus(): void {
     if (network.localFirst) return
+    if (isSearchPage()) {
+      close()
+      resetQuick()
+      return
+    }
     open = true
     active = -1
     const query = searchState.query.trim()
@@ -304,6 +316,11 @@
 
   function onInputClick(): void {
     if (network.localFirst) return
+    if (isSearchPage()) {
+      close()
+      resetQuick()
+      return
+    }
     // Escape can close the panel without moving focus; a second click should
     // bring the suggestions back.
     if (open) return
@@ -333,6 +350,11 @@
     event.preventDefault()
     input?.focus()
     input?.select()
+    if (isSearchPage()) {
+      close()
+      resetQuick()
+      return
+    }
     open = true
     active = -1
     const query = searchState.query.trim()
@@ -507,6 +529,7 @@
     </div>
   </div>
 
+  {#if !isSearchPage()}
   <div class="quick-panel" class:open={open} bind:this={panel} use:portal>
       <div
         class="quick-list scroll"
@@ -540,7 +563,6 @@
                 id={`viby-quick-${i}`}
                 role="option"
                 aria-selected={active === i}
-                onpointerenter={() => (active = i)}
                 onclick={() => useRecent(query)}
               >
                 <span class="recent-icon"><Icon name="clock" size={15} /></span>
@@ -572,7 +594,6 @@
                     data-kind={item.kind}
                     role="option"
                     aria-selected={active === index}
-                    onpointerenter={() => (active = index)}
                     onclick={() => choose({ type: 'result', item })}
                   >
                     <Cover
@@ -628,6 +649,7 @@
         </div>
       {/if}
     </div>
+  {/if}
 </div>
 
 <style>

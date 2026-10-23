@@ -583,6 +583,16 @@ left and a placeholder profile avatar on the right. The bar stays mounted on eve
 - The profile avatar is a visual placeholder; clicking it says
   profiles are coming later.
 
+### Search page (2026-10-23)
+
+The titlebar search and the Search page no longer duplicate each other: while the Search page is open the
+titlebar dropdown stays closed and typing only updates the page. The Search page now renders a grouped,
+Spotify/Apple-Music-style layout — a **Top result** card, then **Songs** (list), **Artists**, **Albums**
+and **Playlists** (card grids), each with a **Show all** that switches the filter and loads the full
+category. The "All" view is built from the same per-category searches the dropdown uses, so a song row on
+the page is identical to one in the dropdown (same metadata and ordering). Recent searches are shown when
+the query is empty. Filter chips still switch between all and a single category.
+
 ### Browser-style navigation (2026-10-20)
 
 Navigation moved out of the page and into the titlebar: **Back** and **Forward** buttons
