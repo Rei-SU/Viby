@@ -450,9 +450,13 @@ git commit -m "chore(release): 0.2.0"
 
 # 2. write the notes, tag the tested commit, push main and the tag together
 $EDITOR /tmp/viby-0.2.0-notes.md
-git tag -a v0.2.0 -F /tmp/viby-0.2.0-notes.md
+node scripts/check-release-notes.mjs /tmp/viby-0.2.0-notes.md
+git tag -a v0.2.0 --cleanup=verbatim -F /tmp/viby-0.2.0-notes.md
 git push origin main v0.2.0
 ```
+
+`--cleanup=verbatim` is required: without it git treats lines starting with
+`#` as comments and silently deletes every `### Added` heading.
 
 Before tagging:
 
@@ -462,7 +466,7 @@ Before tagging:
 - [ ] a hands-on pass of the changed flows;
 - [ ] `package.json` version matches the intended tag exactly;
 - [ ] no `wip`/`tmp` commits in the range: `git log --oneline vLAST..HEAD`;
-- [ ] the annotated tag message carries the release notes and reads well
+- [ ] the notes pass `node scripts/check-release-notes.mjs` and read well
       (see §4.3).
 
 ### 4.3 Release notes are the changelog
@@ -470,9 +474,15 @@ Before tagging:
 The release notes are the **annotated tag message**. They are written once,
 travel with the exact commit they describe, and become the GitHub release body
 verbatim; there is no separate changelog file to keep in sync. `prepare-release`
-refuses a tag without a grouped section, so a release cannot ship blank.
+runs `scripts/check-release-notes.mjs`, which refuses the tag when a section is
+missing or empty, or when the text mentions internals such as hashes, manifests,
+build tooling or logs. A release cannot ship blank or debugging notes.
 
-One line per user-visible change, in user language, grouped as
+Write for the person using the app: what they can do now, what behaves
+differently, what no longer goes wrong. Not how it is implemented. If a line
+only makes sense to someone reading the code, it belongs in the commit message.
+
+One line per user-visible change, grouped as
 **Added / Changed / Fixed / Removed / Security**. No commit hashes, no
 "miscellaneous improvements". If a release has nothing to list, it was not a
 release.
@@ -492,8 +502,8 @@ These are not preferences; the workflow depends on them:
 - Tag `v*` is the only trigger. Every asset is produced by the workflow: no
   hand uploads, no hand-renamed files in a release.
 - `prepare-release` verifies `tag == package.json`, extracts the annotated tag
-  message as the release notes, then creates or reuses a **draft** and clears
-  stale assets.
+  message as the release notes, runs the release-notes lint, then creates or
+  reuses a **draft** and clears stale assets.
 - Platform jobs upload into that draft; the release is published only after
   **all** platforms succeed, so a half-built release is never public.
 - macOS ships exactly two DMGs — `Viby-macos-arm.dmg` (Apple Silicon) and

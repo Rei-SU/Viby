@@ -37,17 +37,25 @@ publishes everything to a GitHub Release for that tag via
 
 1. Bump `version` in `package.json` and commit — it must match the tag.
 2. Run the relevant tests.
-3. Write the release notes in a temporary file and tag the tested commit:
+3. Write the release notes in a temporary file (see below) and tag the tested
+   commit:
 
    ```bash
-   git tag -a vX.Y.Z -F /tmp/viby-X.Y.Z-notes.md
+   node scripts/check-release-notes.mjs /tmp/viby-X.Y.Z-notes.md
+   git tag -a vX.Y.Z --cleanup=verbatim -F /tmp/viby-X.Y.Z-notes.md
    git push origin main vX.Y.Z
    ```
 
-The annotated tag message becomes the release body, with a compare link to the
-previous tag appended by the workflow. A tag without a grouped `### ` section
-fails before the draft is created, and there is no separate changelog file to
-keep in sync.
+The notes are for people using Viby: what they can do now, what changed, or
+what stopped going wrong. Do not mention internal components, hashes, build
+steps or logs; keep it to what a user would notice. The workflow runs
+`scripts/check-release-notes.mjs` before creating the draft and rejects
+missing, empty or unknown sections and internal jargon.
+
+`--cleanup=verbatim` matters: without it, git strips lines starting with `#`,
+including every `### Added` heading. The annotated tag message becomes the
+release body, with a compare link to the previous tag appended by the workflow.
+There is no separate changelog file to keep in sync.
 
 Without update signing (below), no secrets are required: the workflow uses the
 repository's built-in `GITHUB_TOKEN`. If publishing fails with 403, set

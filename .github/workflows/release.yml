@@ -3,7 +3,9 @@ name: Release
 # Push a v* tag -> build macOS (Intel + Apple Silicon) and Windows and publish
 # everything to a GitHub Release for that tag. To cut a release:
 #   1. Bump version in package.json and commit (it must match the tag).
-#   2. git tag vX.Y.Z && git push origin vX.Y.Z
+#   2. Write user-facing notes, then tag and push:
+#      git tag -a vX.Y.Z --cleanup=verbatim -F notes.md
+#      git push origin vX.Y.Z
 #
 # Race-free publish: prepare-release creates the release as a DRAFT first; the
 # platform jobs then *find* it (never create) and upload into it; the release
@@ -44,16 +46,14 @@ jobs:
           fi
 
       # The annotated tag carries the release notes: they ship with the exact
-      # commit they describe, with no separate file to maintain. A tag without
-      # a grouped section fails here, before the draft exists.
-      - name: Build release notes from the annotated tag
+      # commit they describe, with no separate file to maintain. The lint
+      # rejects missing/empty sections and internal jargon, so a release
+      # cannot ship debugging notes.
+      - name: Build and check release notes from the annotated tag
         run: |
           git fetch --tags --force --quiet
           git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > release-notes.md
-          if ! grep -q '^### ' release-notes.md; then
-            echo "::error::Tag $GITHUB_REF_NAME has no release notes. Re-tag it with -a -F <notes>."
-            exit 1
-          fi
+          node scripts/check-release-notes.mjs release-notes.md
           PREVIOUS=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
           if [ -n "$PREVIOUS" ]; then
             printf '\n---\n\n**Full changelog:** https://github.com/%s/compare/%s...%s\n' \

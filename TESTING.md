@@ -59,6 +59,7 @@ ones that touch main-process modules.
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
 | `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks, cancel, skipped versions, Ed25519 manifest verification, signed-hash hand-off |
+| `release-notes` | release-notes lint: allowed sections, empty/missing/duplicate sections, internal jargon, CRLF |
 
 ### Manual update smoke test (Windows, real hardware)
 
@@ -139,7 +140,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/cache/**`, `src/main/media.ts`, `viby-media://` handler | e2e `playback`, `resume` |
 | `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | e2e `settings`, `playback` (volume restore) · behaviour |
 | `src/main/updater*.ts`, `release-feed.ts`, `update-manifest.ts`, `src/renderer/lib/updates.svelte.ts` | unit `version`, `updates` · manual update smoke test (Windows) |
-| `.github/workflows/release.yml` | inspect the draft release body on the next tag |
+| `.github/workflows/release.yml`, `scripts/check-release-notes.mjs` | unit `release-notes` · inspect the draft release body on the next tag |
 | `src/main/json-store.ts` | unit `library` · e2e `library`, `resume` |
 | `src/main/downloads/**`, `src/main/network.ts` | unit `downloads-store`, `downloads-manager`, `network` · e2e `offline`, `playback` |
 | `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `OfflineHome` | e2e `offline`, `playback`, `navigation` · unit `download-groups` |
