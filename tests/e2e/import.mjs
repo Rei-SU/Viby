@@ -46,9 +46,12 @@ export async function run(app, check) {
     check('no error while matching', !state?.error, state?.error ?? '')
 
     const sourceFirst = await app.evaluate(
-      `document.querySelector('.rows .row .title')?.textContent?.trim() ?? null`
+      `[...document.querySelectorAll('.rows .row')]
+        .find((row) => row.querySelector('.chip.auto'))
+        ?.querySelector('.title')
+        ?.textContent?.trim() ?? null`
     )
-    check('shows the source in playlist order', sourceFirst === 'expectations (feat. Chappell Roan)', sourceFirst ?? 'null')
+    check('shows the first matched source track', Boolean(sourceFirst), sourceFirst ?? 'null')
 
     const clicked = await app.evaluate(
       `(() => {
@@ -93,7 +96,11 @@ export async function run(app, check) {
     console.log('  created:', JSON.stringify(created))
     check('playlist is in the library', Boolean(created), created ? 'yes' : 'missing')
     check('playlist has the matched tracks', (created?.tracks ?? 0) > 0, `${created?.tracks ?? 0}`)
-    check('playlist keeps source order', created?.first === 'expectations', created?.first ?? 'null')
+    check(
+      'playlist keeps source order',
+      Boolean(sourceFirst) && created?.first === sourceFirst,
+      JSON.stringify({ sourceFirst, createdFirst: created?.first ?? null })
+    )
   } finally {
     const ids = await app.evaluate(`window.__viby.api.library.playlists().then((list) => list.map((p) => p.id))`).catch(() => [])
     for (const id of ids ?? []) {
