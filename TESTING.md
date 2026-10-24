@@ -165,6 +165,17 @@ Find the row for what you changed; run what it lists.
 | `scripts/fetch-runtime.mjs`, `src/main/ytdlp/binary.ts` | unit `resolver` (asserts the vendored runtime) · packaged smoke test (below) |
 | `scripts/make-icons.py`, `resources/icon.*`, `src/main/menu.ts` | `npm run icons` · `npm run dist:dir` · check `CFBundleIconFile` and the packaged menu name |
 
+## Windows notes
+
+- **Local packaging** needs Developer Mode enabled (Settings → Privacy & security →
+  For developers → Developer Mode), otherwise electron-builder cannot extract the
+  `winCodeSign` archive (it contains macOS symlinks). CI runners already have it on.
+- **Environment variables** in PowerShell use `$env:NAME='value'`, not the POSIX
+  `NAME=value` form. Example: `$env:VIBY_DEBUG_PORT='9222'; npm run dev`.
+- **`npm run icons`** and **`npm run measure`** are macOS-only (iconutil / `ps`).
+- The unit runner (`tests/unit.mjs`) now resolves esbuild via Node and writes
+  bundles to the OS temp dir, so it runs on Windows too.
+
 ## What the suites cannot check
 
 - **The OS media keys / Now Playing panel** — needs a human.
