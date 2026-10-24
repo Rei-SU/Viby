@@ -87,7 +87,8 @@ Packaged builds need no Python install, no configuration file and no first-run s
 Viby is a public beta. The core is in place; the edges are still being sanded.
 
 - Signed and notarized macOS builds (which also enable in-place macOS updates)
-- Windows 10 validation on real hardware (Windows 11 passes, including offline/downloads and in-client updates)
+- Windows 10 validation on real hardware
+- Windows 11 Electron 45 re-check (Electron 37 checks pass, including offline/downloads and in-client updates)
 - Manual search for import rows that don't match automatically
 - Album and single links in the importer
 - Virtualized lists for playlists with thousands of tracks
