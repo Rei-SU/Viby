@@ -65,6 +65,9 @@ Measured in the running app:
 **Files:** `src/main/windows.ts` (`titleBarStyle: isMac ? 'hiddenInset' : 'default'`),
 `src/renderer/App.svelte` (`.titlebar`)
 
+**Status:** Fixed in commit `26be262` and verified on Windows 11 — window drags
+correctly, overlay buttons present, no native caption remaining.
+
 **Fix direction:** either (a) `titleBarStyle: 'hidden'` + `titleBarOverlay: true`
 on Windows (keeps native min/max/close overlaid on the web titlebar — Windows 11;
 needs a fallback for Windows 10), or (b) drop the custom titlebar on Windows and
@@ -111,17 +114,12 @@ child, but any grandchild (e.g. a spawned ffmpeg) is not killed. Also
 
 ## 4. UI / platform-specific code
 
-### 4.1 Media keys / Now Playing via `navigator.mediaSession` — Unverified
-The player relies entirely on `navigator.mediaSession` for OS media keys and the
-Now Playing panel on both platforms. On Windows this maps to SMTC, which needs a
-packaged app with a proper AppUserModelID to show artwork/title in the taskbar
-overlay. In dev (and possibly in unsigned builds) media keys may not register.
-Also no `globalShortcut` fallback exists.
+### 4.1 Media keys / Now Playing via `navigator.mediaSession` — Verified
+Manual test on a packaged Windows 11 build confirmed media keys and the Now
+Playing panel (with artwork) work through SMTC. No `globalShortcut` fallback
+needed. No change required.
 
 **File:** `src/renderer/lib/player.svelte.ts` (`setMediaHandlers`)
-**Fix direction:** manual test on a packaged build; consider registering
-`MediaPlayPause`/`MediaNextTrack`/`MediaPreviousTrack` global shortcuts as a
-fallback on Windows.
 
 ### 4.2 `menu.ts` removes all menus on Windows — Minor
 `Menu.setApplicationMenu(null)` on Windows removes Ctrl+C/V/X/A/Z accelerators
@@ -250,9 +248,18 @@ listening" then exit). Work around with `--user-data-dir=<temp>`.
 
 ---
 
-## 9. Not covered by this pass
+## 9. Verified on Windows 11 (manual, real hardware)
 
-- Real-hardware playback audibility, media keys, window drag/resize, memory budget.
-- In-place NSIS update (manual smoke test).
-- Windows 10 (only Windows 11 was available).
+- Window moves when dragging the titlebar (frameless + `backdrop-filter` drag
+  works).
+- Media keys / Now Playing panel (SMTC) with artwork.
+- In-place NSIS update (manual smoke test) installs and relaunches.
+- `backdrop-filter` glass panels render without black/white flicker.
+- Audio is audible.
+
+## 10. Not covered by this pass
+
+- Windows 10 (only Windows 11 was available) — titlebar overlay and SMTC
+  behaviour should be re-checked there.
+- Memory/CPU budget (`measure.mjs` is macOS-only).
 - Installer signature/notarisation (not applicable to Windows).
