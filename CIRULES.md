@@ -507,7 +507,7 @@ These are not preferences; the workflow depends on them:
 - Platform jobs upload into that draft; the release is published only after
   **all** platforms succeed, so a half-built release is never public.
 - macOS ships exactly two DMGs — `Viby-macos-arm.dmg` (Apple Silicon) and
-  `Viby-macos-intel.dmg` — and no update artifacts until signing exists.
+  `Viby-macos-intel.dmg` — and no macOS auto-update artifacts (zip/blockmap) until signing exists.
   Windows ships `Viby-windows-x64.exe`, its `.blockmap` and `latest.yml`
   (§3.13).
 - The publish job checks out the repository to sign the update manifest; `gh`
@@ -527,8 +527,10 @@ never the same `latest.yml` that stable clients poll.
 ### 4.6 Signing status (known limitation)
 
 macOS builds are unsigned (`identity: null`). Users must right-click → Open on
-first launch, and macOS auto-update stays disabled until a Developer ID
-certificate and notarization are in place. Windows auto-update works unsigned.
+first launch, and in-place macOS updates stay disabled until a Developer ID
+certificate and notarization are in place; installed builds still check GitHub
+Releases and open the matching DMG manually. Windows updates install in place
+while unsigned.
 This is documented in [`PLAN.md`](PLAN.md) §2.1; it MUST be mentioned in the
 release notes of every macOS release while it remains true.
 
@@ -585,7 +587,8 @@ product. Treat them as a public API.
   how fork PRs get your token. Use `pull_request` for untrusted code.
 - **Secrets** come from `secrets.*`, are never echoed, and are absent from
   fork PR runs by design. The release path uses the built-in `GITHUB_TOKEN`;
-  update signing, when enabled, adds `VIBY_UPDATE_KEY` (see CONTRIBUTING.md).
+  update signing uses `VIBY_UPDATE_KEY`, and publishing fails without it once
+  a public key is pinned (see CONTRIBUTING.md).
 - Workflow files are production code: they get the same review, and a change
   to publishing MUST be tested on a throwaway tag before the real release.
 

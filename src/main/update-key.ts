@@ -1,12 +1,13 @@
 /**
  * Ed25519 public key (base64 SPKI) for `update-manifest.json`.
  *
- * Empty until the maintainer generates a key and commits this file:
+ * A key is pinned here. Releases must carry a manifest signed by its private
+ * counterpart (`VIBY_UPDATE_KEY` in CI) or this build fails closed. To replace
+ * it for a fork or a deliberate rotation:
  *
- *   node scripts/update-manifest.mjs generate
+ *   node scripts/update-manifest.mjs generate --force
  *
- * Without it, this build cannot verify a published manifest and falls back to
- * GitHub's asset digest / TLS — still safe against corruption, not against a
- * compromised repository.
+ * Rotating strands already-installed builds: their pinned key will reject the
+ * new manifest.
  */
 export const UPDATE_PUBLIC_KEY = 'MCowBQYDK2VwAyEAm1zE+wj7lkKH7or9x3KSaShzbIcKTlEgOqbB674RltU='

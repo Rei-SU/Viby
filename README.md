@@ -86,7 +86,7 @@ Packaged builds need no Python install, no configuration file and no first-run s
 
 Viby is a public beta. The core is in place; the edges are still being sanded.
 
-- Signed and notarized macOS builds, plus in-app updates
+- Signed and notarized macOS builds (which also enable in-place macOS updates)
 - Windows 10/11 validation on real hardware
 - Manual search for import rows that don't match automatically
 - Album and single links in the importer

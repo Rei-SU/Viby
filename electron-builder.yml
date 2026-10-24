@@ -29,14 +29,14 @@ asar: true
 mac:
   icon: resources/icon.icns
   target:
-    # DMG only: the zip artifacts macOS auto-update needs (electron-updater on
-    # mac updates from zip, not dmg) will be added back when in-app updates
-    # are wired — which also requires code signing, see PLAN §2.1.
+    # DMG only: the zip artifacts macOS in-place updates need (electron-updater
+    # on mac updates from zip, not dmg) return with Developer ID signing, which
+    # those updates also require. See PLAN §2.1.
     - target: dmg
       arch: [x64, arm64]
   category: public.app-category.music
   # Unsigned on purpose: signing needs a paid Apple Developer account.
-  # See PLAN §2.1 — macOS auto-update requires signing, Windows does not.
+  # See PLAN §2.1 — in-place macOS updates require signing, Windows does not.
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
@@ -47,8 +47,8 @@ dmg:
   # (arm64 -> arm, x64 -> intel happens in the release workflow, since
   # artifactName templates cannot map arches.)
   artifactName: ${productName}-macos-${arch}.${ext}
-  # No .dmg.blockmap and no latest-mac.yml: macOS auto-update needs signing
-  # and a zip target, so until that is wired the release carries the two
+  # No .dmg.blockmap and no latest-mac.yml: macOS in-place updates need signing
+  # and a zip target, so until signing is available the release carries the two
   # installers only. Windows keeps its latest.yml — it updates unsigned.
   writeUpdateInfo: false
 

@@ -82,7 +82,7 @@ async function generate() {
   console.log('  Name:  VIBY_UPDATE_KEY')
   console.log(`  Value: the entire contents of ${keyFile}`)
   console.log('')
-  console.log('Until that secret exists, releases publish without a signed manifest.')
+  console.log('Once a key is pinned, the release workflow refuses to publish without this secret.')
 }
 
 async function signRelease(dir) {

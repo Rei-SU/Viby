@@ -9,11 +9,11 @@ name: Release
 #
 # Race-free publish: prepare-release creates the release as a DRAFT first; the
 # platform jobs then *find* it (never create) and upload into it; the release
-# goes live only after both platforms finish and (optionally) the update
-# manifest is signed. Uses the built-in GITHUB_TOKEN, plus VIBY_UPDATE_KEY when
-# update signing is configured (see CONTRIBUTING.md). If a publish step fails
-# with 403, switch Actions -> General -> Workflow permissions to
-# "Read and write".
+# goes live only after both platforms finish and the update manifest is signed.
+# Uses the built-in GITHUB_TOKEN plus VIBY_UPDATE_KEY. Because a public key is
+# pinned, the publish job refuses to go live without that secret (see
+# CONTRIBUTING.md). If a publish step fails with 403, switch Actions -> General
+# -> Workflow permissions to "Read and write".
 on:
   push:
     tags:

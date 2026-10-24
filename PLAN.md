@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-22 (rev 5)
+Last updated: 2026-10-24 (rev 6)
 
 ---
 
@@ -28,7 +28,7 @@ Every decision below came from you, with the technical consequence I derived fro
 | 14 | Shell | Slim sidebar + art-forward heroes | Apple Music feel, still navigable |
 | 15 | OS integration | Media keys + Now Playing, no tray/mini-player | `navigator.mediaSession` — no native code |
 | 16 | Quality | User-selectable, default best, **never auto-downgrade** | Honour the setting exactly; buffer rather than reduce bitrate |
-| 17 | Delivery | Auto-update via GitHub Releases | Release builds are automated: pushing a `v*` tag builds macOS (Intel + Apple Silicon) and Windows and publishes to GitHub Releases. In-app updates are still not wired: Windows can auto-update unsigned; macOS must notify + one-click download until signing is available (see §2.1) |
+| 17 | Delivery | Auto-update via GitHub Releases | Release builds are automated: pushing a `v*` tag builds macOS (Intel + Apple Silicon) and Windows and publishes to GitHub Releases. Windows installs updates in place; macOS notifies, downloads and opens the DMG because an unsigned build cannot self-update (see §2.1). |
 | 18 | Distribution | Public beta on GitHub; built for me and a few friends first | Installers, first-run setup, graceful upstream failure |
 | 19 | Name | Viby | Bundle ID, installers, window title |
 | 20 | Deferred | No EQ, gapless, crossfade, sleep timer, scrobbling, Discord, stats, sync, mobile | Kept out of v1 deliberately; accounts/sync and mobile are planned post-v1, not abandoned. |
@@ -44,7 +44,7 @@ Five assumptions that "obviously work" in most music-app plans do not. Verified 
 
 **2.1 — macOS in-place auto-update requires code signing.** Squirrel.Mac validates the downloaded app against the running app's designated requirement. Our build is only linker-signed ad-hoc, and its requirement is a `cdhash` that changes with every build (verified: `codesign -d --requirements`), so Squirrel can never accept the next version. Windows NSIS auto-update works unsigned. macOS therefore downloads the correct DMG from GitHub and opens it — one drag, no release page. In-place macOS updates return with a Developer ID signature and notarization.
 
-Updates are integrity-checked on both platforms: when a release carries `update-manifest.json`, its Ed25519 signature is verified against a key compiled into the app, and the installer's sha256 must match the signed manifest. Once a key is pinned, a missing manifest, bad signature or hash mismatch fails closed (CONTRIBUTING explains the one-time key setup). Until then the GitHub asset digest over TLS is the fallback.
+Updates are integrity-checked on both platforms: `update-manifest.json` is signed with Ed25519, verified against the public key pinned in `src/main/update-key.ts`, and the installer's sha256 must match the signed manifest. A missing manifest, bad signature or hash mismatch fails closed. The key is already pinned; releases require the matching `VIBY_UPDATE_KEY` secret in CI, and the publish job refuses to go live without it. Builds without a pinned key fall back to GitHub's asset digest over TLS; the shipped build does not.
 
 **2.2 — Media keys must go through `navigator.mediaSession`.** Electron's `globalShortcut` has a long-standing broken-on-macOS bug for media keys, while `mediaSession` is a standard Chromium feature that populates macOS Now Playing and Windows SMTC with zero native code.
 
@@ -138,7 +138,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 | Audio | Single `<audio>` + Chromium decoder | Native decode = no extra CPU; `mediaSession` gives OS integration free |
 | Resolution | Bundled `yt-dlp` (+ PO-token provider) | §2.3, §2.4 |
 | Lyrics | lrclib.net + lyrics.ovh (no keys, no registration) | Verified free; LRCLIB supplies synced lyrics, lyrics.ovh the plain-text backup |
-| Packaging | electron-builder; electron-updater installed for the planned update flow | NSIS on Windows, DMG/zip on macOS |
+| Packaging | electron-builder; electron-updater drives in-place Windows updates | NSIS on Windows; DMG on macOS (manual update install until Developer ID signing) |
 
 **Deliberately not used:** React/Redux (runtime cost buys nothing here), any UI kit, Prisma/TypeORM, `better-sqlite3` (native rebuild risk for no benefit over `node:sqlite`), Web Audio graph (adds CPU until an EQ exists), `hls.js` (extra decode path), Tailwind (a handful of CSS custom properties is lighter).
 
@@ -166,7 +166,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 
 ### 5.3 Browse & categories
 - Home shelves from YouTube Music, including chart and mood carousels when they are surfaced.
-- Moods & genres from YT Music's surfaces, drilled into playlists.
+- Dedicated moods/genres browsing is deferred (see §9 P4); only the shelves YouTube Music surfaces on Home are present.
 - Home: recently played plus YouTube Music's home shelves; artist, album, playlist and song pages open from any card or row.
 
 ### 5.4 Library
@@ -254,11 +254,11 @@ Cache-worthiness rule (keeps the cache useful instead of full): a track is cache
 | R1 | YouTube PO-token / SABR enforcement blocks anonymous stream URLs | Playback fails for affected tracks | Prefer `yt-dlp`'s default client selection (measured best on 2026-10-18); pin clients only as fallback; accept `https` progressive formats only and fall back to download-to-cache for SABR-only tracks; bundle the `bgutil` PO-token provider so tokens are generated locally; keep `yt-dlp` auto-updating; **break-glass**: optional cookie import in Advanced settings | Medium-high. **Verified working 2026-10-18** with no PO token and no cookies (see §2.4) — but only via the default client selection, and `m3u8_native` audio had to be rejected to keep playback honest. Note the app's managed binary is **2026.08.19**, newer than the 2026.03.17 on `PATH`. Expect occasional multi-day windows needing a plugin update — the provider slot in `resources/yt-dlp-plugins/` is pre-wired for exactly that. Still the single biggest existential risk. |
 | R2 | InnerTube constants (API key, client version) rotate | Search/browse errors | All constants in one patchable config file; fall back to `yt-dlp` metadata for search; overridable without a new build | Low |
 | R3 | IP rate-limiting / bot checks from heavy use | Throttled or blocked | Aggressive caching (2h URL cache, bounded audio cache), a resolve only when playback needs one, prefetch limited to the single next track, polite user agent, request pacing with exponential backoff, concurrency cap | Low for personal use |
-| R4 | macOS auto-update impossible unsigned | No silent updates on your main machine | No update path is wired yet. When it is, Windows can auto-update unsigned and macOS must check GitHub Releases and show a one-click download. Flipping to signed later enables silent macOS updates. | Accepted |
+| R4 | macOS auto-update impossible unsigned | No silent updates on your main machine | Wired: Windows checks, downloads and installs in place; macOS checks GitHub Releases, downloads the matching DMG and opens it. Silent macOS updates remain blocked until Developer ID signing/notarization. | Accepted |
 | R5 | Apple Music import depends on scraping | Import breaks | Keep each adapter isolated; failures are per-track and the rest of the import continues. | Accepted |
 | R6 | Spotify embed truncates long playlists | Partial import | Anonymous-token bootstrap pages past the embed limit; the review screen reports the track count, and the embed's first 100 remain a fallback. | Low |
 | R7 | SoundCloud `client_id` rotation | Import breaks | Re-extract from the web-player JS on failure; per-track failures continue the batch. | Low |
-| R8 | Update manifests need a signing key | Release pipeline cannot auto-update | Not wired yet. When update work starts, generate a free Ed25519 keypair once and store it in CI secrets. | None |
+| R8 | Update manifests need a signing key | Release pipeline cannot auto-update | Done: an Ed25519 key is generated and its public half is pinned in `src/main/update-key.ts`; CI must hold the private half as `VIBY_UPDATE_KEY`. The publish job fails closed if the secret is missing. Rotating the key strands installed builds. | Low — depends on the CI secret staying available |
 | R9 | ~~`safeStorage` prompts on unsigned builds~~ | — | **Eliminated** — no credentials are stored anywhere | None |
 | R10 | Electron RAM creep | Breaks the core requirement | The budget table is enforced; dependency additions must be justified. Runtime deps: one. | Low |
 | R11 | Legal / ToS | Takedown or account risk | Public beta on GitHub, no monetisation, no DRM circumvention; `yt-dlp` is Unlicense. A wider release would invite DMCA pressure — re-plan then. | Accepted, your call |
@@ -340,11 +340,10 @@ Full fallback chain, synced auto-scroll, click-to-seek, permanent caching.
 *Acceptance:* paste a public Spotify/Apple Music/Deezer/YouTube Music/SoundCloud playlist; the source
 appears, tracks are matched or visibly flagged, and the playlist is created in source order. Verified:
 Today's Top Hits (50) → 48 auto / 2 review / 0 missing; a 951-track YouTube playlist imports in ~11s.
-Not in this slice: moods/genres browsing, private/collaborative Spotify playlists, Liked Songs. The
-CSV/text floor was dropped by decision (link-only interaction).
+Deferred beyond this slice: moods/genres browsing, private/collaborative Spotify playlists, and Liked Songs. The CSV/text floor was dropped by decision (link-only interaction).
 
 **P5 — Ship. Partially done.**
-Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. Still missing: signing/notarization (which also enables in-place macOS updates), the one-time update-signing key setup, and Windows validation on real hardware.
+Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. Still missing: signing/notarization (which also enables in-place macOS updates) and Windows validation on real hardware. The update-signing key is generated and pinned in `src/main/update-key.ts`; CI must provide its private half as `VIBY_UPDATE_KEY`, or the release workflow refuses to publish.
 
 *Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. Not yet verified.
 
@@ -355,16 +354,16 @@ Scope: optional accounts with end-to-end encrypted backup and sync of favorites,
 
 *Acceptance:* two machines signed into the same account converge on the same library after an offline edit, and signing out leaves a complete, usable local library. Export and account deletion need no support ticket.
 
-**P7 — Offline mode and downloads. Shipped (P7a–P7c); P7d hardening remains.**
+**P7 — Offline mode and downloads. Shipped (P7a–P7c); P7d's packaged/manual pass remains.**
 The full specification and current behavior are in §17. Connectivity + offline shell, the download engine, Library integration, collections, artwork and the offline Search notice are all shipped.
 
-*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs. Met in macOS tests; Windows hardware validation remains.
+*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs. Met in macOS development tests; the packaged/manual pass and Windows hardware validation remain (P7d).
 
 ## 10. Open items
 
-Settled: cache cap (1GB), quality policy (never downgrade), Spotify (no credentials), phase order (skip spike, straight to P1), language (English), charts (global), accounts (optional, local-first, post-v1 — see §9 P6), repeat-one (restarts the track), and history retention (last 5,000 plays).
+Settled: cache cap (1GB), quality policy (never downgrade), Spotify (no credentials), phase order (skip spike, straight to P1), language (English), charts (dedicated page removed; shelves stay in Home), accounts (optional, local-first, post-v1 — see §9 P6), repeat-one (restarts the track), and history retention (last 5,000 plays).
 
-No blocking product questions remain; P5 and P6 track the remaining work.
+No blocking product questions remain; P5, P7d's packaged/manual pass and P6 track the remaining work.
 
 ## 11. Build notes and gotchas
 
@@ -373,7 +372,7 @@ Things that cost time, recorded so they don't cost it twice.
 - **npm 11 gates install scripts.** The repo's `allowScripts` covers `electron@45.0.0` and `esbuild`, so a fresh `npm install` gets a working Electron binary. Optional `fsevents` and `electron-winstaller` scripts stay blocked; neither is needed for macOS development or NSIS packaging. When Electron moves, update the version-pinned entry.
 - **No native modules, on purpose.** `better-sqlite3` would need a node-gyp rebuild. Electron 45 ships Node 24, so `node:sqlite` is available, but these stores are small and JSON-shaped; atomic JSON remains the simpler, crash-safe fit. P1 therefore uses atomic JSON stores.
 - **Cached audio is served over `viby-media://`, not `file://`.** Chromium blocks `file://` media from an http origin, and the usual workaround is disabling `webSecurity`. Registering a privileged custom scheme avoids that trade entirely — every security flag stays on.
-- **Runtime dependencies: exactly one** (`electron-updater`, installed but not wired yet). Everything else is dev-time, which is what keeps the RAM budget honest.
+- **Runtime dependencies: exactly one** (`electron-updater`, wired for in-place Windows updates). Everything else is dev-time, which is what keeps the RAM budget honest.
 - **Media keys route through `mediaSession`, not `globalShortcut`.** `globalShortcut` media-key registration is broken on macOS (a long-standing Electron bug); everything goes through `navigator.mediaSession`, which also gives us Now Playing and Windows SMTC for free.
 - **The dev log** is the terminal running `npm run dev`; renderer console output is forwarded there by `windows.ts`.
 - **`yt-dlp` exits 1 and prints the string `null` on stdout when a video fails.** Checking `code !== 0 && !stdout.trim()` is not enough — `"null"` is non-empty, so it parses to `null` and crashes the caller. Always treat `code !== 0`, empty output, **or literal `null`** as failure, and read the reason from stderr.
@@ -773,7 +772,7 @@ Shipping contract: install and play. The user never installs Python and never se
 
 ## 17. Offline mode and downloads (shipped)
 
-Status: shipped 2026-10-22 (`2059183`, `86abfe4`). P7a–P7c are complete; P7d hardening and Windows validation remain. The specification below describes the current app.
+Status: shipped 2026-10-22 (`2059183`, `86abfe4`). P7a–P7c are complete; P7d's automated coverage is in place, but its packaged/manual pass and Windows hardware validation remain. The specification below describes the current app.
 
 ### 17.1 The distinction that drives everything
 
@@ -972,12 +971,12 @@ Storage/index, manager, progress, per-song action, Library integration (songs + 
 Album/playlist/Liked actions with coverage and partial re-download; grouped Library with downloaded filters and badges; reference-based pruning; offline artwork for saved collections; faded unavailable rows; Search offline notice; settings copy; low-disk warnings; queue polish.
 *Acceptance:* download a playlist and play it fully offline; a saved but undownloaded playlist still opens offline with cached art, all rows visible and non-downloaded rows faded; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; Search shows the offline notice until the connection returns.
 
-**P7d — Hardening. In progress.**
-Offline e2e and docs are in place. Network flapping, failed-download recovery, quit mid-download, long playlists and Windows hardware validation still need the manual/packaged pass.
+**P7d — Hardening. Packaged/manual pass pending.**
+Offline e2e, failure-classification tests and docs are in place. Network flapping, failed-download recovery, quit mid-download, long playlists and Windows hardware validation still need the manual/packaged pass; automated tests do not replace it.
 
 ### 17.9 Test coverage
 
-**Unit (`node tests/unit.mjs`):** `downloads-store` (index healing, reference add/remove, file deletion, path safety, disk guard), `downloads-manager` (queue state machine, progress parser, unknown totals, cache/download dedupe), `network` (state machine with injected `isOnline`/probe results and debounce), `download-groups`, `library-items`, `player-source`, `images`.
+**Unit (`node tests/unit.mjs`):** `downloads-store` (index healing, reference add/remove, file deletion, path safety, disk guard), `downloads-manager` (queue state machine, progress parser, transient vs permanent failure classification, unknown totals, cache/download dedupe), `network` (state machine with injected `isOnline`/probe results and debounce), `download-groups`, `library-items`, `player-source`, `images`.
 
 **E2E (`tests/e2e/offline.mjs`)** uses the manual switch, so it never depends on the machine's real network. It covers: local-first Home, the offline pill, disabled Import, the Charts page staying gone, the offline Search page, downloaded playback when the profile has a download, Library filters and badges, and reconnect. It deliberately does not download through yt-dlp.
 
