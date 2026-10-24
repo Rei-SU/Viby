@@ -218,8 +218,12 @@ input[type='range']::-webkit-slider-thumb:active {
   *,
   *::before,
   *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
+    /* Transitions (hover lifts, panel slides, grid reflows) become instant so
+       reduced-motion users do not get motion sickness from UI movement. */
     transition-duration: 1ms !important;
+    /* Animations are deliberately NOT collapsed here: forcing a 1ms duration or
+       a single iteration made loading spinners and the equaliser freeze after
+       one frame, which looked like a stuck state. Short, purposeful animations
+       (toast/panel entrances, spinners) keep their intended timing. */
   }
 }
