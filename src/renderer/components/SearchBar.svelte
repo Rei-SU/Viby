@@ -171,6 +171,8 @@
     }
 
     if (quickFor !== query) {
+      // A response from the previous query must not write into this one.
+      seq += 1
       quick = emptyQuick()
       quickError = null
     }
@@ -191,7 +193,7 @@
     let firstError: string | null = null
 
     const finish = (id: QuickGroupId, data: CatalogItem[] | null, error?: string): void => {
-      if (mine !== seq) return
+      if (mine !== seq || quickFor !== query) return
       if (data) {
         const def = GROUP_DEFS.find((group) => group.id === id)
         const items = def

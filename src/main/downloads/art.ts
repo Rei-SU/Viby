@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { net } from 'electron'
+import { fetchSafeRemoteImage } from '../cache/images'
 import type { DownloadsStore } from './store'
 
 const MAX_ART_BYTES = 6 * 1024 * 1024
@@ -31,18 +31,20 @@ export async function fetchArt(url: string | undefined, store: DownloadsStore): 
   }
 
   try {
-    const res = await net.fetch(url, {
+    const res = await fetchSafeRemoteImage(url, {
       signal: AbortSignal.timeout(ART_TIMEOUT_MS)
     })
     if (!res.ok) return null
 
+    const contentType = (res.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase()
+    if (!contentType?.startsWith('image/')) return null
     const declared = Number(res.headers.get('content-length') ?? 0)
     if (declared > MAX_ART_BYTES) return null
 
     const bytes = new Uint8Array(await res.arrayBuffer())
     if (bytes.byteLength === 0 || bytes.byteLength > MAX_ART_BYTES) return null
 
-    const ext = extensionFor(res.headers.get('content-type') ?? '', url)
+    const ext = extensionFor(contentType, url)
     const name = store.artNameFor(url, ext)
     const dest = join(store.dir, name)
     if (existsSync(dest)) return name

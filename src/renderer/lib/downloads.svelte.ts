@@ -27,8 +27,10 @@ class DownloadsStore {
   snapshot = $state<DownloadsSnapshot | null>(null)
   jobs = $state<Record<string, DownloadJobView>>({})
   loading = $state(false)
+  error = $state<string | null>(null)
 
   private wired = false
+  private lastRevision = 0
 
   get entries() {
     return this.snapshot?.entries ?? []
@@ -54,8 +56,23 @@ class DownloadsStore {
     this.loading = true
     try {
       this.apply(await api.downloads.snapshot())
+      this.error = null
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err)
     } finally {
       this.loading = false
+    }
+  }
+
+  private async mutate(action: () => Promise<DownloadsSnapshot>): Promise<void> {
+    try {
+      this.apply(await action())
+      this.error = null
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err)
+      // The request may have partially applied. Re-read the authoritative index
+      // instead of leaving the UI on an optimistic state.
+      await this.reload()
     }
   }
 
@@ -92,22 +109,22 @@ class DownloadsStore {
   }
 
   async addTrack(track: Track): Promise<void> {
-    this.apply(await api.downloads.addTrack(track))
+    await this.mutate(() => api.downloads.addTrack(track))
   }
 
   async addCollection(input: DownloadCollectionInput, tracks: Track[]): Promise<void> {
-    this.apply(await api.downloads.addCollection(input, tracks))
+    await this.mutate(() => api.downloads.addCollection(input, tracks))
   }
 
   async removeTrack(trackId: string): Promise<void> {
     this.pauseIfPlaying([trackId])
-    this.apply(await api.downloads.removeTrack(trackId))
+    await this.mutate(() => api.downloads.removeTrack(trackId))
   }
 
   async removeCollection(key: string): Promise<void> {
     const collection = this.collections.find((item) => item.key === key)
     if (collection) this.pauseIfPlaying(collection.trackIds)
-    this.apply(await api.downloads.removeCollection(key))
+    await this.mutate(() => api.downloads.removeCollection(key))
   }
 
   async pruneCollection(key: string, trackIds: string[]): Promise<void> {
@@ -116,23 +133,27 @@ class DownloadsStore {
       const keep = new Set(trackIds)
       this.pauseIfPlaying(collection.trackIds.filter((id) => !keep.has(id)))
     }
-    this.apply(await api.downloads.pruneCollection(key, trackIds))
+    await this.mutate(() => api.downloads.pruneCollection(key, trackIds))
   }
 
   async clear(): Promise<void> {
     this.pauseIfPlaying(this.entries.map((entry) => entry.track.id))
-    this.apply(await api.downloads.clear())
+    await this.mutate(() => api.downloads.clear())
   }
 
   async retry(trackId: string): Promise<void> {
-    this.apply(await api.downloads.retry(trackId))
+    await this.mutate(() => api.downloads.retry(trackId))
   }
 
   async cancel(trackId: string): Promise<void> {
-    this.apply(await api.downloads.cancel(trackId))
+    await this.mutate(() => api.downloads.cancel(trackId))
   }
 
   private apply(snapshot: DownloadsSnapshot): void {
+    // A slow snapshot request can resolve after an onChanged event. Revisions
+    // are assigned by main before it awaits stats, so lower means stale.
+    if (snapshot.revision < this.lastRevision) return
+    this.lastRevision = snapshot.revision
     this.snapshot = snapshot
     this.jobs = Object.fromEntries(snapshot.jobs.map((job) => [job.trackId, job]))
   }

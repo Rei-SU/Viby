@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, shell } from 'electron'
 
 export function createWindow(): BrowserWindow {
@@ -52,13 +53,51 @@ export function createWindow(): BrowserWindow {
     win.webContents.on('console-message', onConsoleMessage as never)
   }
 
-  // External links open in the real browser, never inside the app shell.
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  const appFileUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).href
+
+  const isSafeExternal = (url: string): boolean => {
+    try {
+      const parsed = new URL(url)
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+    } catch {
+      return false
+    }
+  }
+
+  const isAppNavigation = (url: string): boolean => {
+    if (url === appFileUrl || url.startsWith(`${appFileUrl}#`)) return true
+    if (!devUrl) return false
+    try {
+      const target = new URL(url)
+      const dev = new URL(devUrl)
+      return target.origin === dev.origin
+    } catch {
+      return false
+    }
+  }
+
+  // External links open in the real browser, never inside the app shell. Only
+  // web schemes are allowed: `shell.openExternal` can otherwise launch local
+  // files, SMB shares or arbitrary protocol handlers.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (isSafeExternal(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  // A navigation would load an arbitrary document into a window that still has
+  // the Viby preload bridge, i.e. full access to downloads and the library.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isAppNavigation(url)) return
+    event.preventDefault()
+    if (isSafeExternal(url)) void shell.openExternal(url)
+  })
+
+  // Nothing in Viby needs camera, microphone, notifications or geolocation.
+  win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => {
+    callback(false)
+  })
+
   if (!app.isPackaged && devUrl) {
     win.loadURL(devUrl)
   } else {

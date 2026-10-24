@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy, onMount } from 'svelte'
   import { playlistPicker as picker } from '../lib/playlist-picker.svelte'
   import { playlists } from '../lib/playlists.svelte'
   import Icon from './Icon.svelte'
@@ -8,13 +9,36 @@
   let added = $state<string | null>(null)
   let closeTimer: ReturnType<typeof setTimeout> | null = null
 
+  function clearCloseTimer(): void {
+    if (closeTimer) clearTimeout(closeTimer)
+    closeTimer = null
+  }
+
   $effect(() => {
+    // A new anchor/track while the panel is open must cancel the previous
+    // "added" auto-close timer, or it will close the new panel.
+    void picker.track
+    clearCloseTimer()
     if (!picker.open) return
     void playlists.load()
     creating = false
     name = ''
     added = null
   })
+
+  onMount(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && picker.open) {
+        event.preventDefault()
+        clearCloseTimer()
+        picker.close()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  onDestroy(clearCloseTimer)
 
   async function add(id: string, label: string): Promise<void> {
     if (!picker.track) return

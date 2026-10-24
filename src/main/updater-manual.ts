@@ -29,13 +29,18 @@ export async function downloadMacInstaller(
   const name = installerName(release.installerUrl)
   const folder = app.getPath('downloads')
   await mkdir(folder, { recursive: true })
-  const file = join(folder, name)
-  // Always start clean: a partial file from an interrupted attempt must never
-  // be mistaken for a finished installer.
-  await rm(file, { force: true })
+  // Version the local filename so an interrupted attempt never deletes the
+  // user's existing installer (or an unrelated file with the same name).
+  const file = join(folder, `Viby-${release.version}-${name}`)
 
-  // The signed manifest wins over the GitHub digest when both exist.
-  const expected = release.artifacts?.[name] ?? release.installerSha256
+  // The signed manifest wins over the GitHub digest when both exist. If a
+  // manifest is present but omits this asset, that is a hard failure; silently
+  // downgrading to the GitHub digest defeats the pinned key.
+  const expectedName = installerName(release.installerUrl)
+  if (release.artifacts && !release.artifacts[expectedName]) {
+    throw new Error('The signed update manifest does not list this installer.')
+  }
+  const expected = release.artifacts?.[expectedName] ?? release.installerSha256
   await download(release.installerUrl, file, expected, onProgress, signal)
 
   const failure = await shell.openPath(file)

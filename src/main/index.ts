@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, protocol } from 'electron'
+import { app, dialog, protocol } from 'electron'
 import { MEDIA_SCHEME } from './media'
 import { handleMediaProtocol, registerIpc } from './ipc'
 import { installMenu } from './menu'
@@ -38,6 +38,19 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
+process.on('uncaughtException', (error) => {
+  console.error('[main] uncaught exception', error)
+  try {
+    dialog.showErrorBox('Viby encountered an error', error.stack || error.message)
+  } catch {
+    // The app may not be ready enough to show a dialog.
+  }
+  app.quit()
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[main] unhandled rejection', reason)
+})
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
@@ -50,27 +63,38 @@ if (!gotLock) {
     }
   })
 
-  app.whenReady().then(() => {
-    // The packaged app gets its icon from the bundle; in development the Dock
-    // would otherwise show the generic Electron icon.
-    if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
-      app.dock.setIcon(join(app.getAppPath(), 'resources', 'icon.png'))
-    }
+  app
+    .whenReady()
+    .then(() => {
+      // The packaged app gets its icon from the bundle; in development the Dock
+      // would otherwise show the generic Electron icon.
+      if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
+        app.dock.setIcon(join(app.getAppPath(), 'resources', 'icon.png'))
+      }
 
-    installMenu()
+      installMenu()
 
-    // Touch settings once so defaults are written on first launch.
-    settings().get()
+      // Touch settings once so defaults are written on first launch.
+      settings().get()
 
-    handleMediaProtocol()
-    registerIpc()
-    createWindow()
+      handleMediaProtocol()
+      registerIpc()
+      createWindow()
 
-    app.on('activate', () => {
-      const { BrowserWindow } = require('electron')
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      app.on('activate', () => {
+        const { BrowserWindow } = require('electron')
+        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      })
     })
-  })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.stack || error.message : String(error)
+      console.error('[startup] failed', message)
+      dialog.showErrorBox(
+        'Viby could not start',
+        'A local data file could not be read. Details:\n\n' + message.slice(0, 1500)
+      )
+      app.quit()
+    })
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()

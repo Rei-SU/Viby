@@ -34,6 +34,7 @@
             tabindex="0"
             onclick={() => player.playAt(i)}
             onkeydown={(event) => {
+              if (event.target !== event.currentTarget) return
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault()
                 player.playAt(i)
@@ -253,7 +254,9 @@
       background var(--speed) var(--ease);
   }
 
-  li:hover .remove {
+  li:hover .remove,
+  li:focus-within .remove,
+  .remove:focus-visible {
     opacity: 1;
   }
 

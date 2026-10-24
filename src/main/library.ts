@@ -56,10 +56,24 @@ export class Library {
       history: [],
       playlists: []
     })
+    const data = this.store.get()
+    if (
+      !Array.isArray(data.favorites) ||
+      !Array.isArray(data.history) ||
+      !Array.isArray(data.playlists)
+    ) {
+      this.store.update((next) => {
+        if (!Array.isArray(next.favorites)) next.favorites = []
+        if (!Array.isArray(next.history)) next.history = []
+        if (!Array.isArray(next.playlists)) next.playlists = []
+      })
+    }
   }
 
   favorites(): Track[] {
-    const stored = this.store.get().favorites
+    const stored = Array.isArray(this.store.get().favorites)
+      ? this.store.get().favorites
+      : []
     const valid = stored.filter(isValidTrack)
     if (valid.length !== stored.length) {
       this.store.update((data) => {
@@ -92,6 +106,7 @@ export class Library {
   addHistory(entry: HistoryEntry): void {
     if (!isValidHistoryEntry(entry)) return
     this.store.update((data) => {
+      if (!Array.isArray(data.history)) data.history = []
       data.history.unshift(entry)
       if (data.history.length > MAX_HISTORY) data.history.length = MAX_HISTORY
     })
@@ -103,6 +118,7 @@ export class Library {
     const drop = new Set(titles)
     let removed = 0
     this.store.update((data) => {
+      if (!Array.isArray(data.history)) data.history = []
       const before = data.history.length
       data.history = data.history.filter((entry) => !drop.has(entry.title))
       removed = before - data.history.length
@@ -111,18 +127,19 @@ export class Library {
   }
 
   history(limit = 100): HistoryEntry[] {
-    return this.store.get().history.filter(isValidHistoryEntry).slice(0, limit)
+    const history = this.store.get().history
+    return (Array.isArray(history) ? history : []).filter(isValidHistoryEntry).slice(0, limit)
   }
 
   /** Feeds the cache-worthiness rule in cache/policy.ts. */
   playCount(trackId: string): number {
-    return this.store.get().history.filter((h) => h?.trackId === trackId).length
+    return this.history(5000).filter((h) => h.trackId === trackId).length
   }
 
   bestCompletion(trackId: string): number {
     let best = 0
-    for (const h of this.store.get().history) {
-      if (h?.trackId === trackId && h.completion > best) best = h.completion
+    for (const h of this.history(5000)) {
+      if (h.trackId === trackId && h.completion > best) best = h.completion
     }
     return best
   }
@@ -130,7 +147,8 @@ export class Library {
   // ---- playlists ---------------------------------------------------------
 
   playlists(): Playlist[] {
-    const stored = this.store.get().playlists ?? []
+    const value = this.store.get().playlists
+    const stored = Array.isArray(value) ? value : []
     const clean = stored
       .filter(isValidPlaylist)
       .map((playlist) => ({ ...playlist, tracks: playlist.tracks.filter(isValidTrack) }))

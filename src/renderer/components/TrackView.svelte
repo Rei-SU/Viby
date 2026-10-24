@@ -22,16 +22,15 @@
 
   $effect(() => {
     const id = track.id
+    // Never leave the previous song's related list visible under a new title.
+    related = []
     const cached = cachedRadio(id)
     if (cached) {
       related = cached.slice(0, 10)
       return
     }
 
-    if (network.localFirst) {
-      related = []
-      return
-    }
+    if (network.localFirst) return
 
     let alive = true
     void api.catalog.radio(id).then((res) => {

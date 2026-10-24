@@ -86,7 +86,10 @@ export async function resolveSoundcloud(url: string, signal?: AbortSignal): Prom
     throw new ImportError('That SoundCloud link is not a playlist (set)')
   }
 
-  const tracks = (res.tracks ?? [])
+  if (!res || typeof res !== 'object' || Array.isArray(res)) {
+    throw new ImportError('SoundCloud returned an unreadable playlist')
+  }
+  const tracks = (Array.isArray(res.tracks) ? res.tracks : [])
     .map(toTrack)
     .filter((track): track is ImportTrack => Boolean(track))
 

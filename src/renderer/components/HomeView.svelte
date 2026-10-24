@@ -4,6 +4,7 @@
   import { isPlayable, player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import { homeShelves } from '../lib/catalog-cache.svelte'
+  import { fitRail } from '../lib/rail-fit'
   import MediaCard from './MediaCard.svelte'
 
   // Shelves live in a store so leaving Home (or visiting a page) does not
@@ -11,6 +12,7 @@
   const page = homeShelves
 
   let recent = $state<CatalogItem[]>([])
+  let recentRequest = 0
 
   $effect(() => {
     if (!page.attempted && !page.loading) void load()
@@ -21,37 +23,50 @@
     page.loading = true
     page.error = null
 
-    const res = await api.catalog.home()
-    if (res.ok) {
-      page.shelves = res.data.filter((s) => s.items.length > 0)
-      player.prefetchList(page.shelves[0]?.items ?? [], 2)
-    } else {
-      page.error = res.error
+    try {
+      const res = await api.catalog.home()
+      if (res.ok) {
+        page.shelves = res.data.filter((s) => s.items.length > 0)
+        player.prefetchList(page.shelves[0]?.items ?? [], 2)
+      } else {
+        page.error = res.error
+        page.shelves = []
+      }
+    } catch (err) {
+      page.error = err instanceof Error ? err.message : String(err)
       page.shelves = []
+    } finally {
+      page.loading = false
     }
-    page.loading = false
   }
 
   async function loadRecent(): Promise<void> {
-    const list = await api.history.list(24)
-    const seen = new Set<string>()
-    recent = list
-      .filter((h: HistoryEntry) => {
-        if (seen.has(h.trackId)) return false
-        seen.add(h.trackId)
-        return true
-      })
-      .map((h: HistoryEntry) => ({
-        id: h.trackId,
-        kind: 'song' as const,
-        title: h.title,
-        subtitle: h.artist,
-        thumbnail: h.thumbnail,
-        artists: h.artist ? [h.artist] : undefined,
-        parts: h.artist ? [{ text: h.artist, artistId: h.artistId }] : undefined
-      }))
+    const request = ++recentRequest
+    try {
+      const list = await api.history.list(24)
+      // The track changed again while this request was in flight.
+      if (request !== recentRequest) return
+      const seen = new Set<string>()
+      recent = list
+        .filter((h: HistoryEntry) => {
+          if (seen.has(h.trackId)) return false
+          seen.add(h.trackId)
+          return true
+        })
+        .map((h: HistoryEntry) => ({
+          id: h.trackId,
+          kind: 'song' as const,
+          title: h.title,
+          subtitle: h.artist,
+          thumbnail: h.thumbnail,
+          artists: h.artist ? [h.artist] : undefined,
+          parts: h.artist ? [{ text: h.artist, artistId: h.artistId }] : undefined
+        }))
 
-    player.prefetchList(recent, 2)
+      player.prefetchList(recent, 2)
+    } catch {
+      // Recently played is a convenience; a failed read leaves the old list.
+    }
   }
 
   $effect(() => {
@@ -103,7 +118,7 @@
   {#if recent.length > 0}
     <section class="shelf">
       <h2>Recently played</h2>
-      <div class="rail">
+      <div class="rail" use:fitRail>
         {#each recent as item (item.id)}
           <MediaCard {item} onActivate={playOne} />
         {/each}
@@ -114,7 +129,7 @@
   {#each page.shelves as shelf, si (shelf.title + si)}
     <section class="shelf">
       <h2>{shelf.title || 'More'}</h2>
-      <div class="rail">
+      <div class="rail" use:fitRail>
         {#each shelf.items as item (item.kind + item.id + item.title)}
           <MediaCard {item} onActivate={(x) => activate(shelf.items, x)} />
         {/each}

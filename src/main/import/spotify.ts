@@ -263,10 +263,13 @@ async function fetchPage(
     errors?: unknown
   }
 
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new SpotifyImportError('Spotify returned an unreadable playlist')
+  }
   if (payload.errors) throw new SpotifyImportError('Spotify rejected the playlist query')
 
   const playlist = payload.data?.playlistV2
-  const items = playlist?.content?.items ?? []
+  const items = Array.isArray(playlist?.content?.items) ? playlist.content.items : []
   return {
     playlist: {
       name: playlist?.name,

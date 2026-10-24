@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { CacheStats, Settings, UpdateState } from '@shared/types'
+  import type { CacheStats, Settings, UpdateState, YtDlpInfo } from '@shared/types'
   import { api } from '../lib/api'
+  import { artwork } from '../lib/artwork.svelte'
   import { player } from '../lib/player.svelte'
   import { downloads } from '../lib/downloads.svelte'
   import { network } from '../lib/network.svelte'
@@ -17,6 +18,9 @@
 
   let current = $state<Settings | null>(null)
   let stats = $state<CacheStats | null>(null)
+  let resolver = $state<YtDlpInfo | null>(null)
+  let resolverBusy = $state(false)
+  let resolverError = $state('')
   let update = $derived(updates.state)
 
   $effect(() => {
@@ -29,6 +33,35 @@
     stats = cache
     player.applySettings(settings)
     await downloads.init()
+    void loadResolver()
+  }
+
+  async function loadResolver(): Promise<void> {
+    resolverBusy = true
+    resolverError = ''
+    try {
+      const result = await api.ytDlp.info()
+      if (result.ok) resolver = result.data
+      else resolverError = result.error
+    } catch (err) {
+      resolverError = err instanceof Error ? err.message : String(err)
+    } finally {
+      resolverBusy = false
+    }
+  }
+
+  async function updateResolver(): Promise<void> {
+    resolverBusy = true
+    resolverError = ''
+    try {
+      const result = await api.ytDlp.update()
+      if (result.ok) resolver = result.data
+      else resolverError = result.error
+    } catch (err) {
+      resolverError = err instanceof Error ? err.message : String(err)
+    } finally {
+      resolverBusy = false
+    }
   }
 
   async function patch(update: Partial<Settings>): Promise<void> {
@@ -45,7 +78,14 @@
   }
 
   async function clearCache(): Promise<void> {
-    stats = await api.cache.clear()
+    try {
+      stats = await api.cache.clear()
+      // The renderer's artwork map still points at local URLs that were just
+      // deleted; reset it so covers re-resolve instead of rendering broken.
+      artwork.forget()
+    } catch (err) {
+      console.error('[cache] clear failed', err)
+    }
   }
 
   async function checkUpdates(): Promise<void> {
@@ -123,7 +163,8 @@
     }
   }
 
-  function size(bytes: number): string {
+  function size(bytes: number | null): string {
+    if (bytes == null) return '—'
     const gb = bytes / 1024 ** 3
     if (gb >= 1) return `${Number.isInteger(gb) ? gb : gb.toFixed(1)} GB`
     return `${Math.round(bytes / 1024 / 1024)} MB`
@@ -264,6 +305,28 @@
   </section>
 
   <section>
+    <h2>Playback engine</h2>
+
+    <div class="row">
+      <div class="label">
+        <span>YT-DLP resolver</span>
+        <span class="hint">
+          {#if resolverError}
+            {resolverError}
+          {:else if resolver}
+            Version {resolver.version} · {resolver.runtime}. Updating pulls the latest extractor fixes.
+          {:else}
+            Reading the resolver version…
+          {/if}
+        </span>
+      </div>
+      <button class="ghost" onclick={updateResolver} disabled={resolverBusy}>
+        {resolverBusy ? 'Updating…' : 'Update resolver'}
+      </button>
+    </div>
+  </section>
+
+  <section>
     <h2>Storage</h2>
 
     <div class="row">
@@ -273,7 +336,9 @@
           {#if downloads.stats}
             {downloads.stats.entries} {downloads.stats.entries === 1 ? 'song' : 'songs'} · {size(
               downloads.stats.bytes
-            )} used · {size(downloads.stats.freeBytes)} free. Explicit files are never evicted.
+            )} used · {downloads.stats.freeBytes != null
+              ? `${size(downloads.stats.freeBytes)} free`
+              : 'free space unavailable'}. Explicit files are never evicted.
           {:else}
             Reading downloads…
           {/if}

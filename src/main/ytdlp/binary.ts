@@ -11,7 +11,7 @@ import {
   statSync
 } from 'node:fs'
 import { delimiter, join } from 'node:path'
-import { Readable } from 'node:stream'
+import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { app } from 'electron'
 import type { YtDlpInfo } from '@shared/types'
@@ -227,19 +227,38 @@ async function ensureBinaryFile(): Promise<string> {
   return dest
 }
 
+const MAX_BINARY_BYTES = 250 * 1024 * 1024
+
 async function download(url: string, dest: string): Promise<void> {
   const res = await fetch(url, {
     redirect: 'follow',
-    headers: { 'User-Agent': 'Viby/0.1 (+https://github.com/viby)' }
+    headers: { 'User-Agent': 'Viby/0.1 (+https://github.com/viby)' },
+    signal: AbortSignal.timeout(120_000)
   })
   if (!res.ok || !res.body) {
     throw new Error(`Could not download yt-dlp (HTTP ${res.status}). Check your connection.`)
   }
 
+  const declared = Number(res.headers.get('content-length') ?? 0)
+  if (declared > MAX_BINARY_BYTES) throw new Error('yt-dlp download is unexpectedly large.')
+
+  let total = 0
+  const limit = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      total += chunk.length
+      if (total > MAX_BINARY_BYTES) {
+        callback(new Error('yt-dlp download is unexpectedly large.'))
+        return
+      }
+      callback(null, chunk)
+    }
+  })
+
   const tmp = `${dest}.download`
   try {
     await pipeline(
       Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
+      limit,
       createWriteStream(tmp)
     )
     renameSync(tmp, dest)

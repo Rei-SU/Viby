@@ -10,6 +10,7 @@
   let dragging = $state(false)
   let dragValue = $state(0)
   let fav = $state(false)
+  let favRequest = 0
 
   const shownPosition = $derived(dragging ? dragValue : player.position)
   const track = $derived(player.current)
@@ -64,9 +65,17 @@
       fav = false
       return
     }
-    void api.favorites.list().then((list) => {
-      fav = list.some((t) => t.id === id)
-    })
+    const request = ++favRequest
+    void api.favorites
+      .list()
+      .then((list) => {
+        // A slower response for the previous track must not overwrite the
+        // heart for the one now in the player.
+        if (request === favRequest && player.current?.id === id) {
+          fav = list.some((t) => t.id === id)
+        }
+      })
+      .catch(() => undefined)
   })
 
   function onSeekInput(event: Event): void {
@@ -90,9 +99,11 @@
   async function toggleFav(): Promise<void> {
     if (!track) return
     const snapshot = { ...track }
+    const id = snapshot.id
+    const request = ++favRequest
     try {
       const res = await api.favorites.toggle(snapshot)
-      fav = res.favorited
+      if (request === favRequest && player.current?.id === id) fav = res.favorited
     } catch (err) {
       console.error('[favorites] toggle failed', err)
     }

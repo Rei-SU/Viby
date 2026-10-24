@@ -156,6 +156,9 @@
     title={blocked ? 'Not downloaded — unavailable offline' : playable ? 'Play' : 'Open'}
     onclick={activate}
     onkeydown={(event) => {
+      // The row contains real artist/album buttons; let them handle their own
+      // Enter/Space instead of playing the row underneath.
+      if (event.target !== event.currentTarget) return
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
         activate()
@@ -401,7 +404,9 @@
       background var(--speed) var(--ease);
   }
 
-  .row:hover .row-action {
+  .row:hover .row-action,
+  .row:focus-within .row-action,
+  .row-action:focus-visible {
     opacity: 1;
   }
 

@@ -76,6 +76,8 @@ class Player {
   private wired = false
   private handlersSet = false
   private recovering = false
+  private recoveringFor: string | null = null
+  private recoverToken = 0
   private timer: ReturnType<typeof setInterval> | null = null
   private settingsTimer: ReturnType<typeof setTimeout> | null = null
   private prefetched = new Set<string>()
@@ -98,17 +100,21 @@ class Player {
   private playToken = 0
 
   async init(): Promise<void> {
-    const s = await api.settings.get()
-    this.applySettings(s)
-
-    await this.restoreSession()
-
+    // Wire the element before any await: a failed settings/session read must not
+    // leave playback handlers (and session persistence) uninstalled.
     if (!this.wired) {
       this.wire()
       this.wired = true
       window.addEventListener('beforeunload', () => this.persistSession(true))
     }
     this.setMediaHandlers()
+
+    try {
+      this.applySettings(await api.settings.get())
+    } catch {
+      // Keep the defaults; settings can be applied later from the Settings page.
+    }
+    await this.restoreSession()
   }
 
   /** Adopt settings changed outside the player (the Settings page). */
@@ -225,10 +231,9 @@ class Player {
   enqueue(item: CatalogItem): void {
     if (!isPlayable(item)) return
     this.queue = [...this.queue, toTrack(item)]
-    if (this.index < 0) {
-      this.index = 0
-      void this.start(true)
-    }
+    // Adding to an empty queue prepares it for playback; it must not start
+    // audio as a side effect. The row's Play button is the explicit action.
+    if (this.index < 0) this.index = 0
   }
 
   enqueueAll(items: CatalogItem[]): void {
@@ -544,6 +549,13 @@ class Player {
     if (!track) return
 
     const token = ++this.playToken
+    const launchId = track.id
+
+    // Starting a track supersedes any recovery for the previous one.
+    this.recoverToken += 1
+    this.recoveringFor = null
+    this.recovering = false
+    this.reconnecting = false
 
     // A fresh attempt at a track gets a fresh retry budget.
     if (this.recoverTrackId !== track.id) {
@@ -632,7 +644,13 @@ class Player {
       this.loadedId = track.id
 
       // Resume where playback stopped last time (only for the restored track).
-      const resumeAt = this.pendingResume?.id === track.id ? this.pendingResume.position : null
+      // `track.id` may have been swapped to the official audio release above;
+      // compare against both the launch id and the current id.
+      const resumeAt =
+        this.pendingResume &&
+        (this.pendingResume.id === launchId || this.pendingResume.id === track.id)
+          ? this.pendingResume.position
+          : null
       this.pendingResume = null
       if (resumeAt && resumeAt > 1) {
         try {
@@ -676,7 +694,10 @@ class Player {
    */
   private async recover(): Promise<void> {
     const track = this.current
-    if (this.recovering || !track) return
+    if (!track) return
+    // Ignore duplicate error events for a recovery already in flight, but do
+    // not let a recovery for the previous track block the new one.
+    if (this.recoveringFor === track.id) return
 
     if (network.offline && this.stream?.source !== 'download') {
       this.error = "You're offline. This song isn't downloaded."
@@ -694,6 +715,8 @@ class Player {
     this.recoverAttempts += 1
 
     const token = this.playToken
+    const recover = ++this.recoverToken
+    this.recoveringFor = track.id
     this.recovering = true
     this.reconnecting = true
     try {
@@ -701,10 +724,16 @@ class Player {
       const res = await api.player.resolve({
         input: track.id,
         force: true,
-        // A cached copy that failed to decode must not be handed back.
+        // A cached or downloaded copy that failed to decode must not be handed back.
         discardCache: this.stream?.kind === 'file'
       })
-      if (token !== this.playToken || this.current?.id !== track.id) return
+      if (
+        recover !== this.recoverToken ||
+        token !== this.playToken ||
+        this.current?.id !== track.id
+      ) {
+        return
+      }
       if (!res.ok) {
         if (res.error !== CANCELLED) this.error = res.error
         return
@@ -716,8 +745,11 @@ class Player {
       if (resumeAt > 1) audio.currentTime = resumeAt
       await audio.play().catch(() => undefined)
     } finally {
-      this.recovering = false
-      this.reconnecting = false
+      if (recover === this.recoverToken) {
+        this.recoveringFor = null
+        this.recovering = false
+        this.reconnecting = false
+      }
     }
   }
 

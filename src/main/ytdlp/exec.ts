@@ -25,6 +25,12 @@ export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise
   const timeoutMs = opts.timeoutMs ?? 60_000
 
   return new Promise((resolve, reject) => {
+    // An already-aborted signal must not launch work. Adding an 'abort' listener
+    // after the fact never fires, so a cancelled resolve used to spawn yt-dlp.
+    if (opts.signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'))
+      return
+    }
     const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     let stdout = ''
     let stderr = ''
@@ -73,6 +79,10 @@ export function runStreamed(cmd: string, args: string[], opts: StreamOptions = {
   const timeoutMs = opts.timeoutMs ?? 60_000
 
   return new Promise((resolve, reject) => {
+    if (opts.signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'))
+      return
+    }
     const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     let stdout = ''
     let stderr = ''
@@ -85,10 +95,6 @@ export function runStreamed(cmd: string, args: string[], opts: StreamOptions = {
       buffered = final ? '' : (parts.pop() ?? '')
       for (const raw of parts) {
         const line = raw.replace(/\r$/, '')
-        if (line) opts.onStdoutLine?.(line)
-      }
-      if (final && buffered) {
-        const line = buffered.replace(/\r$/, '')
         if (line) opts.onStdoutLine?.(line)
       }
     }

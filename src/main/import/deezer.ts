@@ -50,8 +50,14 @@ export async function resolveDeezer(id: string, signal?: AbortSignal): Promise<I
     throw new ImportError(meta.error.message ?? 'This Deezer playlist is unavailable')
   }
 
-  let tracks = meta.tracks?.data ?? []
-  const total = meta.nb_tracks ?? tracks.length
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    throw new ImportError('Deezer returned an unreadable playlist')
+  }
+  if (meta.title !== undefined && typeof meta.title !== 'string') {
+    throw new ImportError('Deezer returned an unreadable playlist')
+  }
+  let tracks = Array.isArray(meta.tracks?.data) ? meta.tracks.data : []
+  const total = typeof meta.nb_tracks === 'number' ? meta.nb_tracks : tracks.length
 
   // The playlist object usually inlines every track, but page explicitly when
   // Spotify's 10k-track cousin appears in the wild (Deezer's cap is lower, but
@@ -61,7 +67,9 @@ export async function resolveDeezer(id: string, signal?: AbortSignal): Promise<I
       `https://api.deezer.com/playlist/${id}/tracks?limit=100&index=${tracks.length}`,
       { signal }
     )
-    if (page.error || !page.data?.length) break
+    if (!page || typeof page !== 'object' || page.error || !Array.isArray(page.data) || page.data.length === 0) {
+      break
+    }
     tracks = [...tracks, ...page.data]
     await sleep(120)
     if (tracks.length >= 10_000) break
@@ -81,6 +89,6 @@ export async function resolveDeezer(id: string, signal?: AbortSignal): Promise<I
     cover: meta.picture_xl ?? meta.picture_big ?? meta.picture_medium,
     totalTracks: total,
     ...(tracks.length < total ? { truncated: { shown: tracks.length, total } } : {}),
-    tracks: tracks.map(toTrack)
+    tracks: tracks.filter((track) => track && typeof track.title === 'string').map(toTrack)
   }
 }

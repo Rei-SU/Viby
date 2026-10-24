@@ -21,6 +21,7 @@ const suites = {
   'download-groups': { file: 'download-groups.test.ts' },
   'library-items': { file: 'library-items.test.ts' },
   'player-source': { file: 'player-source.test.ts' },
+  'rail-fit': { file: 'rail-fit.test.ts' },
   images: { file: 'images.test.ts', electron: true },
   network: { file: 'network.test.ts', electron: true },
   version: { file: 'version.test.ts' },

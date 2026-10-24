@@ -89,6 +89,8 @@ export class Updater {
       return options.quiet ? previous : this.fail('Updates are only available in the packaged app.')
     }
 
+    // Never let a previous release's artifact hash authorize a new download.
+    this.release = null
     this.set({
       phase: 'checking',
       version: undefined,
@@ -105,14 +107,19 @@ export class Updater {
         if (!version) return this.set({ phase: 'up-to-date', checkedAt: Date.now() })
         if (skipped && version === skipped) return this.skippedState(version)
 
-        // The signed manifest is optional here: electron-updater already
-        // verifies latest.yml's sha512. Only a bad signature blocks the update.
-        try {
-          const release = await this.deps.latestRelease()
-          if (release.version === version) this.release = release
-        } catch (error) {
-          if (error instanceof UpdateIntegrityError) throw error
+        // The pinned manifest is required, not optional: latest.yml alone only
+        // proves GitHub served the bytes it hosts. A missing manifest must fail
+        // closed rather than silently downgrade to an unsigned install.
+        const release = await this.deps.latestRelease()
+        if (release.version !== version) {
+          throw new UpdateIntegrityError(
+            'The signed update manifest does not match the available version.'
+          )
         }
+        if (!release.artifacts?.['Viby-windows-x64.exe']) {
+          throw new UpdateIntegrityError('The signed update manifest is missing the Windows installer.')
+        }
+        this.release = release
         return this.set({ phase: 'available', version, checkedAt: Date.now() })
       }
 
@@ -149,6 +156,11 @@ export class Updater {
     try {
       if (this.deps.native) {
         const expected = this.release?.artifacts?.['Viby-windows-x64.exe']
+        if (!expected) {
+          throw new UpdateIntegrityError(
+            'No signed installer hash is available. Check for updates again.'
+          )
+        }
         await this.deps.native.download(
           (fraction) => {
             this.set({ phase: 'downloading', progress: clamp(fraction) })

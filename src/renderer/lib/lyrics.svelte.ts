@@ -13,6 +13,7 @@ class LyricsState {
   data = $state<Lyrics | null>(null)
 
   private trackId: string | null = null
+  private request = 0
   private cache = new Map<string, Lyrics>()
 
   async toggle(track: Track | null): Promise<void> {
@@ -34,12 +35,16 @@ class LyricsState {
 
     const cached = this.cache.get(track.id)
     if (cached) {
+      // A cache hit supersedes any in-flight request; clear its spinner too.
+      this.request += 1
       this.trackId = track.id
       this.data = cached
       this.error = null
+      this.loading = false
       return
     }
 
+    const request = ++this.request
     this.trackId = track.id
     this.data = null
     this.loading = true
@@ -53,8 +58,9 @@ class LyricsState {
       album: track.album
     })
 
-    // The user may have skipped to another track while this was in flight.
-    if (this.trackId !== track.id) return
+    // The user may have skipped to another track (or opened a cached one)
+    // while this was in flight.
+    if (this.trackId !== track.id || request !== this.request) return
 
     this.loading = false
     if (res.ok) {

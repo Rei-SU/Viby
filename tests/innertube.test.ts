@@ -4,7 +4,6 @@
  *   npx esbuild tests/innertube.test.ts --bundle --platform=node --format=esm \
  *     --alias:@shared=./src/shared --outfile=/tmp/it.mjs && node /tmp/it.mjs
  */
-import { readFileSync } from 'node:fs'
 import { extractItems, extractShelves } from '../src/main/innertube/parse'
 import { browse, home, search } from '../src/main/innertube/client'
 import type { CatalogItem } from '../src/shared/types'
@@ -27,7 +26,65 @@ function show(label: string, items: CatalogItem[], limit = 5): void {
 }
 
 // ---- offline, deterministic -------------------------------------------------
-const captured = JSON.parse(readFileSync('/tmp/innertube.json', 'utf8'))
+// A minimal captured-shape response. Keeping it inline makes the parser test
+// runnable on a clean checkout instead of depending on /tmp/innertube.json.
+function songRow(id: string, title: string): unknown {
+  return {
+    musicResponsiveListItemRenderer: {
+      playlistItemData: { videoId: id },
+      flexColumns: [
+        {
+          musicResponsiveListItemFlexColumnRenderer: {
+            text: { runs: [{ text: title }] }
+          }
+        },
+        {
+          musicResponsiveListItemFlexColumnRenderer: {
+            text: { runs: [{ text: 'Daft Punk' }, { text: ' • ' }, { text: '3:30' }] }
+          }
+        }
+      ]
+    }
+  }
+}
+
+const captured = {
+  contents: {
+    singleColumnBrowseResultsRenderer: {
+      tabs: [
+        {
+          tabRenderer: {
+            content: {
+              sectionListRenderer: {
+                contents: [
+                  {
+                    musicShelfRenderer: {
+                      contents: [
+                        ...Array.from({ length: 11 }, (_, index) =>
+                          songRow(`dQw4w9WgX${String(index).padStart(2, '0').slice(-2)}`, `Song ${index + 1}`)
+                        ),
+                        {
+                          musicTwoRowItemRenderer: {
+                            title: { runs: [{ text: 'Daft Punk' }] },
+                            subtitle: { runs: [{ text: 'Artist' }] },
+                            navigationEndpoint: {
+                              browseEndpoint: { browseId: 'UC3H0b6Z2r7z2cJc8m6z9Y3w' }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
 const parsed = extractItems(captured)
 show('CAPTURED response', parsed, 8)
 console.log('\nchecks:')

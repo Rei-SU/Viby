@@ -10,6 +10,7 @@ import type {
 } from '@shared/types'
 import { ensureRunner, pluginArgs } from '../ytdlp/binary'
 import { runStreamed } from '../ytdlp/exec'
+import { isSafeYtDlpInput } from '../ytdlp/resolver'
 import { getLyrics } from '../lyrics'
 import { fetchArt } from './art'
 import type { DownloadJob, DownloadsStore } from './store'
@@ -34,6 +35,8 @@ export type DownloadManagerOptions = {
   onCompleted: (trackId: string) => void
   /** True while a job is running or waiting; used for the power blocker. */
   onBusy?: (busy: boolean) => void
+  /** The track currently loaded in the player; its file must not be unlinked. */
+  isPlaying?: (trackId: string) => boolean
 }
 
 function numberOrUndefined(value: string | undefined): number | undefined {
@@ -93,6 +96,7 @@ export class DownloadManager {
   private estimateReported = new Set<string>()
   private busy = false
   private backfillingLyrics = false
+  private shuttingDown = false
 
   constructor(
     private readonly store: DownloadsStore,
@@ -144,7 +148,7 @@ export class DownloadManager {
     this.stop(trackId, false)
     this.queue = this.queue.filter((id) => id !== trackId)
     this.progress.delete(trackId)
-    this.store.removeTrack(trackId)
+    this.store.removeTrack(trackId, this.opts.isPlaying?.(trackId) ?? false)
     this.publish()
   }
 
@@ -155,7 +159,9 @@ export class DownloadManager {
   }
 
   pruneCollection(key: string, trackIds: string[]): void {
-    const affected = new Set(this.store.pruneCollection(key, trackIds))
+    const affected = new Set(
+      this.store.pruneCollection(key, trackIds, (id) => this.opts.isPlaying?.(id) ?? false)
+    )
     for (const id of affected) {
       this.queue = this.queue.filter((queued) => queued !== id)
       this.progress.delete(id)
@@ -169,7 +175,9 @@ export class DownloadManager {
   }
 
   removeCollection(key: string): void {
-    const affected = new Set(this.store.removeCollection(key))
+    const affected = new Set(
+      this.store.removeCollection(key, (id) => this.opts.isPlaying?.(id) ?? false)
+    )
     for (const id of affected) {
       this.queue = this.queue.filter((queued) => queued !== id)
       this.progress.delete(id)
@@ -207,13 +215,19 @@ export class DownloadManager {
     }
     this.queue = []
     this.progress.clear()
-    this.store.clear()
+    const playing = this.store
+      .entries()
+      .find((entry) => this.opts.isPlaying?.(entry.track.id))
+    this.store.clear(playing?.track.id)
     this.publish()
   }
 
-  /** Called when connectivity changes: stop cleanly or pick the queue back up. */
-  onNetworkChange(offline: boolean): void {
-    if (offline) {
+  /**
+   * Called when connectivity changes. `available` means the host is actually
+   * reachable — an `unreachable` captive portal is not a reason to burn retries.
+   */
+  onNetworkChange(available: boolean): void {
+    if (!available) {
       this.pauseAll()
       return
     }
@@ -233,10 +247,14 @@ export class DownloadManager {
   }
 
   shutdown(): void {
+    this.shuttingDown = true
     if (this.changedTimer) clearTimeout(this.changedTimer)
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.changedTimer = null
     this.retryTimer = null
+    // Do not let the aborted job's finally start the next queued download while
+    // the app is quitting; that child would have no owner.
+    this.queue = []
     if (this.active) {
       this.active.paused = true
       this.store.setJobState(this.active.id, 'paused')
@@ -271,7 +289,7 @@ export class DownloadManager {
   }
 
   private pump(): void {
-    if (this.active || this.queue.length === 0) return
+    if (this.shuttingDown || this.active || this.queue.length === 0) return
     if (this.opts.isOffline()) return
 
     const id = this.queue.shift()
@@ -286,10 +304,18 @@ export class DownloadManager {
       this.pump()
       return
     }
-    void this.run(id)
+    void this.run(id).catch((err: unknown) => {
+      // run() handles its own errors; this is the last line of defence so a
+      // programming mistake cannot become an unhandled rejection.
+      console.error('[downloads] job crashed', err)
+      this.active = null
+      this.publish()
+      this.pump()
+    })
   }
 
   private async run(id: string): Promise<void> {
+    if (this.shuttingDown) return
     const job = this.store.job(id)
     if (!job) {
       this.pump()
@@ -308,7 +334,9 @@ export class DownloadManager {
 
     try {
       const estimate = job.estimateBytes ?? DEFAULT_ESTIMATE_BYTES
-      if ((await this.store.freeBytes()) < MIN_FREE_BYTES + estimate) {
+      const freeBytes = await this.store.freeBytes()
+      // A filesystem that cannot report free space must not block downloads.
+      if (freeBytes !== null && freeBytes < MIN_FREE_BYTES + estimate) {
         throw new Error('Not enough disk space to finish this download.')
       }
 
@@ -318,6 +346,7 @@ export class DownloadManager {
       mkdirSync(tmpDir, { recursive: true })
       const input =
         job.track.sourceUrl?.trim() || `https://music.youtube.com/watch?v=${job.track.id}`
+      if (!isSafeYtDlpInput(input)) throw new Error('This track has an invalid download URL.')
       const format =
         job.quality === 'data-saver' ? 'bestaudio[abr<=64]/bestaudio/best' : 'bestaudio/best'
 
@@ -341,6 +370,7 @@ export class DownloadManager {
           ...pluginArgs(),
           '-o',
           join(tmpDir, `${safe}.%(ext)s`),
+          '--',
           input
         ],
         {
@@ -360,6 +390,11 @@ export class DownloadManager {
       if (this.active?.paused) {
         this.store.setJobState(id, 'paused')
         return
+      }
+      if (result.timedOut) {
+        // A timeout usually leaves a resumable .part file. Classifying it as a
+        // permanent yt-dlp exit code would make large downloads fail for good.
+        throw new Error('Download timed out — the partial file can resume.')
       }
       if (result.code !== 0) {
         throw new Error(errorLine(result.stderr, result.code))
@@ -395,20 +430,31 @@ export class DownloadManager {
           this.pump()
         }, 2_000 * tries)
       } else {
+        // Do not leave a frozen percentage/speed on a permanently failed row.
+        this.progress.delete(id)
         this.store.setJobState(id, 'failed', { error: message })
       }
       this.publish()
     } finally {
       this.estimateReported.delete(id)
-      if (tmpDir) {
-        // Keep a partial when the job is paused or queued for a retry; it is the
-        // resume point. Finished, cancelled and permanently failed jobs clean up.
-        const state = this.store.job(id)?.state
-        if (state !== 'paused' && state !== 'queued') {
-          rmSync(tmpDir, { recursive: true, force: true })
+      try {
+        if (tmpDir) {
+          // Keep a partial when the job is paused or queued for a retry; it is
+          // the resume point. Finished, cancelled and permanently failed jobs
+          // clean up. A cleanup failure must never wedge the queue.
+          const state = this.store.job(id)?.state
+          if (state !== 'paused' && state !== 'queued') {
+            rmSync(tmpDir, { recursive: true, force: true })
+          }
         }
+      } catch {
+        // Windows can hold the temp file briefly (AV, killed child). The next
+        // launch sweeps orphaned temp dirs.
       }
       this.active = null
+      // Publish after clearing `active` so onBusy(false) actually fires when the
+      // queue drains; otherwise the power blocker stayed on indefinitely.
+      this.publish()
       this.pump()
     }
   }
@@ -522,7 +568,9 @@ export class DownloadManager {
 
   private updateBusy(): void {
     if (!this.opts.onBusy) return
-    const busy = this.active !== null || this.queue.length > 0
+    // A queued job while offline is not doing work; keeping the power blocker
+    // on forever drained the battery for nothing.
+    const busy = this.active !== null || (this.queue.length > 0 && !this.opts.isOffline())
     if (busy === this.busy) return
     this.busy = busy
     this.opts.onBusy(busy)

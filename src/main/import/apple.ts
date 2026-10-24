@@ -71,19 +71,26 @@ export async function resolveApple(url: string, signal?: AbortSignal): Promise<I
     throw new ImportError('Could not read this Apple Music playlist')
   }
 
-  const sections = data.data?.[0]?.data?.sections ?? []
-  const trackSection = sections.find(
-    (section) => section.itemKind === 'trackLockup' || /^track-list/.test(section.id ?? '')
-  )
-  const items = (trackSection?.items ?? []) as AppleTrack[]
+  const sections = Array.isArray(data?.data?.[0]?.data?.sections)
+    ? data.data[0].data.sections
+    : []
+  const trackSection = Array.isArray(sections)
+    ? sections.find(
+        (section) => section.itemKind === 'trackLockup' || /^track-list/.test(section.id ?? '')
+      )
+    : undefined
+  const items = Array.isArray(trackSection?.items) ? (trackSection.items as AppleTrack[]) : []
   const tracks = items.map(toTrack).filter((track): track is ImportTrack => Boolean(track))
 
   if (tracks.length === 0) {
     throw new ImportError('This Apple Music playlist has no readable tracks')
   }
 
-  const header = sections.find((section) => section.itemKind === 'containerDetailHeaderLockup')
-    ?.items?.[0] as AppleHeader | undefined
+  const header = Array.isArray(sections)
+    ? (sections.find((section) => section.itemKind === 'containerDetailHeaderLockup')?.items?.[0] as
+        | AppleHeader
+        | undefined)
+    : undefined
   const ogTitle = meta(html, 'og:title')?.replace(/\s+on Apple Music$/i, '').trim()
   const cover =
     meta(html, 'og:image') ??

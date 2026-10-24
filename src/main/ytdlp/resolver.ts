@@ -31,6 +31,8 @@ type ResolvedEntry = {
 
 export class Resolver {
   private semaphore = new Semaphore(2)
+  /** Opportunistic caching must never occupy a slot a play request needs. */
+  private backgroundSemaphore = new Semaphore(1)
   private urlCache = new Map<string, ResolvedEntry>()
   private cacheFile: string | null = null
   private persistTimer: ReturnType<typeof setTimeout> | null = null
@@ -126,6 +128,9 @@ export class Resolver {
     opts: { force?: boolean; signal?: AbortSignal; maxKbps?: number } = {}
   ): Promise<ResolveResult> {
     const url = Resolver.normalizeInput(input)
+    if (!isSafeYtDlpInput(url)) {
+      throw new ResolveError('unknown', 'Only http(s) track URLs are supported.')
+    }
 
     // A playlist link is an import, not a playback target. Say so plainly instead
     // of letting yt-dlp fail in a way nobody can read.
@@ -193,6 +198,7 @@ export class Resolver {
       '-J',
       ...(clients ? ['--extractor-args', `youtube:player_client=${clients}`] : []),
       ...pluginArgs(),
+      '--',
       url
     ]
 
@@ -226,9 +232,12 @@ export class Resolver {
   async download(
     url: string,
     signal?: AbortSignal,
-    maxKbps?: number
-  ): Promise<{ file: string; ext: string; id: string }> {
-    return this.semaphore.run(async () => {
+    maxKbps?: number,
+    background = false
+  ): Promise<{ file: string; ext: string; id: string; dir: string }> {
+    if (!isSafeYtDlpInput(url)) throw new Error('Only http(s) track URLs are supported.')
+    const semaphore = background ? this.backgroundSemaphore : this.semaphore
+    return semaphore.run(async () => {
       const runner = await ensureRunner()
       const id = Resolver.extractId(url) ?? `viby-${Date.now()}`
       const dir = mkdtempSync(join(tmpdir(), 'viby-track-'))
@@ -248,6 +257,7 @@ export class Resolver {
             ...pluginArgs(),
             '-o',
             join(dir, `${id}.%(ext)s`),
+            '--',
             url
           ],
           { timeoutMs: 300_000, signal }
@@ -258,7 +268,7 @@ export class Resolver {
         if (!file) throw new Error('Downloaded file was not found')
 
         const ext = file.split('.').pop() ?? 'm4a'
-        return { file: join(dir, file), ext, id }
+        return { file: join(dir, file), ext, id, dir }
       } catch (err) {
         rmSync(dir, { recursive: true, force: true })
         throw err
@@ -405,6 +415,18 @@ function firstLine(text: string): string {
 export type ResolveErrorKind = 'unavailable' | 'playlist' | 'botcheck' | 'cancelled' | 'unknown'
 
 /** A resolution failure with a message worth showing a human. */
+/** yt-dlp treats a leading `-` as an option; never pass renderer strings as options. */
+export function isSafeYtDlpInput(input: string): boolean {
+  const value = input.trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(value)) return true
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
 export class ResolveError extends Error {
   constructor(
     readonly kind: ResolveErrorKind,

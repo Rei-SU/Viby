@@ -189,6 +189,14 @@ jobs:
           VIBY_UPDATE_KEY: ${{ secrets.VIBY_UPDATE_KEY }}
         run: |
           if [ -z "$VIBY_UPDATE_KEY" ]; then
+            # A pinned public key means every installed build requires a signed
+            # manifest (release-feed.ts fails closed). Publishing anyway creates
+            # a release no existing install can update to.
+            if grep -Eq "UPDATE_PUBLIC_KEY = '[^']+'" src/main/update-key.ts; then
+              echo "::error::VIBY_UPDATE_KEY is not set, but src/main/update-key.ts pins a public key."
+              echo "Refusing to publish an update that every installed build will reject."
+              exit 1
+            fi
             echo "::warning::VIBY_UPDATE_KEY is not set — publishing without a signed update manifest."
             exit 0
           fi

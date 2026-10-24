@@ -31,10 +31,25 @@ export type LyricsQuery = {
   album?: string
 }
 
-export async function getLyrics(query: LyricsQuery): Promise<Lyrics> {
-  const cached = cachedLyrics(query.trackId)
-  if (cached) return cached
+const inflight = new Map<string, Promise<Lyrics>>()
 
+export function getLyrics(query: LyricsQuery): Promise<Lyrics> {
+  const cached = cachedLyrics(query.trackId)
+  if (cached) return Promise.resolve(cached)
+
+  // The player and the download backfill can ask for the same track at once.
+  // Share the request so a slow failure cannot race a successful cache write.
+  const existing = inflight.get(query.trackId)
+  if (existing) return existing
+
+  const request = loadLyrics(query).finally(() => {
+    inflight.delete(query.trackId)
+  })
+  inflight.set(query.trackId, request)
+  return request
+}
+
+async function loadLyrics(query: LyricsQuery): Promise<Lyrics> {
   const found = (await lookup(query)) ?? { kind: 'none' as const }
   save(query.trackId, found)
   return found
@@ -56,13 +71,15 @@ async function lookup(query: LyricsQuery): Promise<Lyrics | null> {
   const artist = primaryArtist(query.artist)
   if (!query.title.trim()) return null
 
+  let transient = false
   const exact = await request('get', {
     artist_name: artist,
     track_name: query.title,
     album_name: query.album ?? '',
     duration: query.durationSec > 0 ? String(Math.round(query.durationSec)) : ''
   })
-  const fromExact = toLyrics(exact)
+  transient ||= exact.transient
+  const fromExact = toLyrics(exact.data)
   if (fromExact) return fromExact
 
   // Exact lookup is fussy about titles ("Radio Edit", "feat. …"); search is not.
@@ -70,19 +87,33 @@ async function lookup(query: LyricsQuery): Promise<Lyrics | null> {
     track_name: cleanTitle(query.title),
     artist_name: artist
   })
-  const fromSearch = Array.isArray(results) ? toLyrics(pickBest(results, query)) : null
+  transient ||= results.transient
+  const fromSearch = Array.isArray(results.data)
+    ? toLyrics(pickBest(results.data, query))
+    : null
   if (fromSearch) return fromSearch
 
   // Backup source: plain text only, but better than "no lyrics".
-  return fetchOvhLyrics(artist, query.title)
+  const backup = await ovhLookup(artist, query.title)
+  transient ||= backup.transient
+  if (backup.lyrics) return backup.lyrics
+
+  if (transient) {
+    // Do not persist a 24-hour miss because a service was briefly unavailable.
+    throw new Error('Lyrics service could not be reached. Try again in a moment.')
+  }
+  return null
 }
 
 /**
  * lyrics.ovh — keyless, plain text. No timestamps, so it is only used when
  * LRCLIB has nothing at all.
  */
-export async function fetchOvhLyrics(artist: string, title: string): Promise<Lyrics | null> {
-  if (!artist.trim() || !title.trim()) return null
+async function ovhLookup(
+  artist: string,
+  title: string
+): Promise<{ lyrics: Lyrics | null; transient: boolean }> {
+  if (!artist.trim() || !title.trim()) return { lyrics: null, transient: false }
 
   const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(cleanTitle(title))}`
   try {
@@ -90,19 +121,27 @@ export async function fetchOvhLyrics(artist: string, title: string): Promise<Lyr
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
       signal: AbortSignal.timeout(8000)
     })
-    if (!res.ok) return null
+    if (res.status === 404) return { lyrics: null, transient: false }
+    if (!res.ok) return { lyrics: null, transient: true }
 
     const data = (await res.json()) as { lyrics?: string }
     const text = data.lyrics?.replace(/\r\n/g, '\n').trim()
-    if (!text) return null
+    if (!text) return { lyrics: null, transient: false }
 
-    return { kind: 'plain', plain: text, source: 'lyrics.ovh' }
+    return { lyrics: { kind: 'plain', plain: text, source: 'lyrics.ovh' }, transient: false }
   } catch {
-    return null
+    return { lyrics: null, transient: true }
   }
 }
 
-async function request(path: string, params: Record<string, string>): Promise<unknown> {
+/** Backwards-compatible plain-text lookup for callers that only want a result. */
+export async function fetchOvhLyrics(artist: string, title: string): Promise<Lyrics | null> {
+  return (await ovhLookup(artist, title)).lyrics
+}
+
+type RequestResult = { data: unknown; transient: boolean }
+
+async function request(path: string, params: Record<string, string>): Promise<RequestResult> {
   const url = new URL(`${BASE}/${path}`)
   for (const [key, value] of Object.entries(params)) {
     if (value) url.searchParams.set(key, value)
@@ -113,11 +152,14 @@ async function request(path: string, params: Record<string, string>): Promise<un
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
       signal: AbortSignal.timeout(8000)
     })
-    if (!res.ok) return null
-    return await res.json()
+    // 404/400 are definitive "not found"; 429 and 5xx are transient.
+    if (res.status === 404 || res.status === 400) return { data: null, transient: false }
+    if (!res.ok) return { data: null, transient: true }
+    return { data: await res.json(), transient: false }
   } catch {
-    // Offline or slow: no lyrics is a valid outcome, not an error.
-    return null
+    // Offline, timeout, DNS failure, or malformed JSON. Do not cache this as a
+    // permanent miss; the renderer can offer a retry instead.
+    return { data: null, transient: true }
   }
 }
 
@@ -167,25 +209,67 @@ function parseLrc(text: string): LyricsLine[] {
   return lines.sort((a, b) => a.time - b.time)
 }
 
-/** Prefer a synced result whose duration matches the track. */
+/** Prefer a synced result whose title, artist and duration match the track. */
 function pickBest(results: unknown[], query: LyricsQuery): unknown {
+  const wantedTitle = comparisonText(cleanTitle(query.title))
+  const wantedArtist = comparisonText(query.artist)
+
   const scored = results
     .filter((item): item is LrclibRecord => Boolean(item) && typeof item === 'object')
     .filter((item) => item.syncedLyrics || item.plainLyrics || item.instrumental)
     .map((item) => {
+      const title = comparisonText(cleanTitle(String(item.trackName ?? '')))
+      const artist = comparisonText(String(item.artistName ?? ''))
+      // A different title is almost always a cover, live version or remix.
+      // Reject it rather than showing confidently wrong lyrics.
+      const titleScore =
+        wantedTitle && title
+          ? title === wantedTitle
+            ? 0
+            : title.includes(wantedTitle) || wantedTitle.includes(title)
+              ? 2
+              : 20
+          : 5
+      const artistScore =
+        wantedArtist && artist
+          ? artist === wantedArtist
+            ? 0
+            : artist.includes(wantedArtist) || wantedArtist.includes(artist)
+              ? 2
+              : 8
+          : 3
       const duration = Number(item.duration) || 0
       const drift =
-        query.durationSec > 0 && duration > 0 ? Math.abs(duration - query.durationSec) : 30
+        query.durationSec > 0 && duration > 0 ? Math.abs(duration - query.durationSec) : 8
       const syncPenalty = item.syncedLyrics ? 0 : 3
-      return { item, score: drift + syncPenalty }
+      return { item, score: titleScore * 12 + artistScore * 4 + Math.min(drift, 30) + syncPenalty }
     })
+    .filter(({ score }) => score < 20 * 12)
     .sort((a, b) => a.score - b.score)
 
   return scored[0]?.item ?? null
 }
 
+function comparisonText(value: string): string {
+  return value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/\b(?:feat|ft|with)\b.*$/i, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+}
+
 function primaryArtist(artist: string): string {
-  return artist.split(/[,&]|\sfeat\.?\s|\sx\s/i)[0]?.trim() ?? artist.trim()
+  // Only an explicit feature marker is a safe split. Splitting on `&` or every
+  // comma broke names like "Simon & Garfunkel" and "Tyler, The Creator".
+  const explicit = artist.split(/\s(?:feat\.?|ft\.?|with)\s/i)[0]?.trim() ?? artist.trim()
+  const parts = explicit.split(',').map((part) => part.trim())
+  // "Daft Punk, Julian Casablancas" is a main artist plus a feature;
+  // "Tyler, The Creator" and "Earth, Wind & Fire" are single names.
+  if (parts.length === 2 && !/^the\b/i.test(parts[1]) && /\s/.test(parts[1])) {
+    return parts[0]
+  }
+  return explicit
 }
 
 function cleanTitle(title: string): string {

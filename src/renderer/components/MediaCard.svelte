@@ -14,12 +14,13 @@
   } = $props()
 </script>
 
-<button class="card" style="width: {size}px" onclick={() => onActivate(item)} title={item.title}>
+<button class="card" style="--card-size: {size}px" onclick={() => onActivate(item)} title={item.title}>
   <span class="art">
     <Cover
       src={item.thumbnail}
       {size}
-      radius={item.kind === 'artist' ? size / 2 : 12}
+      radius={item.kind === 'artist' ? '50%' : 12}
+      fluid
       alt={item.title}
     />
     <span class="play-badge"><Icon name="play" size={14} solid /></span>
@@ -30,6 +31,9 @@
 
 <style>
   .card {
+    /* Rails write --rail-card-width so every visible card is whole. Cards
+       outside a rail keep the fixed --card-size they were given. */
+    width: var(--rail-card-width, var(--card-size, 152px));
     display: flex;
     flex-direction: column;
     gap: 5px;

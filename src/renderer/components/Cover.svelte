@@ -1,12 +1,21 @@
 <script lang="ts">
+  import { artwork } from '../lib/artwork.svelte'
   import Icon from './Icon.svelte'
 
   let {
     src,
     size = 44,
     radius = 6,
-    alt = ''
-  }: { src?: string; size?: number; radius?: number; alt?: string } = $props()
+    alt = '',
+    fluid = false
+  }: { src?: string; size?: number; radius?: number | string; alt?: string; fluid?: boolean } = $props()
+
+  const radiusCss = $derived(typeof radius === 'number' ? `${radius}px` : radius)
+  const coverStyle = $derived(
+    fluid
+      ? `border-radius:${radiusCss}`
+      : `width:${size}px;height:${size}px;border-radius:${radiusCss}`
+  )
 
   /**
    * A dead URL should look like missing art, not a broken browser.
@@ -24,18 +33,20 @@
 {#if showImage}
   <img
     class="cover"
+    class:fluid
     {src}
     {alt}
     loading="lazy"
     decoding="async"
     onerror={() => {
       failedSrc = src ?? ''
+      if (src) artwork.broken(src)
       console.warn('[cover] image failed:', src)
     }}
-    style="width:{size}px;height:{size}px;border-radius:{radius}px"
+    style={coverStyle}
   />
 {:else}
-  <div class="cover empty" style="width:{size}px;height:{size}px;border-radius:{radius}px">
+  <div class="cover empty" class:fluid style={coverStyle}>
     <Icon name="note" size={Math.max(14, Math.round(size * 0.32))} />
   </div>
 {/if}
@@ -47,6 +58,13 @@
     flex-shrink: 0;
     display: block;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  }
+
+  /* Card artwork follows the fitted card width instead of a frozen pixel size. */
+  .cover.fluid {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
   }
 
   .empty {

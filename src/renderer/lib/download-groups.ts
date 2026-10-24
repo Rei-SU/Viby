@@ -73,7 +73,8 @@ export function collectionBytes(
   return collectionEntries(collection, entries).reduce((sum, entry) => sum + entry.bytes, 0)
 }
 
-export function formatSize(bytes: number | undefined): string {
+export function formatSize(bytes: number | null | undefined): string {
+  if (bytes == null) return '—'
   if (!bytes) return '0 MB'
   const gb = bytes / 1024 ** 3
   if (gb >= 1) return `${gb.toFixed(1)} GB`

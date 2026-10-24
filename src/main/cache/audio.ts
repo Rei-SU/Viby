@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { existsSync, mkdirSync, renameSync, rmSync, statSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
 import { JsonStore } from '../json-store'
 import type { CacheStats } from '@shared/types'
 
@@ -57,16 +57,21 @@ export class AudioCache {
     })
   }
 
-  /** Move a fully downloaded temp file into the cache and evict if over cap. */
-  put(trackId: string, tmpFile: string, ext: string): string {
+  /**
+   * Move a fully downloaded temp file into the cache and evict if over cap.
+   * `keepId` is the file currently playing: eviction must never pull it out
+   * from under the media element.
+   */
+  put(trackId: string, tmpFile: string, ext: string, keepId?: string): string {
     const dest = join(this.dir, `${trackId}.${ext}`)
-    if (existsSync(dest)) unlinkSync(dest)
+    // Rename replaces the destination atomically; unlinking first created a
+    // window where a failed rename left the track with no cached file.
     renameSync(tmpFile, dest)
     const bytes = statSync(dest).size
     this.store.update((d) => {
       d.entries[trackId] = { ext, bytes, lastUsed: Date.now() }
     })
-    this.evict()
+    this.evict(keepId)
     return dest
   }
 
@@ -93,15 +98,19 @@ export class AudioCache {
     return Object.values(this.store.get().entries).reduce((sum, e) => sum + e.bytes, 0)
   }
 
-  /** Drop least-recently-used entries until we are back under the cap. */
-  evict(): void {
+  /**
+   * Drop least-recently-used entries until we are back under the cap.
+   * `keepId` may leave the cache slightly over cap while that track plays; it is
+   * removed by the next eviction after playback moves on.
+   */
+  evict(keepId?: string): void {
     const cap = this.capBytes()
     let total = this.bytes()
     if (total <= cap) return
 
-    const ordered = Object.entries(this.store.get().entries).sort(
-      (a, b) => a[1].lastUsed - b[1].lastUsed
-    )
+    const ordered = Object.entries(this.store.get().entries)
+      .filter(([id]) => id !== keepId)
+      .sort((a, b) => a[1].lastUsed - b[1].lastUsed)
 
     for (const [id, entry] of ordered) {
       if (total <= cap) break
@@ -122,12 +131,34 @@ export class AudioCache {
     return { bytes: this.bytes(), capBytes: this.capBytes(), entries, dir: this.dir }
   }
 
-  clear(): CacheStats {
+  /**
+   * Remove every cached file. `keepId` protects the file currently playing.
+   * A per-file unlink is deliberate: deleting the whole directory throws on
+   * Windows when Chromium holds the open file, so the handler used to fail and
+   * leave the cache untouched.
+   */
+  clear(keepId?: string): CacheStats {
+    const keep = keepId ? this.store.get().entries[keepId] : undefined
+    const keepName = keepId && keep ? `${keepId}.${keep.ext}` : null
+    for (const name of this.files()) {
+      if (name === 'index.json' || name === keepName) continue
+      try {
+        unlinkSync(join(this.dir, name))
+      } catch {
+        // Held or already gone; the index drop below still frees the entry.
+      }
+    }
     this.store.update((d) => {
-      d.entries = {}
+      d.entries = keepId && keep ? { [keepId]: keep } : {}
     })
-    rmSync(this.dir, { recursive: true, force: true })
-    mkdirSync(this.dir, { recursive: true })
     return this.stats()
+  }
+
+  private files(): string[] {
+    try {
+      return readdirSync(this.dir)
+    } catch {
+      return []
+    }
   }
 }

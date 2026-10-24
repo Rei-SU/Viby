@@ -109,6 +109,9 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    /* A single hairline marks the edge of the docked panel. It is deliberately
+       weaker than the old raised surface/border treatment: no background step,
+       no gutter, just enough contrast to read where the page ends. */
     background: var(--bg);
     border-left: 1px solid var(--stroke);
     pointer-events: none;

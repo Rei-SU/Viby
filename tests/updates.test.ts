@@ -167,7 +167,14 @@ console.log('\nWindows: in-place download and install:')
       installs++
     }
   }
-  const { updater, states } = build({ native })
+  const { updater, states } = build({
+    native,
+    latestRelease: async () => ({
+      version: '0.2.0',
+      url: 'https://example.test',
+      artifacts: { 'Viby-windows-x64.exe': 'c'.repeat(64) }
+    })
+  })
   check('can install in place', updater.get().canInstall === true)
 
   const checked = await updater.check()
@@ -196,7 +203,14 @@ console.log('\nWindows: install is inert before the download finishes:')
       installs++
     }
   }
-  const { updater } = build({ native })
+  const { updater } = build({
+    native,
+    latestRelease: async () => ({
+      version: '0.2.0',
+      url: 'https://example.test',
+      artifacts: { 'Viby-windows-x64.exe': 'c'.repeat(64) }
+    })
+  })
   await updater.check()
   updater.install()
   check('nothing installed from the available phase', installs === 0, String(installs))
@@ -340,6 +354,26 @@ console.log('\nWindows: the signed manifest hash reaches the downloader:')
   await updater.check()
   await updater.download()
   check('the manifest hash is passed through', expected === 'c'.repeat(64), expected)
+}
+
+console.log('\nWindows: a missing signed manifest blocks the update:')
+{
+  let downloaded = false
+  const native = {
+    check: async (): Promise<string | null> => '0.2.0',
+    download: async (): Promise<void> => {
+      downloaded = true
+    },
+    install: (): void => undefined
+  }
+  const { updater } = build({
+    native,
+    latestRelease: async () => ({ version: '0.2.0', url: 'https://example.test' })
+  })
+  const state = await updater.check()
+  check('fails closed without an artifact hash', state.phase === 'error', state.phase)
+  await updater.download()
+  check('never downloads unsigned bytes', !downloaded)
 }
 
 console.log('\nWindows: a bad signature blocks the update:')

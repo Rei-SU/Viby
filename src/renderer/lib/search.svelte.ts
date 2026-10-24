@@ -31,11 +31,21 @@ class SearchState {
     this.query = query
     if (this.timer) clearTimeout(this.timer)
 
+    // Invalidate anything still in flight before the debounce starts. Without
+    // this an old response can land inside the 220 ms window and be accepted
+    // under the new query.
+    this.seq += 1
+
     if (!query.trim() || network.localFirst) {
       this.clearResults()
       return
     }
 
+    // Rows for the previous query must not remain clickable under the new one.
+    this.items = []
+    this.source = null
+    this.error = null
+    this.loading = true
     this.timer = setTimeout(() => void this.load(), 220)
   }
 

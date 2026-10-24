@@ -1,5 +1,5 @@
 import { ImportError } from './errors'
-import { httpGet } from './http'
+import { assertPublicHttpUrl, httpGet } from './http'
 
 export type DetectedImport = {
   service: 'spotify' | 'apple' | 'deezer' | 'youtube' | 'soundcloud'
@@ -25,16 +25,44 @@ const SHORT_HOSTS = new Set([
 const SUPPORTED =
   'Paste a playlist link from Spotify, Apple Music, Deezer, YouTube Music or SoundCloud.'
 
-/** Follow short share links (and YouTube short links) to the canonical URL. */
+/**
+ * Follow short share links manually. Automatic redirect-following would let a
+ * malicious short link bounce the main process into a loopback address.
+ */
 async function followRedirect(input: string, signal?: AbortSignal): Promise<string> {
-  const res = await httpGet(input, { signal, timeoutMs: 12_000 })
-  const final = res.url || input
-  try {
-    await res.body?.cancel()
-  } catch {
-    // The body is irrelevant; cancelling is just polite.
+  let current = input
+  const seen = new Set<string>()
+
+  for (let hop = 0; hop < 6; hop++) {
+    if (seen.has(current)) throw new ImportError('That short link redirects in a loop.')
+    seen.add(current)
+    await assertPublicHttpUrl(current)
+
+    const res = await httpGet(current, {
+      signal,
+      timeoutMs: 12_000,
+      redirect: 'manual'
+    })
+    const location = res.headers.get('location')
+    try {
+      await res.body?.cancel()
+    } catch {
+      // The body is irrelevant; cancelling is just polite.
+    }
+
+    if (res.status < 300 || res.status >= 400) {
+      return res.url || current
+    }
+    if (!location) throw new ImportError('That short link could not be resolved.')
+
+    const next = new URL(location, current)
+    if (next.protocol !== 'http:' && next.protocol !== 'https:') {
+      throw new ImportError('That short link points to an unsupported address.')
+    }
+    current = next.toString()
   }
-  return final
+
+  throw new ImportError('That short link redirects too many times.')
 }
 
 function spotify(url: URL): DetectedImport | null {
@@ -121,7 +149,8 @@ function soundcloud(url: URL): DetectedImport | null {
  */
 export async function detectImportUrl(
   input: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  depth = 0
 ): Promise<DetectedImport> {
   const value = input.trim()
   if (!value) throw new ImportError('Paste a playlist link first')
@@ -149,11 +178,12 @@ export async function detectImportUrl(
 
   const host = url.hostname.toLowerCase()
   if (SHORT_HOSTS.has(host) && !host.includes('youtube.com')) {
+    if (depth >= 2) throw new ImportError('That short link could not be resolved.')
     const final = await followRedirect(url.toString(), signal)
     if (final === url.toString()) {
       throw new ImportError('That short link could not be resolved. Paste the full share link.')
     }
-    return detectImportUrl(final, signal)
+    return detectImportUrl(final, signal, depth + 1)
   }
 
   return (

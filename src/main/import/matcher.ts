@@ -280,6 +280,7 @@ export async function matchImport(
       try {
         items = await searchCached(query)
       } catch {
+        if (isCancelled()) return
         results[index] = {
           source: track,
           status: 'missing',
@@ -291,6 +292,7 @@ export async function matchImport(
         report()
         continue
       }
+      if (isCancelled()) return
 
       const scored = items
         .map((item) => scoreCandidate(track, item))
@@ -331,5 +333,6 @@ export async function matchImport(
     Array.from({ length: Math.min(3, Math.max(1, total)) }, () => worker())
   )
 
+  if (isCancelled()) return []
   return results.filter((match): match is ImportMatch => Boolean(match))
 }

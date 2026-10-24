@@ -1,4 +1,4 @@
-import { createReadStream, statSync } from 'node:fs'
+import { createReadStream, rmSync, statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
@@ -29,7 +29,7 @@ import type {
   YtDlpInfo
 } from '@shared/types'
 import { CH, type LyricsRequest, type ResolveRequest } from '@shared/ipc'
-import { qualityCapKbps, settings } from './settings'
+import { qualityCapKbps, setSettings, settings } from './settings'
 import { session } from './session'
 import { cachedLyrics, getLyrics } from './lyrics'
 import { lib } from './library'
@@ -52,6 +52,7 @@ import { downloadMacInstaller } from './updater-manual'
 
 const resolver = new Resolver()
 const inflightDownloads = new Set<string>()
+const backgroundDownloadControllers = new Set<AbortController>()
 let blockerId: number | null = null
 let downloadBlockerId: number | null = null
 /** The track the <audio> element is currently on, for download-safety checks. */
@@ -104,6 +105,7 @@ export function registerIpc(): void {
       : null
 
   let importJob: { cancelled: boolean } | null = null
+let importResolveController: AbortController | null = null
 
   // Restore stream URLs resolved in the last two hours, so a restart does not
   // make you wait all over again for the tracks you were just playing.
@@ -125,7 +127,11 @@ export function registerIpc(): void {
 
   const downloadsStore = downloadStore()
   const manager = new DownloadManager(downloadsStore, {
-    isOffline: () => networkMonitor.isOffline(),
+    // Downloads need the upstream host, not just a local link. Treat
+    // `unreachable` (captive portal/DNS failure) as unavailable so we do not
+    // spend retries and power on jobs that cannot finish.
+    isOffline: () => networkMonitor.isLocalFirst(),
+    isPlaying: (trackId) => playingTrackId === trackId,
     onProgress: (progress: DownloadProgress) => broadcast(CH.downloadsProgress, progress),
     onChanged: () => {
       void manager.snapshot().then((snapshot) => broadcast(CH.downloadsChanged, snapshot))
@@ -151,8 +157,7 @@ export function registerIpc(): void {
 
   networkMonitor.onChange((state: NetworkState) => {
     broadcast(CH.networkChanged, state)
-    // `unreachable` keeps the network path alive; only a missing link pauses.
-    manager.onNetworkChange(networkMonitor.isOffline())
+    manager.onNetworkChange(!networkMonitor.isLocalFirst())
   })
   networkMonitor.start()
   manager.start()
@@ -167,7 +172,8 @@ export function registerIpc(): void {
     offline: () => networkMonitor.isOffline(),
     latestRelease: () => fetchLatestRelease(process.arch),
     native: app.isPackaged && process.platform === 'win32' ? createNativeUpdater() : undefined,
-    downloadManual: process.platform === 'darwin' ? downloadMacInstaller : undefined,
+    downloadManual:
+      app.isPackaged && process.platform === 'darwin' ? downloadMacInstaller : undefined,
     quit: () => app.quit(),
     skippedVersion: () => settings().get().skippedUpdateVersion,
     onState: (state) => broadcast(CH.updatesChanged, state)
@@ -192,23 +198,40 @@ export function registerIpc(): void {
     setInterval(autoCheck, 6 * 60 * 60_000).unref()
   }
 
+  const stopPlaybackBlocker = (): void => {
+    if (blockerId !== null) {
+      powerSaveBlocker.stop(blockerId)
+      blockerId = null
+    }
+  }
+
   app.on('before-quit', () => {
     manager.shutdown()
     networkMonitor.stop()
+    stopPlaybackBlocker()
+    for (const controller of backgroundDownloadControllers) controller.abort()
+    backgroundDownloadControllers.clear()
     if (downloadBlockerId !== null) {
       powerSaveBlocker.stop(downloadBlockerId)
       downloadBlockerId = null
     }
   })
 
+  // A renderer crash or reload never sends player:state=false. Release the
+  // display-sleep blocker rather than leaving the machine awake all session.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('render-process-gone', stopPlaybackBlocker)
+    contents.on('destroyed', stopPlaybackBlocker)
+  })
+
   ipcMain.handle(CH.settingsGet, (): Settings => settings().get())
 
   ipcMain.handle(CH.settingsSet, (_e, patch: Partial<Settings>): Settings => {
     const previous = settings().get().audioQuality
-    const next = settings().set(patch)
+    const next = setSettings(patch)
 
     // A smaller cap must take effect immediately, not on next launch.
-    cacheInstance().evict()
+    cacheInstance().evict(playingTrackId ?? undefined)
 
     // The offline switch may have been changed through the generic settings API.
     if (patch.offlineMode !== undefined) networkMonitor.applySettings()
@@ -473,7 +496,16 @@ export function registerIpc(): void {
 
   ipcMain.handle(CH.favoritesList, (): Track[] => lib().favorites())
 
-  ipcMain.handle(CH.favoritesToggle, (_e, track: Track) => lib().toggleFavorite(track))
+  ipcMain.handle(CH.favoritesToggle, (_e, track: Track) => {
+    const result = lib().toggleFavorite(track)
+    // Keep the Liked songs download snapshot in step: liking/unliking after the
+    // collection was downloaded should not leave a stale coverage count.
+    downloadsManager?.syncCollection(
+      'liked',
+      result.favorites.map((favorite) => favorite.id)
+    )
+    return result
+  })
 
   // ---- playlists (PLAN §5.4) ----------------------------------------------
   ipcMain.handle(CH.libraryPlaylists, (): Playlist[] => lib().playlists())
@@ -507,10 +539,14 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle(CH.importResolve, async (_e, url: string): Promise<Result<ImportSource>> => {
+    const controller = new AbortController()
+    importResolveController = controller
     try {
-      return ok(await resolveImport(url))
+      return ok(await resolveImport(url, { signal: controller.signal }))
     } catch (err) {
       return fail(err)
+    } finally {
+      if (importResolveController === controller) importResolveController = null
     }
   })
 
@@ -539,6 +575,7 @@ export function registerIpc(): void {
   )
 
   ipcMain.handle(CH.importCancel, (): void => {
+    importResolveController?.abort()
     if (importJob) importJob.cancelled = true
   })
 
@@ -562,7 +599,9 @@ export function registerIpc(): void {
   ipcMain.handle(CH.cacheStats, () => cacheInstance().stats())
 
   ipcMain.handle(CH.cacheClear, () => {
-    cacheInstance().clear()
+    // Keep the track loaded in the player; deleting its file breaks seeking and
+    // can make the unlink fail on Windows.
+    cacheInstance().clear(playingTrackId ?? undefined)
     // Artwork is cache too, even though the Settings line reports audio only.
     imageCache().clear()
     return cacheInstance().stats()
@@ -618,11 +657,13 @@ async function resolveForPlayback(
   const offline = networkMonitor.isOffline()
 
   // 1. An explicit download always wins, even over a fresh URL. It is the one
-  //    file the user asked us to keep.
+  //    file the user asked us to keep. The exception is a forced recovery from a
+  //    file stream: if the downloaded file itself failed to decode, handing the
+  //    same file back makes recovery impossible. Bypass it for this attempt.
   if (directId) {
     const file = downloadStore().lookup(directId)
     const entry = downloadStore().entry(directId)
-    if (file && entry) {
+    if (file && entry && !(req.force && req.discardCache)) {
       const track = known[directId] ?? entry.track
       remember(track)
       return {
@@ -672,7 +713,19 @@ async function resolveForPlayback(
     // SABR-only: no playable URL, so fetch the audio and play it locally.
     const url = Resolver.normalizeInput(input)
     const downloaded = await resolver.download(url, signal, qualityCapKbps())
-    const file = store.put(downloaded.id, downloaded.file, downloaded.ext)
+    let file: string
+    try {
+      file = store.put(
+        downloaded.id,
+        downloaded.file,
+        downloaded.ext,
+        playingTrackId ?? undefined
+      )
+    } finally {
+      // The audio file was moved into the cache; the temp directory itself is
+      // now empty and must not survive every SABR playback.
+      rmSync(downloaded.dir, { recursive: true, force: true })
+    }
     remember(err.track)
     return {
       track: err.track,
@@ -726,7 +779,8 @@ function kickOffBackgroundCache(track: Track, input: string): void {
   const store = cacheInstance()
   if (store.has(track.id) || inflightDownloads.has(track.id)) return
   // A user-owned download already covers this track; do not duplicate the file.
-  if (downloadStore().has(track.id)) return
+  // A queued/running explicit download will produce that copy shortly.
+  if (downloadStore().has(track.id) || downloadStore().job(track.id)) return
 
   const worth = shouldCache({
     favorited: lib().isFavorite(track.id),
@@ -737,16 +791,28 @@ function kickOffBackgroundCache(track: Track, input: string): void {
   if (!worth) return
 
   inflightDownloads.add(track.id)
+  const controller = new AbortController()
+  backgroundDownloadControllers.add(controller)
   resolver
-    .download(Resolver.normalizeInput(input))
+    .download(Resolver.normalizeInput(input), controller.signal, qualityCapKbps(), true)
     .then((downloaded) => {
-      store.put(downloaded.id, downloaded.file, downloaded.ext)
+      try {
+        // The user may have started an explicit download while this ran. The
+        // explicit copy wins; cache the same bytes would waste space.
+        if (downloadStore().has(downloaded.id) || downloadStore().job(downloaded.id)) {
+          return
+        }
+        store.put(downloaded.id, downloaded.file, downloaded.ext, playingTrackId ?? undefined)
+      } finally {
+        rmSync(downloaded.dir, { recursive: true, force: true })
+      }
     })
     .catch(() => {
       // A failed opportunistic download is not worth surfacing: playback
       // already succeeded over the network.
     })
     .finally(() => {
+      backgroundDownloadControllers.delete(controller)
       inflightDownloads.delete(track.id)
     })
 }

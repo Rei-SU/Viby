@@ -7,7 +7,7 @@ import { playlistItems } from '../innertube/client'
  * CatalogItems; this just follows the 100-row continuations and normalises.
  * The source ids are already YouTube ids, so matching is exact and instant.
  */
-export async function resolveYoutube(listId: string): Promise<ImportSource> {
+export async function resolveYoutube(listId: string, signal?: AbortSignal): Promise<ImportSource> {
   if (!listId) throw new ImportError('That YouTube Music link has no playlist id')
   if (listId.startsWith('RD')) {
     throw new ImportError('That is an endless radio mix. Paste a normal playlist instead.')
@@ -16,7 +16,7 @@ export async function resolveYoutube(listId: string): Promise<ImportSource> {
     throw new ImportError('That playlist is private. Make it public, then paste the link again.')
   }
 
-  const { items, header } = await playlistItems(`VL${listId}`)
+  const { items, header } = await playlistItems(`VL${listId}`, signal)
   const tracks: ImportTrack[] = []
 
   for (const item of items) {

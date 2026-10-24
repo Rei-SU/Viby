@@ -24,7 +24,7 @@ import type {
   Quality,
   Track
 } from '@shared/types'
-import { JsonStore } from '../json-store'
+import { JsonStore, recoveryMarkerFor } from '../json-store'
 import { mediaUrlFor } from '../media'
 
 export type DownloadJob = {
@@ -54,18 +54,58 @@ function unique(values: string[]): string[] {
  */
 export class DownloadsStore {
   private store: JsonStore<DownloadData>
+  private revision = 0
+  /**
+   * A corrupt index leaves us with no list of which files are referenced.
+   * Sweeping would then delete every download, so pause destructive cleanup
+   * until the user explicitly clears the library.
+   */
+  private recoveryNeeded: boolean
 
   constructor(private readonly root: string) {
     mkdirSync(this.audioDir, { recursive: true })
     mkdirSync(this.artDir, { recursive: true })
     mkdirSync(this.lyricsDir, { recursive: true })
     mkdirSync(this.tmpDir, { recursive: true })
-    this.store = new JsonStore<DownloadData>(join(root, 'index.json'), {
+    const indexFile = join(root, 'index.json')
+    this.store = new JsonStore<DownloadData>(indexFile, {
       entries: {},
       collections: {},
       jobs: {}
     })
-    this.heal()
+    this.recoveryNeeded =
+      this.store.loadFailed || existsSync(recoveryMarkerFor(indexFile))
+
+    const data = this.store.get()
+    if (
+      !data.entries ||
+      typeof data.entries !== 'object' ||
+      Array.isArray(data.entries) ||
+      !data.collections ||
+      typeof data.collections !== 'object' ||
+      Array.isArray(data.collections) ||
+      !data.jobs ||
+      typeof data.jobs !== 'object' ||
+      Array.isArray(data.jobs)
+    ) {
+      this.store.update((next) => {
+        if (!next.entries || typeof next.entries !== 'object' || Array.isArray(next.entries)) {
+          next.entries = {}
+        }
+        if (
+          !next.collections ||
+          typeof next.collections !== 'object' ||
+          Array.isArray(next.collections)
+        ) {
+          next.collections = {}
+        }
+        if (!next.jobs || typeof next.jobs !== 'object' || Array.isArray(next.jobs)) {
+          next.jobs = {}
+        }
+      })
+    }
+
+    if (!this.recoveryNeeded) this.heal()
   }
 
   get dir(): string {
@@ -133,7 +173,9 @@ export class DownloadsStore {
     if (!entry) return null
     const file = join(this.audioDir, `${this.safeId(trackId)}.${entry.ext}`)
     if (!existsSync(file)) {
-      this.removeTrack(trackId)
+      // Drop the stale entry but keep it in any collection's trackIds: the
+      // collection can then show incomplete coverage and be repaired on demand.
+      this.removeMissingEntry(trackId, entry)
       return null
     }
     return file
@@ -195,7 +237,11 @@ export class DownloadsStore {
   }
 
   async snapshot(jobs: DownloadJobView[]): Promise<DownloadsSnapshot> {
+    // Assign the revision before awaiting stats: if two snapshots resolve out of
+    // order, the renderer can discard the older one instead of flickering back.
+    const revision = ++this.revision
     return {
+      revision,
       entries: this.entries(),
       collections: this.collections(),
       jobs,
@@ -207,12 +253,14 @@ export class DownloadsStore {
     return Object.values(this.store.get().entries).reduce((sum, entry) => sum + entry.bytes, 0)
   }
 
-  async freeBytes(): Promise<number> {
+  async freeBytes(): Promise<number | null> {
     try {
       const fs = await statfs(this.root)
       return Number(fs.bavail) * Number(fs.bsize)
     } catch {
-      return 0
+      // "Unknown" is not "full". Returning 0 turned a statfs failure into a
+      // permanent "not enough disk space" failure for every download.
+      return null
     }
   }
 
@@ -227,6 +275,16 @@ export class DownloadsStore {
 
   /** Add a source to an existing download, or queue every track that is missing. */
   enqueue(items: Array<{ track: Track; source: string }>, quality: Quality): string[] {
+    // The renderer's badge can be stale if a file was removed outside Viby.
+    // Drop those entries first so clicking Download starts a real job instead of
+    // only adding a source to a download that no longer exists.
+    for (const { track } of items) {
+      const entry = this.store.get().entries[track.id]
+      if (!entry) continue
+      const file = join(this.audioDir, `${this.safeId(track.id)}.${entry.ext}`)
+      if (!existsSync(file)) this.removeMissingEntry(track.id, entry)
+    }
+
     const added: string[] = []
     this.store.update((data) => {
       for (const { track, source } of items) {
@@ -281,7 +339,11 @@ export class DownloadsStore {
   }
 
   /** Playlist lost tracks: drop the reference and any file nobody else needs. */
-  pruneCollection(key: string, trackIds: string[]): string[] {
+  pruneCollection(
+    key: string,
+    trackIds: string[],
+    keepFile?: (trackId: string) => boolean
+  ): string[] {
     const keep = new Set(trackIds)
     const affected: string[] = []
     this.store.update((data) => {
@@ -295,7 +357,7 @@ export class DownloadsStore {
         if (!entry.sources.includes(key) || keep.has(id)) continue
         entry.sources = entry.sources.filter((source) => source !== key)
         if (entry.sources.length === 0) {
-          this.unlinkEntry(id, entry)
+          this.unlinkEntry(id, entry, keepFile?.(id) ?? false)
           delete data.entries[id]
         }
       }
@@ -361,22 +423,17 @@ export class DownloadsStore {
     const dest = join(this.audioDir, `${id}.${ext}`)
     const previous = this.store.get().entries[track.id]
 
+    // Rename over the old file atomically. Node maps this to a replace-existing
+    // move on Windows too; deleting the destination first could lose the only
+    // playable copy if the rename then failed (locked file, full disk).
+    renameSync(tmpFile, dest)
     if (previous && previous.ext !== ext) {
       try {
         unlinkSync(join(this.audioDir, `${id}.${previous.ext}`))
       } catch {
-        // Already gone.
+        // Orphaned old extension; startup healing removes it.
       }
     }
-    if (existsSync(dest)) {
-      try {
-        unlinkSync(dest)
-      } catch {
-        // Windows can briefly hold a file; rename below will surface the issue.
-      }
-    }
-
-    renameSync(tmpFile, dest)
     const bytes = statSync(dest).size
     const duration = track.durationSec ?? 0
     const entry: DownloadEntry = {
@@ -398,32 +455,41 @@ export class DownloadsStore {
     return this.decorateEntry(entry)
   }
 
-  removeSource(trackId: string, source: string): void {
+  removeSource(trackId: string, source: string, keepFile = false): void {
     this.store.update((data) => {
       const entry = data.entries[trackId]
       if (!entry) return
       entry.sources = entry.sources.filter((value) => value !== source)
       if (entry.sources.length === 0) {
-        this.unlinkEntry(trackId, entry)
+        this.unlinkEntry(trackId, entry, keepFile)
         delete data.entries[trackId]
       }
     })
     this.sweepArt()
+    this.sweepLyrics()
   }
 
-  removeTrack(trackId: string): void {
+  removeTrack(trackId: string, keepFile = false): void {
     this.store.update((data) => {
       const entry = data.entries[trackId]
-      if (entry) this.unlinkEntry(trackId, entry)
+      if (entry) this.unlinkEntry(trackId, entry, keepFile)
       delete data.entries[trackId]
       delete data.jobs[trackId]
+      // A row-level removal means the track is no longer part of any downloaded
+      // album or playlist. Leaving the id behind made collections show ghost
+      // tracks that could never be played again.
+      for (const [key, collection] of Object.entries(data.collections)) {
+        collection.trackIds = collection.trackIds.filter((id) => id !== trackId)
+        if (collection.trackIds.length === 0) delete data.collections[key]
+      }
     })
     rmSync(this.tmpDirFor(trackId), { recursive: true, force: true })
     this.sweepArt()
+    this.sweepLyrics()
   }
 
   /** Remove a collection and every reference it owned. Returns affected jobs. */
-  removeCollection(key: string): string[] {
+  removeCollection(key: string, keepFile?: (trackId: string) => boolean): string[] {
     const affected: string[] = []
     this.store.update((data) => {
       delete data.collections[key]
@@ -432,7 +498,7 @@ export class DownloadsStore {
         if (!entry.sources.includes(key)) continue
         entry.sources = entry.sources.filter((source) => source !== key)
         if (entry.sources.length === 0) {
-          this.unlinkEntry(id, entry)
+          this.unlinkEntry(id, entry, keepFile?.(id) ?? false)
           delete data.entries[id]
         }
       }
@@ -447,16 +513,40 @@ export class DownloadsStore {
       }
     })
     this.sweepArt()
+    this.sweepLyrics()
     return affected
   }
 
-  clear(): void {
+  /**
+   * Remove every download. `keepTrackId` protects the file currently loaded in
+   * the player; deleting it under an open media element breaks seeking and can
+   * fail outright on Windows. The orphan is swept on the next launch.
+   */
+  clear(keepTrackId?: string): void {
+    // An explicit clear is the user's acknowledgement that the preserved
+    // recovery files can go away.
+    this.recoveryNeeded = false
+    rmSync(recoveryMarkerFor(join(this.root, 'index.json')), { force: true })
+    const keepEntry = keepTrackId ? this.store.get().entries[keepTrackId] : undefined
+    const keepName = keepEntry
+      ? `${this.safeId(keepTrackId as string)}.${keepEntry.ext}`
+      : null
+
     this.store.update((data) => {
       data.entries = {}
       data.collections = {}
       data.jobs = {}
     })
-    rmSync(this.audioDir, { recursive: true, force: true })
+
+    for (const name of this.audioFiles()) {
+      if (name === keepName) continue
+      try {
+        unlinkSync(join(this.audioDir, name))
+      } catch {
+        // Held by another process; the next launch sweeps it.
+      }
+    }
+
     rmSync(this.artDir, { recursive: true, force: true })
     rmSync(this.lyricsDir, { recursive: true, force: true })
     rmSync(this.tmpDir, { recursive: true, force: true })
@@ -475,6 +565,7 @@ export class DownloadsStore {
   }
 
   private heal(): void {
+    if (this.recoveryNeeded) return
     this.store.update((data) => {
       for (const [id, entry] of Object.entries(data.entries)) {
         const file = join(this.audioDir, `${this.safeId(id)}.${entry.ext}`)
@@ -536,6 +627,7 @@ export class DownloadsStore {
    * file nothing points at any more. Runs after removals and on startup.
    */
   private sweepArt(): void {
+    if (this.recoveryNeeded) return
     const refs = new Set<string>()
     for (const entry of Object.values(this.store.get().entries)) {
       if (entry.art) refs.add(basename(entry.art))
@@ -555,6 +647,7 @@ export class DownloadsStore {
 
   /** Lyrics belong to their entry; delete files whose entry is gone. */
   private sweepLyrics(): void {
+    if (this.recoveryNeeded) return
     const wanted = new Set(Object.keys(this.store.get().entries).map((id) => `${this.safeId(id)}.json`))
     for (const name of this.lyricsFiles()) {
       if (wanted.has(name)) continue
@@ -598,11 +691,25 @@ export class DownloadsStore {
     }
   }
 
-  private unlinkEntry(trackId: string, entry: DownloadEntry): void {
-    try {
-      unlinkSync(join(this.audioDir, `${this.safeId(trackId)}.${entry.ext}`))
-    } catch {
-      // Already gone; the index entry is the part that matters.
+  /** Drop an entry whose file vanished, without rewriting collection membership. */
+  private removeMissingEntry(trackId: string, entry: DownloadEntry): void {
+    this.unlinkEntry(trackId, entry)
+    this.store.update((data) => {
+      delete data.entries[trackId]
+      delete data.jobs[trackId]
+    })
+    rmSync(this.tmpDirFor(trackId), { recursive: true, force: true })
+    this.sweepArt()
+    this.sweepLyrics()
+  }
+
+  private unlinkEntry(trackId: string, entry: DownloadEntry, keepFile = false): void {
+    if (!keepFile) {
+      try {
+        unlinkSync(join(this.audioDir, `${this.safeId(trackId)}.${entry.ext}`))
+      } catch {
+        // Already gone; the index entry is the part that matters.
+      }
     }
     rmSync(this.lyricsPath(trackId), { force: true })
   }

@@ -21,7 +21,11 @@ function context(): Record<string, unknown> {
   }
 }
 
-async function call(endpoint: string, body: Record<string, unknown>): Promise<unknown> {
+async function call(
+  endpoint: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<unknown> {
   const url = `${INNERTUBE.endpoint}/${endpoint}?prettyPrint=false&key=${INNERTUBE.apiKey}`
   const res = await fetch(url, {
     method: 'POST',
@@ -32,7 +36,9 @@ async function call(endpoint: string, body: Record<string, unknown>): Promise<un
       'X-Goog-Api-Format-Version': '1'
     },
     body: JSON.stringify({ context: context(), ...body }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+      : AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   })
 
   if (!res.ok) {
@@ -91,16 +97,29 @@ export async function audioTrackFor(
   const base = normalizeTitle(title)
   if (!base) return null
 
-  const query = `${base} ${artist.split(',')[0]?.trim() ?? ''}`.trim()
+  const primaryArtist = artist.split(',')[0]?.trim().toLowerCase() ?? ''
+  const query = `${base} ${primaryArtist}`.trim()
   const results = (await search(query, 'songs')).filter((item) => item.videoType !== 'ugc')
+  const versionWord = /\b(live|remix|cover|karaoke|instrumental|acoustic|sped up|slowed|nightcore)\b/i
+  const baseHasVersion = versionWord.test(base)
 
-  const candidate =
-    results.find((item) => {
-      if (item.kind !== 'song' || !item.id) return false
+  const ranked = results
+    .filter((item) => item.kind === 'song' && item.id)
+    .map((item) => {
       const name = normalizeTitle(item.title)
-      if (!name) return false
-      return name === base || name.startsWith(base) || base.startsWith(name)
-    }) ?? null
+      if (!name) return null
+      if (!(name === base || name.startsWith(base) || base.startsWith(name))) return null
+      let score = name === base ? 4 : 2
+      const itemArtist = (item.artists ?? []).join(' ').toLowerCase()
+      if (primaryArtist && itemArtist.includes(primaryArtist)) score += 3
+      if (!baseHasVersion && versionWord.test(name)) score -= 4
+      if (item.videoType === 'audio') score += 1
+      return { item, score }
+    })
+    .filter((entry): entry is { item: CatalogItem; score: number } => Boolean(entry))
+    .sort((a, b) => b.score - a.score)
+
+  const candidate = ranked[0]?.item ?? null
 
   if (audioTrackCache.size > 300) audioTrackCache.clear()
   audioTrackCache.set(videoId, candidate)
@@ -110,11 +129,52 @@ export async function audioTrackFor(
 /** Open an album, artist, or playlist page: its own header plus its contents. */
 export async function browse(browseId: string): Promise<BrowseResult> {
   if (!browseId) throw new Error('Nothing to open')
-  const response = await call('browse', { browseId })
-  const shelves = extractShelves(response).filter((shelf) => shelf.items.length > 0)
+  const first = await call('browse', { browseId })
+  const header = extractHeader(first)
+  const items = extractItems(first)
+  const seen = new Set(items.map((item) => `${item.kind}:${item.id ?? item.browseId ?? item.title}`))
+  const shelves = extractShelves(first).filter((shelf) => shelf.items.length > 0)
+  const shelfIndex = new Map(shelves.map((shelf) => [shelf.title, shelf]))
+  let token = continuationToken(first)
+  let pages = 0
+
+  // Albums and artist discographies paginate exactly like playlists. Without
+  // this, a 200-track album silently ended after its first 100 rows.
+  while (token && items.length < 10_000 && pages < 100) {
+    const page = await call('browse', { continuation: token })
+    for (const item of extractItems(page)) {
+      const key = `${item.kind}:${item.id ?? item.browseId ?? item.title}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push(item)
+    }
+    for (const shelf of extractShelves(page)) {
+      if (shelf.items.length === 0) continue
+      const existing = shelfIndex.get(shelf.title)
+      if (!existing) {
+        shelfIndex.set(shelf.title, shelf)
+        shelves.push(shelf)
+        continue
+      }
+      const known = new Set(
+        existing.items.map((item) => `${item.kind}:${item.id ?? item.browseId ?? item.title}`)
+      )
+      for (const item of shelf.items) {
+        const key = `${item.kind}:${item.id ?? item.browseId ?? item.title}`
+        if (!known.has(key)) {
+          known.add(key)
+          existing.items.push(item)
+        }
+      }
+    }
+    token = continuationToken(page)
+    pages++
+    if (token) await new Promise((resolve) => setTimeout(resolve, 120))
+  }
+
   return {
-    items: extractItems(response),
-    header: extractHeader(response),
+    items,
+    header,
     shelves: shelves.length > 0 ? shelves : undefined
   }
 }
@@ -124,7 +184,8 @@ export async function browse(browseId: string): Promise<BrowseResult> {
  * continuations. Browse alone only returns the first page.
  */
 export async function playlistItems(
-  browseId: string
+  browseId: string,
+  signal?: AbortSignal
 ): Promise<{ items: CatalogItem[]; header?: BrowseHeader }> {
   if (!browseId) throw new Error('Nothing to open')
 
@@ -136,7 +197,7 @@ export async function playlistItems(
   let pages = 0
 
   while (token && items.length < 10_000 && pages < 100) {
-    const page = await call('browse', { continuation: token })
+    const page = await call('browse', { continuation: token }, signal)
     for (const item of extractItems(page)) {
       if (seen.has(item.id)) continue
       seen.add(item.id)

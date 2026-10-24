@@ -9,6 +9,8 @@ import {
   writeFileSync
 } from 'node:fs'
 import { join } from 'node:path'
+import { isIP } from 'node:net'
+import { lookup } from 'node:dns/promises'
 import { net } from 'electron'
 import { mediaUrlFor } from '../media'
 
@@ -17,7 +19,8 @@ const MAX_CACHE_BYTES = 256 * 1024 * 1024
 const TIMEOUT_MS = 8_000
 const EXTENSIONS = ['jpg', 'png', 'webp', 'gif'] as const
 
-type FetchLike = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>
+type FetchInit = { signal?: AbortSignal; redirect?: 'follow' | 'manual' | 'error' }
+type FetchLike = (url: string, init?: FetchInit) => Promise<Response>
 
 function extensionFor(contentType: string, url: string): string {
   const type = contentType.split(';')[0]?.trim().toLowerCase()
@@ -32,6 +35,90 @@ function extensionFor(contentType: string, url: string): string {
 function isRemote(url: string): boolean {
   return /^https?:\/\//i.test(url)
 }
+
+function isPrivateAddress(address: string): boolean {
+  const family = isIP(address)
+  if (family === 4) {
+    const [a, b] = address.split('.').map(Number)
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127)
+    )
+  }
+  if (family === 6) {
+    const lower = address.toLowerCase()
+    if (lower.startsWith('::ffff:')) return isPrivateAddress(lower.slice(7))
+    return (
+      lower === '::1' ||
+      lower === '::' ||
+      lower.startsWith('fc') ||
+      lower.startsWith('fd') ||
+      lower.startsWith('fe8') ||
+      lower.startsWith('fe9') ||
+      lower.startsWith('fea') ||
+      lower.startsWith('feb')
+    )
+  }
+  return true
+}
+
+/**
+ * The cache is reachable from renderer-supplied URLs, so it must not become an
+ * SSRF primitive into loopback, link-local or private network services.
+ */
+export async function assertSafeRemoteImageUrl(url: string): Promise<URL> {
+  const parsed = new URL(url)
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error('Only http(s) image URLs are supported')
+  }
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) {
+    throw new Error('Local image hosts are not allowed')
+  }
+  if (isIP(host) && isPrivateAddress(host)) throw new Error('Private image hosts are not allowed')
+  if (!isIP(host)) {
+    const addresses = await lookup(host, { all: true })
+    if (addresses.length === 0 || addresses.some((entry) => isPrivateAddress(entry.address))) {
+      throw new Error('Private image hosts are not allowed')
+    }
+  }
+  return parsed
+}
+
+/**
+ * Follow redirects manually so a public image URL cannot bounce the request
+ * into loopback or a private network after the initial URL passed validation.
+ */
+export async function fetchSafeRemoteImage(url: string, init: FetchInit = {}): Promise<Response> {
+  let current = url
+  for (let hop = 0; hop < 6; hop++) {
+    await assertSafeRemoteImageUrl(current)
+    const res = await net.fetch(current, { ...init, redirect: 'manual' })
+    if (res.status < 300 || res.status >= 400) return res
+
+    const location = res.headers.get('location')
+    try {
+      await res.body?.cancel()
+    } catch {
+      // The redirect body is irrelevant.
+    }
+    if (!location) return res
+
+    const next = new URL(location, current)
+    if (next.protocol !== 'https:' && next.protocol !== 'http:') {
+      throw new Error('Unsupported image redirect')
+    }
+    current = next.toString()
+  }
+  throw new Error('Too many image redirects')
+}
+
+const guardedFetch: FetchLike = (url, init) => fetchSafeRemoteImage(url, init)
 
 /**
  * Artwork for the saved library, content-addressed and served over the media
@@ -48,7 +135,7 @@ export class ImageCache {
     private readonly dir: string,
     fetchImpl?: FetchLike
   ) {
-    this.fetchImpl = fetchImpl ?? ((url, init) => net.fetch(url, init))
+    this.fetchImpl = fetchImpl ?? guardedFetch
     mkdirSync(dir, { recursive: true })
   }
 
@@ -91,13 +178,15 @@ export class ImageCache {
       const res = await this.fetchImpl(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
       if (!res.ok) return undefined
 
+      const contentType = (res.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase()
+      if (!contentType?.startsWith('image/')) return undefined
       const declared = Number(res.headers.get('content-length') ?? 0)
       if (declared > MAX_IMAGE_BYTES) return undefined
 
       const bytes = new Uint8Array(await res.arrayBuffer())
       if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return undefined
 
-      const ext = extensionFor(res.headers.get('content-type') ?? '', url)
+      const ext = extensionFor(contentType, url)
       const dest = join(this.dir, this.nameFor(url, ext))
       if (!existsSync(dest)) {
         mkdirSync(this.dir, { recursive: true })

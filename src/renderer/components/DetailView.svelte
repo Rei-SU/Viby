@@ -5,6 +5,7 @@
   import { nav } from '../lib/nav.svelte'
   import { downloads } from '../lib/downloads.svelte'
   import { cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
+  import { fitRail } from '../lib/rail-fit'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
   import MediaCard from './MediaCard.svelte'
@@ -19,6 +20,7 @@
   let loading = $state(true)
   let error = $state<string | null>(null)
   let shown = $state(PAGE)
+  let loadRequest = 0
 
   const isArtist = $derived(item.kind === 'artist')
   const shelves = $derived(result?.shelves ?? [])
@@ -130,6 +132,10 @@
     shown = PAGE
     activeShelf = 0
 
+    // Invalidate any request for the page we were on. The component instance is
+    // reused as `item` changes, so an old response must not overwrite this page.
+    const request = ++loadRequest
+
     // Revisiting a page (Back, or the same artist again) should not re-fetch.
     const cached = cachedDetail(browseId)
     if (cached) {
@@ -142,14 +148,15 @@
     // Nothing in this effect may read `result`: it is written here, and reading
     // it would make the effect its own dependency (that caused a renderer freeze).
     result = null
-    void load(browseId)
+    void load(browseId, request)
   })
 
-  async function load(browseId: string): Promise<void> {
+  async function load(browseId: string, request: number): Promise<void> {
     loading = true
     error = null
     try {
       const res = await api.catalog.browse(browseId)
+      if (request !== loadRequest) return
       if (res.ok) {
         result = res.data
         cacheDetail(browseId, res.data)
@@ -162,8 +169,18 @@
         error = res.error
       }
     } finally {
-      loading = false
+      if (request === loadRequest) loading = false
     }
+  }
+
+  /** Retry after a failed browse without needing to navigate away and back. */
+  function retry(): void {
+    const browseId = item.browseId ?? item.id
+    const request = ++loadRequest
+    result = null
+    error = null
+    loading = true
+    void load(browseId, request)
   }
 
   function playAll(): void {
@@ -285,6 +302,7 @@
     <div class="notice">
       <strong>Could not open this</strong>
       <span>{error}</span>
+      <button class="retry" onclick={retry}>Try again</button>
     </div>
   {/if}
 
@@ -325,7 +343,7 @@
         </div>
 
         {#key shelfIndex}
-          <div class="rail">
+          <div class="rail" use:fitRail>
             {#each currentShelf.items as entry (entry.kind + entry.id + entry.title)}
               <MediaCard item={entry} onActivate={(target) => activate(currentShelf.items, target)} />
             {/each}
@@ -674,6 +692,20 @@
   .notice span {
     color: var(--text-dim);
     font-size: 12.5px;
+  }
+
+  .notice .retry {
+    align-self: flex-start;
+    margin-top: 6px;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    padding: 5px 12px;
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .notice .retry:hover {
+    background: var(--glass-hover);
   }
 
   .placeholder {

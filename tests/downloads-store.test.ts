@@ -200,6 +200,29 @@ check('valid entry survives', reopened.entry('d') !== null)
 check('entry keeps its art path', reopened.entry('e')?.art === artRel)
 check('entry without a thumbnail keeps the album cover', reopened.entry('f')?.art === albumArtRel)
 
+
+console.log('\ncorrupt index recovery:')
+const recoveryRoot = mkdtempSync(join(tmpdir(), 'viby-downloads-corrupt-'))
+mkdirSync(join(recoveryRoot, 'audio'), { recursive: true })
+const orphan = join(recoveryRoot, 'audio', 'keep-me.m4a')
+writeFileSync(orphan, Buffer.alloc(2048, 1))
+writeFileSync(join(recoveryRoot, 'index.json'), '{"entries":')
+const recovered = new DownloadsStore(recoveryRoot)
+check('starts empty after an unreadable index', recovered.entries().length === 0)
+check('does not delete audio it cannot reference', existsSync(orphan))
+check(
+  'leaves a recovery marker',
+  existsSync(join(recoveryRoot, 'index.json.recovery-needed'))
+)
+check(
+  'keeps the corrupt index as a backup',
+  readdirSync(recoveryRoot).some((name) => name.startsWith('index.json.corrupt-'))
+)
+
+recovered.clear()
+check('an explicit clear removes the marker', !existsSync(join(recoveryRoot, 'index.json.recovery-needed')))
+check('an explicit clear removes preserved files', !existsSync(orphan))
+
 console.log('\nclear:')
 reopened.clear()
 check('no entries after clear', reopened.entries().length === 0)

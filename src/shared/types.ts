@@ -259,7 +259,8 @@ export type DownloadCollectionInput = {
 export type DownloadStats = {
   bytes: number
   entries: number
-  freeBytes: number
+  /** Null when the filesystem cannot be queried; never report zero as "full". */
+  freeBytes: number | null
   dir: string
 }
 
@@ -278,6 +279,8 @@ export type DownloadJobView = {
 }
 
 export type DownloadsSnapshot = {
+  /** Monotonic revision, so older async responses cannot overwrite newer state. */
+  revision: number
   entries: DownloadEntry[]
   collections: DownloadCollection[]
   jobs: DownloadJobView[]

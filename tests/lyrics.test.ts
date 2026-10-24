@@ -4,7 +4,7 @@
  *     --alias:@shared=./src/shared --alias:electron=./tests/electron-stub.ts \
  *     --outfile=/tmp/lyrics.mjs && node /tmp/lyrics.mjs
  */
-import { fetchOvhLyrics, getLyrics } from '../src/main/lyrics'
+import { cachedLyrics, fetchOvhLyrics, getLyrics } from '../src/main/lyrics'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = ''): void {
@@ -45,13 +45,55 @@ check(
 )
 check('LRCLIB still wins when it has the track', first.kind === 'synced' && first.source === 'LRCLIB')
 
-const missing = await getLyrics({
-  trackId: 'definitely-not-a-track-xyz',
-  title: 'Zzzz Qqqq Not A Real Song 12345',
-  artist: 'Nobody At All',
-  durationSec: 123
-})
-check('unknown track returns none', missing.kind === 'none', missing.kind)
+// LRCLIB's search endpoint sometimes returns 503 for a nonsense query. Stub a
+// definitive 404 so this check tests Viby's "none" path, not upstream weather.
+const realFetch = globalThis.fetch
+globalThis.fetch = (async (input: RequestInfo | URL) => {
+  const url = String(input)
+  if (url.startsWith('https://lrclib.net/') || url.startsWith('https://api.lyrics.ovh/')) {
+    return new Response('{"message":"not found"}', {
+      status: 404,
+      headers: { 'content-type': 'application/json' }
+    })
+  }
+  return realFetch(input)
+}) as typeof fetch
+
+try {
+  const missing = await getLyrics({
+    trackId: 'definitely-not-a-track-xyz',
+    title: 'Zzzz Qqqq Not A Real Song 12345',
+    artist: 'Nobody At All',
+    durationSec: 123
+  })
+  check('unknown track returns none', missing.kind === 'none', missing.kind)
+} finally {
+  globalThis.fetch = realFetch
+}
+
+// A temporary outage must be retryable, not cached as a 24-hour "no lyrics".
+globalThis.fetch = (async () =>
+  new Response('{"message":"busy"}', {
+    status: 503,
+    headers: { 'content-type': 'application/json' }
+  })) as typeof fetch
+try {
+  let transient = false
+  try {
+    await getLyrics({
+      trackId: 'transient-outage-xyz',
+      title: 'Another Song',
+      artist: 'Somebody',
+      durationSec: 180
+    })
+  } catch (error) {
+    transient = error instanceof Error && /could not be reached/i.test(error.message)
+  }
+  check('a transient outage is reported instead of cached', transient)
+  check('a transient outage leaves no cache entry', cachedLyrics('transient-outage-xyz') === null)
+} finally {
+  globalThis.fetch = realFetch
+}
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)

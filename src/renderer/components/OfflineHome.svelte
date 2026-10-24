@@ -10,6 +10,7 @@
     formatSize as size,
     standaloneEntries
   } from '../lib/download-groups'
+  import { fitRail } from '../lib/rail-fit'
   import MediaCard from './MediaCard.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
@@ -78,7 +79,7 @@
     <p>
       {#if entries.length > 0}
         {entries.length} downloaded {entries.length === 1 ? 'song' : 'songs'} · {size(stats?.bytes)}
-        · {size(stats?.freeBytes)} free
+        · {stats?.freeBytes != null ? `${size(stats.freeBytes)} free` : 'free space unavailable'}
       {:else}
         {network.detail || 'Downloads are the only things that play without a connection.'}
       {/if}
@@ -119,7 +120,7 @@
           <h2>Continue listening</h2>
           <button class="link" onclick={() => nav.go('library')}>See all</button>
         </div>
-        <div class="rail">
+        <div class="rail" use:fitRail>
           {#each recent as item (item.id)}
             <MediaCard {item} onActivate={() => playCollection([item])} />
           {/each}
@@ -130,7 +131,7 @@
     {#if albums.length > 0}
       <section class="shelf">
         <h2>Albums</h2>
-        <div class="rail">
+        <div class="rail" use:fitRail>
           {#each albums as group (group.collection.key)}
             <MediaCard
               item={collectionItem(group.collection, group.items)}
@@ -144,7 +145,7 @@
     {#if playlists.length > 0}
       <section class="shelf">
         <h2>Playlists</h2>
-        <div class="rail">
+        <div class="rail" use:fitRail>
           {#each playlists as group (group.collection.key)}
             <MediaCard
               item={collectionItem(group.collection, group.items)}

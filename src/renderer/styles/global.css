@@ -199,6 +199,21 @@ input[type='range']::-webkit-slider-thumb:active {
   transform: scale(1.15);
 }
 
+/* Deck rails show whole cards only. The rail action writes --rail-card-width
+   after measuring the content box, so the visible row always ends on a card
+   boundary. Snapping keeps that true after a manual scroll too. */
+.rail {
+  scroll-snap-type: x mandatory;
+  /* The rails use their 4px padding as breathing room around hover lift and
+     shadows. Snap to the content edge, not the padding edge, so the first card
+     stays aligned with the section heading. */
+  scroll-padding-inline: 4px;
+}
+
+.rail > .card {
+  scroll-snap-align: start;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

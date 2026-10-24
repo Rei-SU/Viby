@@ -49,6 +49,38 @@ class ArtworkStore {
     for (const url of retryable) this.enqueue(url)
   }
 
+  /**
+   * The on-disk image cache was cleared. Drop the local URL mapping so the next
+   * render uses the remote URL and warms the new cache instead of showing dead
+   * `viby-media://` links.
+   */
+  forget(): void {
+    this.local = {}
+    this.known.clear()
+    this.failed.clear()
+    this.pending.clear()
+    this.queue = []
+  }
+
+  /**
+   * A local `viby-media://` image failed to load (usually evicted by the LRU).
+   * Find its remote URL, forget the mapping and try again from the network.
+   */
+  broken(localUrl: string): void {
+    if (isRemote(localUrl)) return
+    let changed = false
+    const next = { ...this.local }
+    for (const [remote, local] of Object.entries(next)) {
+      if (local !== localUrl) continue
+      delete next[remote]
+      this.known.delete(remote)
+      this.failed.delete(remote)
+      changed = true
+      this.enqueue(remote)
+    }
+    if (changed) this.local = next
+  }
+
   private enqueue(url: string): void {
     if (this.known.has(url) || this.pending.has(url) || this.failed.has(url)) return
     this.pending.add(url)

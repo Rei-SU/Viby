@@ -8,10 +8,18 @@ import { api } from './api'
 class Playlists {
   items = $state<Playlist[]>([])
   loaded = $state(false)
+  /**
+   * Bumped by every local mutation. A `load()` that started before a mutation
+   * must not overwrite the newer state when it returns.
+   */
+  private generation = 0
 
   async load(force = false): Promise<void> {
     if (this.loaded && !force) return
-    this.items = await api.library.playlists()
+    const generation = ++this.generation
+    const items = await api.library.playlists()
+    if (generation !== this.generation) return
+    this.items = items
     this.loaded = true
   }
 
@@ -20,30 +28,37 @@ class Playlists {
   }
 
   async create(name: string): Promise<Playlist> {
+    const generation = ++this.generation
     const playlist = await api.library.createPlaylist(name)
-    this.items = [playlist, ...this.items]
+    if (generation === this.generation) this.items = [playlist, ...this.items]
     return playlist
   }
 
   async rename(id: string, name: string): Promise<void> {
+    const generation = ++this.generation
     const playlist = await api.library.renamePlaylist(id, name)
-    if (playlist) this.replace(playlist)
+    if (playlist && generation === this.generation) this.replace(playlist)
   }
 
   async remove(id: string): Promise<void> {
+    const generation = ++this.generation
     await api.library.deletePlaylist(id)
-    this.items = this.items.filter((playlist) => playlist.id !== id)
+    if (generation === this.generation) {
+      this.items = this.items.filter((playlist) => playlist.id !== id)
+    }
   }
 
   async addTrack(id: string, track: Track): Promise<Playlist | null> {
+    const generation = ++this.generation
     const playlist = await api.library.addToPlaylist(id, track)
-    if (playlist) this.replace(playlist)
+    if (playlist && generation === this.generation) this.replace(playlist)
     return playlist
   }
 
   async removeTrack(id: string, trackId: string): Promise<void> {
+    const generation = ++this.generation
     const playlist = await api.library.removeFromPlaylist(id, trackId)
-    if (playlist) this.replace(playlist)
+    if (playlist && generation === this.generation) this.replace(playlist)
   }
 
   private replace(playlist: Playlist): void {

@@ -24,7 +24,9 @@
   let progress = $state<ImportProgress>({ done: 0, total: 0 })
   let name = $state('')
   let created = $state<Playlist | null>(null)
-  let cancelled = false
+  // Every submit/cancel gets a new generation. A late response from an older
+  // attempt must not replace the playlist the user is looking at now.
+  let attempt = 0
 
   const busy = $derived(phase === 'resolving' || phase === 'matching' || phase === 'creating')
   const autoCount = $derived(rows.filter((row) => row.match.status === 'auto').length)
@@ -57,7 +59,7 @@
     progress = { done: 0, total: 0 }
     name = ''
     created = null
-    cancelled = false
+    attempt += 1
   }
 
   async function submit(event: SubmitEvent): Promise<void> {
@@ -65,7 +67,7 @@
     const value = url.trim()
     if (!value || busy) return
 
-    cancelled = false
+    const mine = ++attempt
     source = null
     rows = []
     created = null
@@ -73,7 +75,7 @@
     phase = 'resolving'
 
     const resolved = await api.import.resolve(value)
-    if (cancelled) return
+    if (mine !== attempt) return
     if (!resolved.ok) {
       error = resolved.error
       phase = 'idle'
@@ -86,7 +88,7 @@
     phase = 'matching'
 
     const matched = await api.import.match($state.snapshot(source) as ImportSource)
-    if (cancelled) return
+    if (mine !== attempt) return
     if (!matched.ok) {
       error = matched.error
       phase = 'idle'
@@ -102,7 +104,7 @@
   }
 
   function cancel(): void {
-    cancelled = true
+    attempt += 1
     void api.import.cancel()
     phase = 'idle'
     source = null
