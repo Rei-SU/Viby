@@ -1,13 +1,13 @@
 <script lang="ts">
-  import type { CatalogItem, SubtitlePart } from '@shared/types'
+  import type { CatalogItem } from '@shared/types'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
-  import { openArtist } from '../lib/artist'
   import { playlistPicker } from '../lib/playlist-picker.svelte'
   import { downloads } from '../lib/downloads.svelte'
   import { network } from '../lib/network.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import SubtitleParts from './SubtitleParts.svelte'
 
   let {
     item,
@@ -99,21 +99,6 @@
     }
   }
 
-  function openPart(event: MouseEvent, part: SubtitlePart): void {
-    event.stopPropagation()
-    if (part.artistId) {
-      openArtist(part.artistId, part.text)
-    } else if (part.albumId) {
-      nav.open({
-        id: part.albumId,
-        browseId: part.albumId,
-        kind: 'album',
-        title: part.text,
-        subtitle: 'Album'
-      })
-    }
-  }
-
   function fmt(seconds?: number): string {
     if (!seconds) return ''
     const m = Math.floor(seconds / 60)
@@ -181,17 +166,7 @@
       <span class="title truncate">{item.title}</span>
       <span class="sub truncate">
         {#if item.kind !== 'song'}<span class="tag">{item.kind}</span>{/if}
-        {#if item.parts?.length}
-          {#each item.parts as part, i (i)}
-            {#if part.artistId || part.albumId}
-              <button class="inline-link" onclick={(event) => openPart(event, part)}>{part.text}</button>
-            {:else}
-              <span>{part.text}</span>
-            {/if}
-          {/each}
-        {:else}
-          {item.subtitle}
-        {/if}
+        <SubtitleParts parts={item.parts} fallback={item.subtitle} />
         {#if item.views}
           <span class="views">{item.parts?.length ? ' · ' : ''}{item.views}</span>
         {/if}
@@ -341,20 +316,6 @@
   .sub {
     font-size: 12px;
     color: var(--text-faint);
-  }
-
-  .inline-link {
-    display: inline;
-    padding: 0;
-    color: var(--text-dim);
-    font: inherit;
-    transition: color var(--speed) var(--ease);
-  }
-
-  .inline-link:hover {
-    color: var(--text);
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
 
   .tag {

@@ -127,6 +127,12 @@ export type SubtitlePart = {
   text: string
   artistId?: string
   albumId?: string
+  /**
+   * Which page this run opens when the source did not provide a browse id.
+   * Saved tracks know that their artist and album are still clickable; the
+   * lookup happens on click (see lib/artist.ts and lib/album.ts).
+   */
+  entity?: 'artist' | 'album'
 }
 
 /** A row that can be shown in search results, a shelf, or a track list. */

@@ -9,6 +9,7 @@
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
   import MediaCard from './MediaCard.svelte'
+  import EntityLink from './EntityLink.svelte'
   import Icon from './Icon.svelte'
 
   let { item }: { item: CatalogItem } = $props()
@@ -76,6 +77,35 @@
     return result?.header?.artist ?? null
   })
 
+  /** Album headers put the artist in the subtitle; keep it linked. */
+  const albumArtist = $derived.by(() => {
+    if (item.kind !== 'album') return null
+    const fromItem = item.parts?.find((part) => part.artistId || part.entity === 'artist')
+    if (fromItem) return { name: fromItem.text.trim(), id: fromItem.artistId }
+    if (result?.header?.artist) return result.header.artist
+
+    // Some album headers only carry "Album • 2013". The tracks still know
+    // their primary artist; use it when the whole album agrees.
+    const credited = new Map<string, string | undefined>()
+    for (const song of songs) {
+      const part = song.parts?.find((part) => part.artistId || part.entity === 'artist')
+      if (!part) continue
+      const name = part.text.trim()
+      if (name) credited.set(name, part.artistId)
+    }
+    if (credited.size === 1) {
+      const [name, id] = [...credited.entries()][0]
+      return { name, id }
+    }
+    return null
+  })
+  const albumYear = $derived(
+    item.kind === 'album'
+      ? (/\b(?:19|20)\d{2}\b/.exec(result?.header?.subtitle ?? '')?.[0] ?? null)
+      : null
+  )
+  const headerSubtitle = $derived(result?.header?.subtitle ?? item.subtitle)
+
   function withDefaults(track: CatalogItem): CatalogItem {
     let next = track
     if ((track.artists?.length ?? 0) === 0 && fallbackArtist) {
@@ -83,7 +113,7 @@
         ...track,
         subtitle: fallbackArtist.name,
         artists: [fallbackArtist.name],
-        parts: [{ text: fallbackArtist.name, artistId: fallbackArtist.id }]
+        parts: [{ text: fallbackArtist.name, artistId: fallbackArtist.id, entity: 'artist' }]
       }
     }
     // Album rows often omit their own thumbnail. The header cover is the right
@@ -194,11 +224,15 @@
       // track rows can fall back to it when the API omits it.
       if (target.kind === 'album' && isArtist && item.browseId) {
         const name = result?.header?.title ?? item.title
-        const hasArtist = target.parts?.some((part) => part.artistId)
+        const hasArtist = target.parts?.some(
+          (part) => part.artistId || part.entity === 'artist'
+        )
         nav.open({
           ...target,
           artists: [name],
-          parts: hasArtist ? target.parts : [{ text: name, artistId: item.browseId }]
+          parts: hasArtist
+            ? target.parts
+            : [{ text: name, artistId: item.browseId, entity: 'artist' }]
         })
         return
       }
@@ -263,7 +297,16 @@
       <div class="hero-text">
         <span class="kind">{item.kind}</span>
         <h1>{result?.header?.title ?? item.title}</h1>
-        <p>{result?.header?.subtitle ?? item.subtitle}</p>
+        {#if albumArtist}
+          <p class="album-byline">
+            <EntityLink kind="artist" id={albumArtist.id} name={albumArtist.name} />
+            {#if albumYear}
+              <span class="sep">·</span><span>{albumYear}</span>
+            {/if}
+          </p>
+        {:else}
+          <p>{headerSubtitle}</p>
+        {/if}
         {#if trackList.length > 0}
           <p class="meta">
             {trackList.length} tracks{total ? ` · ${fmt(total)}` : ''}
@@ -521,6 +564,11 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     max-width: 720px;
+  }
+
+  .album-byline .sep {
+    margin: 0 6px;
+    color: var(--text-faint);
   }
 
   .meta {

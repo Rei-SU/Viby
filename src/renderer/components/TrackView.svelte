@@ -2,10 +2,11 @@
   import type { CatalogItem, Track } from '@shared/types'
   import { api } from '../lib/api'
   import { player } from '../lib/player.svelte'
-  import { nav } from '../lib/nav.svelte'
   import { network } from '../lib/network.svelte'
   import { cacheRadio, cachedRadio } from '../lib/catalog-cache.svelte'
+  import { openAlbum } from '../lib/album'
   import { openArtist } from '../lib/artist'
+  import { trackToItem } from '../lib/track'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
@@ -45,15 +46,7 @@
   })
 
   function asItem(): CatalogItem {
-    return {
-      id: track.id,
-      kind: 'song',
-      title: track.title,
-      subtitle: track.artist,
-      artists: [track.artist],
-      thumbnail: track.thumbnail,
-      durationSec: track.durationSec
-    }
+    return trackToItem(track)
   }
 
   function togglePlay(): void {
@@ -61,16 +54,8 @@
     else void player.playList([asItem()], 0)
   }
 
-  function openAlbum(): void {
-    if (track.albumId && track.album) {
-      nav.open({
-        id: track.albumId,
-        browseId: track.albumId,
-        kind: 'album',
-        title: track.album,
-        subtitle: 'Album'
-      })
-    }
+  function openAlbumPage(): void {
+    if (track.album) openAlbum(track.albumId, track.album, track.thumbnail)
   }
 
   function fmt(seconds: number): string {
@@ -95,11 +80,7 @@
         <button class="link" onclick={() => openArtist(track.artistId, track.artist)}>{track.artist}</button>
         {#if track.album}
           <span class="sep">·</span>
-          {#if track.albumId}
-            <button class="link dim" onclick={openAlbum}>{track.album}</button>
-          {:else}
-            <span class="dim">{track.album}</span>
-          {/if}
+          <button class="link dim" onclick={openAlbumPage}>{track.album}</button>
         {/if}
         {#if track.durationSec}
           <span class="sep">·</span>

@@ -2,6 +2,7 @@
   import type { CatalogItem } from '@shared/types'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import SubtitleParts from './SubtitleParts.svelte'
 
   let {
     item,
@@ -12,10 +13,19 @@
     onActivate: (item: CatalogItem) => void
     size?: number
   } = $props()
+
+  const action = $derived(item.kind === 'song' ? `Play ${item.title}` : `Open ${item.title}`)
 </script>
 
-<button class="card" style="--card-size: {size}px" onclick={() => onActivate(item)} title={item.title}>
-  <span class="art">
+<div class="card" style="--card-size: {size}px">
+  <button
+    type="button"
+    class="card-hit"
+    aria-label={action}
+    title={item.title}
+    onclick={() => onActivate(item)}
+  ></button>
+  <span class="art" aria-hidden="true">
     <Cover
       src={item.thumbnail}
       {size}
@@ -25,20 +35,42 @@
     />
     <span class="play-badge"><Icon name="play" size={14} solid /></span>
   </span>
-  <span class="card-title truncate">{item.title}</span>
-  <span class="card-sub truncate">{item.subtitle}</span>
-</button>
+  <span class="card-title truncate" aria-hidden="true">{item.title}</span>
+  <span class="card-sub truncate">
+    <SubtitleParts
+      parts={item.parts}
+      fallback={item.subtitle}
+      linkPlainArtists={item.kind === 'playlist'}
+    />
+  </span>
+</div>
 
 <style>
   .card {
     /* Rails write --rail-card-width so every visible card is whole. Cards
        outside a rail keep the fixed --card-size they were given. */
+    position: relative;
     width: var(--rail-card-width, var(--card-size, 152px));
     display: flex;
     flex-direction: column;
     gap: 5px;
     flex-shrink: 0;
     text-align: left;
+  }
+
+  /* The hit target is a real button underneath the artwork and title. Names in
+     the subtitle sit above it and handle their own clicks. */
+  .card-hit {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: 12px;
+  }
+
+  .card > :not(.card-hit) {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
   }
 
   .art {

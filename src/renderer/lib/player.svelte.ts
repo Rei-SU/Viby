@@ -33,8 +33,8 @@ export function isPlayable(item: CatalogItem): boolean {
 
 export function toTrack(item: CatalogItem): Track {
   const parts = item.parts ?? []
-  const artistPart = parts.find((part) => part.artistId)
-  const albumPart = parts.find((part) => part.albumId)
+  const artistPart = parts.find((part) => part.artistId || part.entity === 'artist')
+  const albumPart = parts.find((part) => part.albumId || part.entity === 'album')
 
   return {
     id: item.id,

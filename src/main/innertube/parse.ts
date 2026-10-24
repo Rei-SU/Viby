@@ -281,7 +281,7 @@ function fromResponsiveListItem(renderer: AnyObj): CatalogItem | null {
     const albumRun = runsOf(column).find((run) => refId(run, 'album'))
     if (albumRun) {
       if (parts.length > 0) parts.push({ text: ' · ' })
-      parts.push({ text: text.trim(), albumId: refId(albumRun, 'album') })
+      parts.push({ text: text.trim(), albumId: refId(albumRun, 'album'), entity: 'album' })
     }
   }
 
@@ -403,7 +403,14 @@ function partsFrom(runs: AnyObj[]): SubtitlePart[] {
     .map((run): SubtitlePart | null => {
       const text = String(run.text ?? '')
       if (!text) return null
-      return { text, artistId: refId(run, 'artist'), albumId: refId(run, 'album') }
+      const artistId = refId(run, 'artist')
+      const albumId = refId(run, 'album')
+      return {
+        text,
+        artistId,
+        albumId,
+        entity: artistId ? 'artist' : albumId ? 'album' : undefined
+      }
     })
     .filter((part): part is SubtitlePart => part !== null)
 }

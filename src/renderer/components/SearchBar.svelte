@@ -8,6 +8,7 @@
   import { openArtist } from '../lib/artist'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import SubtitleParts from './SubtitleParts.svelte'
 
   type QuickGroupId = 'songs' | 'artists' | 'playlists'
   type QuickGroups = Record<QuickGroupId, CatalogItem[]>
@@ -589,14 +590,22 @@
 
                 {#each group.items as item, i (item.id)}
                   {@const index = group.offset + i}
-                  <button
+                  <div
                     class="quick-row"
                     class:active={active === index}
                     id={`viby-quick-${index}`}
                     data-kind={item.kind}
                     role="option"
+                    tabindex="-1"
                     aria-selected={active === index}
                     onclick={() => choose({ type: 'result', item })}
+                    onkeydown={(event) => {
+                      if (event.target !== event.currentTarget) return
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        choose({ type: 'result', item })
+                      }
+                    }}
                   >
                     <Cover
                       src={item.thumbnail}
@@ -606,14 +615,20 @@
                     />
                     <span class="row-text">
                       <span class="row-title truncate">{item.title}</span>
-                      <span class="row-sub truncate">{item.subtitle}</span>
+                      <span class="row-sub truncate">
+                        <SubtitleParts
+                          parts={item.parts}
+                          fallback={item.subtitle}
+                          linkPlainArtists={item.kind === 'playlist'}
+                        />
+                      </span>
                     </span>
                     {#if item.kind === 'song' && item.durationSec}
                       <span class="row-dur tabular">{fmt(item.durationSec)}</span>
                     {:else}
                       <Icon name="forward" size={13} />
                     {/if}
-                  </button>
+                  </div>
                 {/each}
               </div>
             {/each}
@@ -857,6 +872,7 @@
     border-radius: 8px;
     text-align: left;
     color: var(--text-dim);
+    cursor: pointer;
     transition:
       background var(--speed) var(--ease),
       color var(--speed) var(--ease);

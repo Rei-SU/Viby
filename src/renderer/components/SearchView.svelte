@@ -10,6 +10,7 @@
   import { fitRail } from '../lib/rail-fit'
   import TrackRow from './TrackRow.svelte'
   import MediaCard from './MediaCard.svelte'
+  import SubtitleParts from './SubtitleParts.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
 
@@ -205,17 +206,30 @@
         {#if top}
           <section class="top-result">
             <h2>Top result</h2>
-            <button class="top-card" onclick={() => activate(top)}>
+            <div class="top-card">
+              <button
+                type="button"
+                class="top-hit"
+                aria-label={top.kind === 'song' ? `Play ${top.title}` : `Open ${top.title}`}
+                title={top.title}
+                onclick={() => activate(top)}
+              ></button>
               <Cover src={top.thumbnail} size={96} radius={top.kind === 'artist' ? 48 : 12} alt={top.title} />
               <div class="top-meta">
                 <span class="top-type">{top.kind}</span>
                 <span class="top-title">{top.title}</span>
-                <span class="top-sub">{top.subtitle}</span>
+                <span class="top-sub">
+                  <SubtitleParts
+                    parts={top.parts}
+                    fallback={top.subtitle}
+                    linkPlainArtists={top.kind === 'playlist'}
+                  />
+                </span>
               </div>
               {#if top.kind === 'song'}
                 <span class="top-play"><Icon name="play" size={18} solid /></span>
               {/if}
-            </button>
+            </div>
           </section>
         {/if}
 
@@ -494,6 +508,7 @@
   }
 
   .top-card {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 16px;
@@ -506,6 +521,19 @@
       background var(--speed) var(--ease),
       border-color var(--speed) var(--ease),
       transform var(--speed) var(--ease);
+  }
+
+  .top-hit {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: var(--radius-lg);
+  }
+
+  .top-card > :not(.top-hit) {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
   }
 
   .top-card:hover {

@@ -60,7 +60,9 @@
           subtitle: h.artist,
           thumbnail: h.thumbnail,
           artists: h.artist ? [h.artist] : undefined,
-          parts: h.artist ? [{ text: h.artist, artistId: h.artistId }] : undefined
+          parts: h.artist
+            ? [{ text: h.artist, artistId: h.artistId, entity: 'artist' }]
+            : undefined
         }))
 
       player.prefetchList(recent, 2)

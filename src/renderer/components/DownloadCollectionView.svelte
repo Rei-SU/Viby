@@ -12,6 +12,7 @@
   import { markFor } from '../lib/library-items'
   import Cover from './Cover.svelte'
   import DownloadBadge from './DownloadBadge.svelte'
+  import EntityLink from './EntityLink.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
 
@@ -44,10 +45,15 @@
         : 'Downloaded liked songs'
   )
 
-  const artistLine = $derived.by(() => {
-    if (collection?.kind !== 'album') return ''
-    const names = [...new Set(entries.map((entry) => entry.track.artist).filter(Boolean))]
-    return names.slice(0, 3).join(', ')
+  const artists = $derived.by(() => {
+    if (collection?.kind !== 'album') return []
+    const seen = new Map<string, string | undefined>()
+    for (const entry of entries) {
+      const name = entry.track.artist
+      if (!name || seen.has(name)) continue
+      seen.set(name, entry.track.artistId)
+    }
+    return [...seen.entries()].slice(0, 3).map(([name, id]) => ({ name, id }))
   })
 
   const quality = $derived.by(() => {
@@ -111,8 +117,13 @@
       <div class="hero-text">
         <span class="kind">{kindLabel}</span>
         <h1>{collection.title}</h1>
-        {#if artistLine}
-          <p class="artist">{artistLine}</p>
+        {#if artists.length > 0}
+          <p class="artist">
+            {#each artists as artist, i (artist.name)}
+              {#if i > 0}<span class="sep">, </span>{/if}
+              <EntityLink kind="artist" id={artist.id} name={artist.name} />
+            {/each}
+          </p>
         {/if}
 
         <p class="meta">
@@ -215,6 +226,10 @@
     margin: 0 0 6px;
     color: var(--text-dim);
     font-size: 13px;
+  }
+
+  .artist .sep {
+    color: var(--text-faint);
   }
 
   .meta {

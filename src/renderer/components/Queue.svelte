@@ -52,17 +52,14 @@
             <span class="text">
               <span class="t truncate">{track.title}</span>
               <span class="a truncate">
-                {#if track.artistId}
-                  <button
-                    class="artist-link"
-                    onclick={(event) => {
-                      event.stopPropagation()
-                      openArtist(track.artistId, track.artist)
-                    }}>{track.artist}</button
-                  >
-                {:else}
-                  {track.artist}
-                {/if}
+                <button
+                  class="artist-link"
+                  title="Open artist"
+                  onclick={(event) => {
+                    event.stopPropagation()
+                    openArtist(track.artistId, track.artist)
+                  }}>{track.artist}</button
+                >
               </span>
             </span>
             {#if downloads.stateFor(track.id) === 'done'}
