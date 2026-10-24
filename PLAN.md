@@ -343,7 +343,7 @@ Today's Top Hits (50) → 48 auto / 2 review / 0 missing; a 951-track YouTube pl
 Deferred beyond this slice: moods/genres browsing, private/collaborative Spotify playlists, and Liked Songs. The CSV/text floor was dropped by decision (link-only interaction).
 
 **P5 — Ship. Partially done.**
-Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. Still missing: signing/notarization (which also enables in-place macOS updates) and Windows validation on real hardware. The update-signing key is generated and pinned in `src/main/update-key.ts`; CI must provide its private half as `VIBY_UPDATE_KEY`, or the release workflow refuses to publish.
+Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. Still missing: signing/notarization (which also enables in-place macOS updates) and Windows 10 validation on real hardware; Windows 11 manual checks pass, including in-client updates. The update-signing key is generated and pinned in `src/main/update-key.ts`; CI must provide its private half as `VIBY_UPDATE_KEY`, or the release workflow refuses to publish.
 
 *Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. Not yet verified.
 
@@ -357,7 +357,7 @@ Scope: optional accounts with end-to-end encrypted backup and sync of favorites,
 **P7 — Offline mode and downloads. Shipped (P7a–P7c); P7d's packaged/manual pass remains.**
 The full specification and current behavior are in §17. Connectivity + offline shell, the download engine, Library integration, collections, artwork and the offline Search notice are all shipped.
 
-*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs. Met in macOS development tests; the packaged/manual pass and Windows hardware validation remain (P7d).
+*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs. Met in macOS development tests; the Windows 11 manual offline/download pass is done, and Windows 10 hardware validation remains (P7d).
 
 ## 10. Open items
 
@@ -522,7 +522,7 @@ The UI is built from a small set of decisions rather than per-component styling.
 
 **Type.** System stack; 30px/640 page titles with -0.028em tracking, 15px/600 section headings, 13.5px body, 11.5px metadata. Tabular numerals for every duration.
 
-**Shape & motion.** 22px panels, 16px cards, 12px controls, 999px pills. One easing (`cubic-bezier(0.22,1,0.36,1)`), 160ms, and `prefers-reduced-motion` disables the rest.
+**Shape & motion.** 22px panels, 16px cards, 12px controls, 999px pills. One easing (`cubic-bezier(0.22,1,0.36,1)`), 160ms, and `prefers-reduced-motion` disables transitions and decorative entrances while keeping status spinners and equalisers moving.
 
 **Components.** `Icon.svelte` replaces every emoji with a 24px stroked glyph set. `PlayerBar` is a floating dock with an accent play button and a filled scrubber. `HomeView` cards lift 3px on hover with a play badge and a slight image dim. `TrackRow` shows a three-bar equaliser on the playing row and surfaces artist/album links on hover. Detail and song pages add an artwork bloom (`filter: blur(70px)`, 30% opacity) behind the header.
 
@@ -768,11 +768,11 @@ Shipping contract: install and play. The user never installs Python and never se
 - **Source artwork** lives at `assets/Logo.png` (1024²). `npm run icons` (`scripts/make-icons.py`) produces the platform icons: a 1024 PNG with the logo on the standard 824px rounded tile (transparent margin), `resources/icon.icns` via `iconutil`, and a 16–256px `resources/icon.ico` via Pillow.
 - **Packaging** points `mac.icon` and `win.icon` at those files. The built bundle reports `CFBundleName`/`CFBundleDisplayName = Viby` and `CFBundleIconFile = icon.icns`; the `.icns` in the app matches `resources/icon.icns` byte for byte. The DMG/NSIS artifacts use the same icon.
 - **Development** sets the Dock icon from `resources/icon.png` and installs a custom application menu (`src/main/menu.ts`) instead of Electron's default File/Edit/View menu. Edit roles are preserved so copy/paste still works in the search fields and inputs.
-- **Menu name caveat:** macOS renders the first menu item with the *bundle* name, not the template label. Dev runs the `Electron.app` helper, so it still says "Electron"; the packaged app shows "Viby" (verified by screenshot: Apple / Viby / Edit / View / Window). Windows and Linux get no native menu bar — the custom titlebar is the chrome — and the packaged Windows executable takes its icon from `win.icon`.
+- **Menu name caveat:** macOS renders the first menu item with the *bundle* name, not the template label. Dev runs the `Electron.app` helper, so it still says "Electron"; the packaged app shows "Viby" (verified by screenshot: Apple / Viby / Edit / View / Window). Packaged Windows and Linux builds get no native menu bar — the custom titlebar is the chrome — while non-macOS development builds keep a minimal Edit/View menu for reload and DevTools. The packaged Windows executable takes its icon from `win.icon`.
 
 ## 17. Offline mode and downloads (shipped)
 
-Status: shipped 2026-10-22 (`2059183`, `86abfe4`). P7a–P7c are complete; P7d's automated coverage is in place, but its packaged/manual pass and Windows hardware validation remain. The specification below describes the current app.
+Status: shipped 2026-10-22 (`2059183`, `86abfe4`). P7a–P7c are complete; P7d's automated coverage is in place, and the Windows 11 manual offline/download pass is done; Windows 10 hardware validation remains. The specification below describes the current app.
 
 ### 17.1 The distinction that drives everything
 
@@ -972,7 +972,7 @@ Album/playlist/Liked actions with coverage and partial re-download; grouped Libr
 *Acceptance:* download a playlist and play it fully offline; a saved but undownloaded playlist still opens offline with cached art, all rows visible and non-downloaded rows faded; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; Search shows the offline notice until the connection returns.
 
 **P7d — Hardening. Packaged/manual pass pending.**
-Offline e2e, failure-classification tests and docs are in place. Network flapping, failed-download recovery, quit mid-download, long playlists and Windows hardware validation still need the manual/packaged pass; automated tests do not replace it.
+Offline e2e, failure-classification tests and docs are in place. Network flapping, failed-download recovery, quit mid-download, long playlists and Windows 10 hardware validation still need the manual/packaged pass; automated tests do not replace it.
 
 ### 17.9 Test coverage
 
@@ -980,7 +980,7 @@ Offline e2e, failure-classification tests and docs are in place. Network flappin
 
 **E2E (`tests/e2e/offline.mjs`)** uses the manual switch, so it never depends on the machine's real network. It covers: local-first Home, the offline pill, disabled Import, the Charts page staying gone, the offline Search page, downloaded playback when the profile has a download, Library filters and badges, and reconnect. It deliberately does not download through yt-dlp.
 
-**Manual/packaged pass:** download one short track and a collection, relaunch offline, play both; clear the cache and confirm downloads remain; delete a playlist and confirm only unreferenced files go; airplane mode on both platforms, Wi-Fi drop mid-download, quit mid-download, disk-full simulation, captive portal (`unreachable`). Windows hardware validation is still pending.
+**Manual/packaged pass:** download one short track and a collection, relaunch offline, play both; clear the cache and confirm downloads remain; delete a playlist and confirm only unreferenced files go; airplane mode on both platforms, Wi-Fi drop mid-download, quit mid-download, disk-full simulation, captive portal (`unreachable`). Windows 10 hardware validation is still pending.
 
 ### 17.10 Risks
 

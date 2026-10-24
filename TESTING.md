@@ -71,7 +71,7 @@ running per-user install on a real machine.
    must say "You're up to date".
 3. Bump `package.json`, tag and push a newer `v*` release; wait for it to go
    live.
-4. In the installed 0.1.0: check → **Download**. The progress bar must advance
+4. In the installed build: check → **Download**. The progress bar must advance
    and reach 100%, then **Restart & install**.
 5. Confirm Viby quits, NSIS installs silently, and Viby reopens on the new
    version (`Settings → Updates` shows the new current version).
@@ -83,13 +83,23 @@ running per-user install on a real machine.
    its installer (or temporarily edit the manifest asset); the download must be
    deleted and the state must show the verification failure, never install.
 
-Until someone runs this, "Windows installs in place" is a design claim, not a
-verified fact.
+Verified on Windows 11 (2026-10-24): the NSIS installer replaced the running
+per-user install and relaunched successfully. Re-run this on Windows 10 and
+after any updater change.
 
 ### E2E scenarios (app must be running)
 
 ```bash
-VIBY_DEBUG_PORT=9222 npm run dev      # in one terminal
+# macOS/Linux, in one terminal:
+VIBY_DEBUG_PORT=9222 npm run dev
+```
+
+```powershell
+# Windows PowerShell, in one terminal:
+$env:VIBY_DEBUG_PORT='9222'; npm run dev
+```
+
+```bash
 node tests/e2e/run.mjs lyrics         # targeted
 node tests/e2e/run.mjs                # all scenarios
 ```

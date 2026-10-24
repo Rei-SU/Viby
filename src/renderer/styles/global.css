@@ -221,9 +221,15 @@ input[type='range']::-webkit-slider-thumb:active {
     /* Transitions (hover lifts, panel slides, grid reflows) become instant so
        reduced-motion users do not get motion sickness from UI movement. */
     transition-duration: 1ms !important;
-    /* Animations are deliberately NOT collapsed here: forcing a 1ms duration or
-       a single iteration made loading spinners and the equaliser freeze after
-       one frame, which looked like a stuck state. Short, purposeful animations
-       (toast/panel entrances, spinners) keep their intended timing. */
+  }
+
+  /* Loading and playback indicators are status, not decoration: keep the
+     spinner, search pip and equaliser moving so they never look stuck.
+     Popovers and toasts are decorative entrances, so they appear without
+     motion instead. */
+  .net-menu,
+  .profile-note,
+  .toast {
+    animation: none !important;
   }
 }
