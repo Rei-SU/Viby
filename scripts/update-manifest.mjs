@@ -118,6 +118,13 @@ async function main() {
   process.exit(1)
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Only run the CLI when this file is the actual entry point. When the module is
+// bundled into a test (process.argv[1] is the bundle, not this script), the
+// guard must stay false so importing it does not exit the process.
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href &&
+  process.argv[1].endsWith('update-manifest.mjs')
+) {
   await main()
 }

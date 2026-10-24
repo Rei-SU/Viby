@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 /**
  * Runs the Node-side suites (no app required).
@@ -39,14 +41,17 @@ if (unknown.length > 0) {
 }
 
 const selected = requested.length > 0 ? requested : Object.keys(suites)
-const esbuild = 'node_modules/.bin/esbuild'
+// Invoke esbuild through Node rather than the `.bin` shim, which is not
+// resolvable by execFileSync on Windows (ENOENT for the extensionless name).
+const esbuildEntry = join(process.cwd(), 'node_modules', 'esbuild', 'bin', 'esbuild')
 
 let failures = 0
 for (const name of selected) {
   const suite = suites[name]
-  const out = `/tmp/viby-${name}.mjs`
+  const out = join(tmpdir(), `viby-${name}.mjs`)
 
   const args = [
+    esbuildEntry,
     `tests/${suite.file}`,
     '--bundle',
     '--platform=node',
@@ -59,7 +64,7 @@ for (const name of selected) {
 
   console.log(`\n▶ ${name}`)
   try {
-    execFileSync(esbuild, args, { stdio: 'inherit' })
+    execFileSync(process.execPath, args, { stdio: 'inherit' })
     execFileSync(process.execPath, [out], { stdio: 'inherit' })
   } catch {
     failures++

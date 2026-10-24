@@ -125,6 +125,11 @@ function main() {
   console.log(`Release notes OK (${file}).`)
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Only run the CLI when this file is the actual entry point (see update-manifest.mjs).
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href &&
+  process.argv[1].endsWith('check-release-notes.mjs')
+) {
   main()
 }
