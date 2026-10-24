@@ -168,6 +168,11 @@ export class DownloadsStore {
     }
   }
 
+  /** Drop the lyrics pinned to a download (e.g. after a credit repair). */
+  removeLyrics(trackId: string): void {
+    rmSync(this.lyricsPath(trackId), { force: true })
+  }
+
   lookup(trackId: string): string | null {
     const entry = this.store.get().entries[trackId]
     if (!entry) return null
@@ -204,6 +209,28 @@ export class DownloadsStore {
     return Object.values(this.store.get().collections)
       .map((collection) => this.decorateCollection(collection))
       .sort((a, b) => b.addedAt - a.addedAt)
+  }
+
+  /**
+   * Fill in metadata an older build could not know when the download was
+   * queued (an album opened outside the artist page stored no artist). Only the
+   * credits are patched; the file, quality and source list stay untouched.
+   */
+  patchTrack(trackId: string, patch: Partial<Pick<Track, 'artist' | 'artistId' | 'album' | 'albumId' | 'thumbnail'>>): boolean {
+    let changed = false
+    this.store.update((data) => {
+      const entry = data.entries[trackId]
+      if (entry) {
+        entry.track = { ...entry.track, ...patch }
+        changed = true
+      }
+      const job = data.jobs[trackId]
+      if (job) {
+        job.track = { ...job.track, ...patch }
+        changed = true
+      }
+    })
+    return changed
   }
 
   collection(key: string): DownloadCollection | null {

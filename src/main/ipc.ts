@@ -151,7 +151,10 @@ let importResolveController: AbortController | null = null
       if (playingTrackId !== trackId) cacheInstance().remove(trackId)
       const entry = downloadsStore.entry(trackId)
       if (entry) remember(entry.track)
-    }
+    },
+    // Used once per downloaded album to repair credits saved before the album
+    // header's artist was parsed.
+    catalogAlbum: async (browseId) => innertube.browse(browseId)
   })
   downloadsManager = manager
 

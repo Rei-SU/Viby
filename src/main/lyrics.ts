@@ -67,9 +67,28 @@ export function cachedLyrics(trackId: string): Lyrics | null {
   return stale ? null : strip(cached)
 }
 
+/**
+ * Cached lyrics are only valid for the query that produced them. When a
+ * download's artist is repaired, both a miss and a hit may be wrong (the old
+ * lookup had no artist to filter by), so drop the entry and look again.
+ */
+export function forgetLyrics(trackId: string): void {
+  if (!lyricsStore().get()[trackId]) return
+  lyricsStore().update((all) => {
+    delete all[trackId]
+  })
+}
+
+/** Placeholder credits are not artist names; sending one filters every result out. */
+function usableArtist(artist: string): string {
+  const primary = primaryArtist(artist)
+  return /^(?:unknown(?: artist)?|various artists)$/i.test(primary) ? '' : primary
+}
+
 async function lookup(query: LyricsQuery): Promise<Lyrics | null> {
-  const artist = primaryArtist(query.artist)
+  const artist = usableArtist(query.artist)
   if (!query.title.trim()) return null
+  const effective: LyricsQuery = { ...query, artist }
 
   let transient = false
   const exact = await request('get', {
@@ -89,7 +108,7 @@ async function lookup(query: LyricsQuery): Promise<Lyrics | null> {
   })
   transient ||= results.transient
   const fromSearch = Array.isArray(results.data)
-    ? toLyrics(pickBest(results.data, query))
+    ? toLyrics(pickBest(results.data, effective))
     : null
   if (fromSearch) return fromSearch
 
@@ -242,9 +261,19 @@ function pickBest(results: unknown[], query: LyricsQuery): unknown {
       const drift =
         query.durationSec > 0 && duration > 0 ? Math.abs(duration - query.durationSec) : 8
       const syncPenalty = item.syncedLyrics ? 0 : 3
-      return { item, score: titleScore * 12 + artistScore * 4 + Math.min(drift, 30) + syncPenalty }
+      return {
+        item,
+        titleScore,
+        artistScore,
+        score: titleScore * 12 + artistScore * 4 + Math.min(drift, 30) + syncPenalty
+      }
     })
-    .filter(({ score }) => score < 20 * 12)
+    // A title is not enough on its own: "Dust" must not resolve to "Another One
+    // Bites the Dust". When the track's artist is known, a result credited to
+    // someone else is rejected; without one, only an exact title is trusted.
+    .filter(({ titleScore, artistScore }) =>
+      wantedArtist ? artistScore < 8 : titleScore === 0
+    )
     .sort((a, b) => a.score - b.score)
 
   return scored[0]?.item ?? null

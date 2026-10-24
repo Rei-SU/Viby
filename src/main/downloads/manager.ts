@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
+  BrowseResult,
+  CatalogItem,
   DownloadCollectionInput,
   DownloadJobView,
   DownloadProgress,
@@ -11,7 +13,7 @@ import type {
 import { ensureRunner, pluginArgs } from '../ytdlp/binary'
 import { runStreamed } from '../ytdlp/exec'
 import { isSafeYtDlpInput } from '../ytdlp/resolver'
-import { getLyrics } from '../lyrics'
+import { forgetLyrics, getLyrics } from '../lyrics'
 import { fetchArt } from './art'
 import type { DownloadJob, DownloadsStore } from './store'
 
@@ -37,12 +39,29 @@ export type DownloadManagerOptions = {
   onBusy?: (busy: boolean) => void
   /** The track currently loaded in the player; its file must not be unlinked. */
   isPlaying?: (trackId: string) => boolean
+  /**
+   * Catalog lookup for an album page. Used once per collection to repair
+   * credits that an older build could not record at download time. Album rows
+   * carry no artist of their own, so the page header is needed too.
+   */
+  catalogAlbum?: (browseId: string) => Promise<Pick<BrowseResult, 'items' | 'header'>>
 }
 
 function numberOrUndefined(value: string | undefined): number | undefined {
   if (!value || value === 'NA') return undefined
   const n = Number(value)
   return Number.isFinite(n) ? n : undefined
+}
+
+/** A stored credit that is really a placeholder, from an older build. */
+function isUnknownArtist(artist: string | undefined): boolean {
+  const value = artist?.trim() ?? ''
+  return !value || /^unknown(?: artist)?$/i.test(value)
+}
+
+/** Track titles are stable enough to match by text when an id drifted. */
+function normalizeTitle(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
 /**
@@ -96,6 +115,7 @@ export class DownloadManager {
   private estimateReported = new Set<string>()
   private busy = false
   private backfillingLyrics = false
+  private repairing = false
   private shuttingDown = false
 
   constructor(
@@ -115,7 +135,9 @@ export class DownloadManager {
     }
     this.publish()
     this.pump()
-    void this.backfillLyrics()
+    // Repair first: the backfill reads each entry's artist, and a placeholder
+    // would make LRCLIB filter every result out and cache the miss.
+    void this.repairCredits().finally(() => this.backfillLyrics())
   }
 
   addTrack(track: Track, quality: Quality): void {
@@ -239,7 +261,7 @@ export class DownloadManager {
     }
     this.publish()
     this.pump()
-    void this.backfillLyrics()
+    void this.repairCredits().finally(() => this.backfillLyrics())
   }
 
   async snapshot(): Promise<DownloadsSnapshot> {
@@ -514,6 +536,75 @@ export class DownloadManager {
     if (!owner) return null
     if (owner.art) return owner.art
     return owner.thumbnail ? fetchArt(owner.thumbnail, this.store) : null
+  }
+
+  /**
+   * Older builds only learned an album's artist from the card that opened it, so
+   * a release opened from Home or a track link stored every row as "Unknown
+   * artist". Those snapshots also poisoned the lyrics lookup (LRCLIB filters by
+   * artist name) and cached the miss. Fill the credit in from the album page
+   * once, then let the lyrics backfill retry.
+   */
+  async repairCredits(): Promise<void> {
+    if (this.repairing || this.shuttingDown) return
+    if (this.opts.isOffline() || !this.opts.catalogAlbum) return
+    const lookup = this.opts.catalogAlbum
+
+    this.repairing = true
+    try {
+      let changed = false
+      for (const collection of this.store.collections()) {
+        if (collection.kind !== 'album') continue
+        const browseId = collection.key.slice('album:'.length)
+        if (!browseId) continue
+
+        const missing = collection.trackIds.filter((id) => {
+          const entry = this.store.entry(id)
+          return Boolean(entry) && isUnknownArtist(entry!.track.artist)
+        })
+        if (missing.length === 0) continue
+
+        let items: CatalogItem[] = []
+        let headerArtist: { name: string; id: string } | undefined
+        try {
+          const album = await lookup(browseId)
+          items = album.items
+          headerArtist = album.header?.artist
+        } catch {
+          // Offline or a transient catalog failure: try again next launch.
+          continue
+        }
+        if (this.shuttingDown) return
+
+        const byId = new Map(items.filter((item) => item.id).map((item) => [item.id, item]))
+        const byTitle = new Map(
+          items.filter((item) => item.title).map((item) => [normalizeTitle(item.title), item])
+        )
+
+        for (const id of missing) {
+          const entry = this.store.entry(id)
+          if (!entry) continue
+          const item = byId.get(id) ?? byTitle.get(normalizeTitle(entry.track.title))
+          // Album rows usually have no per-row credit; the header holds it.
+          const artist = item?.artists?.[0]?.trim() || headerArtist?.name?.trim()
+          if (!artist) continue
+          const artistId =
+            item?.parts?.find((part) => part.artistId)?.artistId ?? headerArtist?.id
+          if (this.store.patchTrack(id, { artist, artistId, album: collection.title })) {
+            // The old lookup ran without a usable artist, so a stored result may
+            // be a different song ("Dust" → "Another One Bites the Dust"). Drop
+            // both copies and let the backfill fetch them again.
+            forgetLyrics(id)
+            this.store.removeLyrics(id)
+            changed = true
+          }
+        }
+      }
+
+      if (changed) this.publish()
+    } finally {
+      this.repairing = false
+    }
   }
 
   /**

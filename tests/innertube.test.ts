@@ -4,7 +4,7 @@
  *   npx esbuild tests/innertube.test.ts --bundle --platform=node --format=esm \
  *     --alias:@shared=./src/shared --outfile=/tmp/it.mjs && node /tmp/it.mjs
  */
-import { extractItems, extractShelves } from '../src/main/innertube/parse'
+import { extractHeader, extractItems, extractShelves } from '../src/main/innertube/parse'
 import { browse, home, search } from '../src/main/innertube/client'
 import type { CatalogItem } from '../src/shared/types'
 
@@ -96,6 +96,57 @@ check(
 )
 check('captured artists keep a browse id', parsed.some((i) => i.kind === 'artist' && i.browseId))
 
+// Album pages credit the artist in `straplineTextOne`, not the subtitle.
+const albumHeader = {
+  header: {
+    musicResponsiveHeaderRenderer: {
+      title: { runs: [{ text: 'KID A MNESIA' }] },
+      subtitle: { runs: [{ text: 'Album' }, { text: ' • ' }, { text: '2021' }] },
+      straplineTextOne: {
+        runs: [
+          {
+            text: 'Radiohead',
+            navigationEndpoint: {
+              browseEndpoint: {
+                browseId: 'UCr_iyUANcn9OX_yy9piYoLw',
+                browseEndpointContextSupportedConfigs: {
+                  browseEndpointContextMusicConfig: { pageType: 'MUSIC_PAGE_TYPE_ARTIST' }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+const releaseHeader = extractHeader(albumHeader)
+check(
+  'album header reads the strapline artist',
+  releaseHeader?.artist?.name === 'Radiohead' &&
+    releaseHeader?.artist?.id === 'UCr_iyUANcn9OX_yy9piYoLw',
+  `${releaseHeader?.artist?.name ?? 'none'}`
+)
+
+// A playlist strapline is the owner, so it must never become the track artist.
+const playlistHeader = {
+  header: {
+    musicResponsiveHeaderRenderer: {
+      title: { runs: [{ text: 'Focus' }] },
+      subtitle: { runs: [{ text: 'Playlist' }, { text: ' • ' }, { text: '2024' }] },
+      straplineTextOne: {
+        runs: [
+          {
+            text: 'Some Listener',
+            navigationEndpoint: { browseEndpoint: { browseId: 'UCsomeone' } }
+          }
+        ]
+      }
+    }
+  }
+}
+check('playlist owner strapline is not an artist', extractHeader(playlistHeader)?.artist === undefined)
+
 // ---- live -------------------------------------------------------------------
 const songs = await search('daft punk', 'songs')
 show('\nLIVE search (songs filter)', songs)
@@ -122,6 +173,21 @@ if (playlist) {
   check('browse returns tracks', tracks.length > 3, `${tracks.length}`)
 } else {
   check('found a playlist to browse', false, 'none in search')
+}
+
+// Album pages are the case that regressed: the header artist lives in the
+// strapline, and rows carry no artist of their own.
+const albums = await search('kid a mnesia', 'albums')
+const album = albums.find((i) => i.kind === 'album' && i.browseId)
+if (album) {
+  const page = await browse(album.browseId!)
+  check(
+    'live album header knows its artist',
+    Boolean(page.header?.artist?.name),
+    `${page.header?.artist?.name ?? 'none'} — "${page.header?.subtitle ?? ''}"`
+  )
+} else {
+  check('found an album to browse', false, 'none in search')
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)

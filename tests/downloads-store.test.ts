@@ -62,6 +62,20 @@ check('ext recorded', store.extOf('a') === 'm4a')
 check('bitrate from duration', typeof entry.bitrateKbps === 'number' && entry.bitrateKbps > 0)
 check('artUrl decorated', entry.artUrl === undefined)
 
+console.log('\npatch credits:')
+{
+  const patched = store.patchTrack('a', {
+    artist: 'The Neighbourhood',
+    artistId: 'UC1cnYMXqKdazz-gDPKaDFyg',
+    album: 'Hard To Imagine The Neighbourhood Ever Changing'
+  })
+  check('patch reports a change', patched)
+  check('artist replaced', store.entry('a')?.track.artist === 'The Neighbourhood')
+  check('album filled', store.entry('a')?.track.album?.startsWith('Hard To Imagine') === true)
+  check('missing id is a no-op', store.patchTrack('not-a-track', { artist: 'x' }) === false)
+  check('other entries untouched', store.entry('b') === null)
+}
+
 console.log('\nreference add on an existing entry:')
 store.enqueue([{ track: track('a'), source: 'playlist:p1' }], 'best')
 check(
@@ -130,6 +144,9 @@ store.putLyrics('l', {
   source: 'LRCLIB'
 })
 check('lyrics read back', store.lyrics('l')?.lines?.[1]?.text === 'World')
+store.removeLyrics('l')
+check('removeLyrics drops the pinned copy', store.lyrics('l') === null)
+store.putLyrics('l', { kind: 'plain', plain: 'again' })
 store.putLyrics('missing-entry', { kind: 'plain', plain: 'nope' })
 check('lyrics without an entry are ignored', store.lyrics('missing-entry') === null)
 store.removeTrack('l')

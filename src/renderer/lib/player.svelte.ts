@@ -35,12 +35,21 @@ export function toTrack(item: CatalogItem): Track {
   const parts = item.parts ?? []
   const artistPart = parts.find((part) => part.artistId || part.entity === 'artist')
   const albumPart = parts.find((part) => part.albumId || part.entity === 'album')
+  // A subtitle is not an artist name when it only holds a duration or a play
+  // count; album rows with no credited artist use an empty subtitle, and the
+  // detail page fills in the real name before playback.
+  const subtitle = (item.subtitle ?? '').trim()
+  const subtitleIsCounter =
+    /^\d{1,2}:\d{2}(?::\d{2})?$|^[\d.,]+\s*[KMB]?\s*(?:plays|views)$/i.test(subtitle)
 
   return {
     id: item.id,
     title: item.title,
     artist:
-      item.artists?.join(', ') || artistPart?.text.trim() || item.subtitle || 'Unknown artist',
+      item.artists?.join(', ') ||
+      artistPart?.text.trim() ||
+      (subtitleIsCounter ? '' : subtitle) ||
+      'Unknown artist',
     artistId: artistPart?.artistId,
     album: albumPart?.text.trim(),
     albumId: albumPart?.albumId,

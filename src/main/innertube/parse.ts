@@ -102,8 +102,22 @@ export function extractHeader(response: unknown): BrowseHeader | undefined {
     if (!heading) continue
 
     const subtitle = textOf(node.subtitle) || textOf(node.description)
-    const artistRun = runsOf(node.subtitle).find((run) => refId(run, 'artist'))
-    const artistId = artistRun ? refId(artistRun, 'artist') : undefined
+    const subtitleRuns = runsOf(node.subtitle)
+    const artistRun = subtitleRuns.find((run) => refId(run, 'artist'))
+
+    // Album and single headers credit the artist in `straplineTextOne` — the
+    // line above the title — while the subtitle is only "Album • 2021". Read it
+    // for releases so an album opened from anywhere (Home, a track's album
+    // link, history) still knows its artist; otherwise every row fell back to
+    // "Unknown artist". Playlists are excluded: their strapline, when present,
+    // is the owner, not the artist.
+    const releaseKind = /^(?:album|single|ep|compilation)\b/i.test(subtitle.trim())
+    const creditedRun =
+      artistRun ??
+      (releaseKind
+        ? runsOf(node.straplineTextOne).find((run) => refId(run, 'artist'))
+        : undefined)
+    const artistId = creditedRun ? refId(creditedRun, 'artist') : undefined
 
     // "71.8M monthly audience" → "71.8M". Artists only; albums/playlists omit it.
     const monthlyText = textOf(node.monthlyListenerCount)
@@ -117,8 +131,8 @@ export function extractHeader(response: unknown): BrowseHeader | undefined {
       thumbnail: best,
       monthlyListeners,
       artist:
-        artistRun && artistId
-          ? { name: String(artistRun.text ?? '').trim(), id: artistId }
+        creditedRun && artistId
+          ? { name: String(creditedRun.text ?? '').trim(), id: artistId }
           : undefined
     }
   }
