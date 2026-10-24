@@ -176,13 +176,21 @@ function isMachO(path) {
 
 /** Drop parts of the stdlib a headless audio extractor will never import. */
 function trim(root, targetPlatform, version) {
-  const lib = join(root, 'lib', `python${version.split('.').slice(0, 2).join('.')}`)
+  // Windows keeps the stdlib directly under `Lib/` (capitalised) instead of
+  // `lib/pythonX.Y/`. Point at the right place so the trim actually fires.
+  const isWin = targetPlatform === 'win32'
+  const lib = isWin
+    ? join(root, 'Lib')
+    : join(root, 'lib', `python${version.split('.').slice(0, 2).join('.')}`)
   const drop = [
     join(lib, 'idlelib'),
     join(lib, 'tkinter'),
     join(lib, 'ensurepip'),
     join(lib, 'lib2to3'),
     join(lib, 'pydoc_data'),
+    join(lib, 'turtledemo'),
+    join(lib, 'test'),
+    join(lib, 'tests'),
     join(lib, 'site-packages', 'pip'),
     join(lib, 'site-packages', 'pip-*.dist-info'),
     join(lib, 'site-packages', 'setuptools'),
@@ -193,6 +201,10 @@ function trim(root, targetPlatform, version) {
     join(root, 'include'),
     join(root, 'share')
   ]
+  // Windows-only extras a headless audio extractor never imports.
+  if (isWin) {
+    drop.push(join(root, 'tcl'), join(root, 'Tools'), join(root, 'Doc'))
+  }
 
   for (const path of drop) {
     // Simple glob support for the *.dist-info directories.
