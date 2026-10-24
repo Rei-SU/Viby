@@ -11,8 +11,43 @@ export function installMenu(): void {
 
   if (!isMac) {
     // The app draws its own titlebar; a File/Edit/View menu would be duplicate
-    // chrome. Chromium still handles editing shortcuts inside inputs.
-    Menu.setApplicationMenu(null)
+    // chrome in a shipped build. Chromium still handles editing shortcuts inside
+    // inputs. In development, keep a minimal menu so Reload/DevTools/zoom are
+    // reachable on Windows (where there is no default menu at all).
+    if (app.isPackaged) {
+      Menu.setApplicationMenu(null)
+      return
+    }
+
+    const devTemplate: MenuItemConstructorOptions[] = [
+      {
+        label: 'Edit',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' }
+        ]
+      },
+      {
+        label: 'View',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forceReload' },
+          { role: 'toggleDevTools' },
+          { type: 'separator' },
+          { role: 'resetZoom' },
+          { role: 'zoomIn' },
+          { role: 'zoomOut' },
+          { type: 'separator' },
+          { role: 'togglefullscreen' }
+        ]
+      }
+    ]
+    Menu.setApplicationMenu(Menu.buildFromTemplate(devTemplate))
     return
   }
 
