@@ -1,5 +1,5 @@
 import { createReadStream, rmSync, statSync } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
 import { app, BrowserWindow, ipcMain, powerSaveBlocker, protocol } from 'electron'
@@ -622,6 +622,22 @@ let importResolveController: AbortController | null = null
       : art.cacheMany(list)
   })
 
+  ipcMain.handle(
+    CH.imagesDataUrl,
+    async (_e, src: unknown): Promise<{ src: string; type: string } | null> => {
+      if (typeof src !== 'string') return null
+      const file = mediaFileFor(src)
+      if (!file) return null
+      try {
+        const bytes = await readFile(file)
+        const type = mimeForPath(file)
+        return { src: `data:${type};base64,${bytes.toString('base64')}`, type }
+      } catch {
+        return null
+      }
+    }
+  )
+
   ipcMain.handle(CH.ytdlpInfo, async (): Promise<Result<YtDlpInfo>> => {
     try {
       return ok(await runnerInfo())
@@ -820,6 +836,20 @@ function kickOffBackgroundCache(track: Track, input: string): void {
     })
 }
 
+/** Resolve a media URL to a file, but only inside the cache/download folders. */
+function mediaFileFor(url: string): string | null {
+  let requested: string
+  try {
+    requested = pathFromMediaUrl(url)
+  } catch {
+    return null
+  }
+  const file = resolve(requested)
+  const userData = app.getPath('userData')
+  const allowed = [join(userData, 'cache'), join(userData, 'downloads')]
+  return allowed.some((root) => file === root || file.startsWith(root + sep)) ? file : null
+}
+
 /** Serve cached audio over the privileged scheme registered in index.ts. */
 export function handleMediaProtocol(): void {
   // Chromium only lets you seek a resource that advertises byte ranges.
@@ -827,13 +857,8 @@ export function handleMediaProtocol(): void {
   // cached track was unseekable: dragging the scrubber snapped back to zero.
   // Serving real 206 partial responses fixes it.
   protocol.handle(MEDIA_SCHEME, async (request) => {
-    const requested = pathFromMediaUrl(request.url)
-    const file = resolve(requested)
-    const userData = app.getPath('userData')
-    const allowed = [join(userData, 'cache'), join(userData, 'downloads')]
-    if (!allowed.some((root) => file === root || file.startsWith(root + sep))) {
-      return new Response('Not found', { status: 404 })
-    }
+    const file = mediaFileFor(request.url)
+    if (!file) return new Response('Not found', { status: 404 })
 
     let total: number
     try {

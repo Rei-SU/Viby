@@ -63,6 +63,7 @@ export const CH = {
   cacheStats: 'cache:stats',
   cacheClear: 'cache:clear',
   imagesCache: 'images:cache',
+  imagesDataUrl: 'images:data-url',
 
   networkGet: 'network:get',
   networkSetMode: 'network:set-mode',
@@ -171,6 +172,12 @@ export interface VibyApi {
   images: {
     /** Cache remote artwork under userData and return URL → local media URL. */
     cache(urls: string[]): Promise<Record<string, string>>
+    /**
+     * Read a cached/downloaded image back as a data URL. Chromium refuses to
+     * fetch a custom scheme, and the media session only accepts
+     * http(s)/data/blob artwork.
+     */
+    dataUrl(src: string): Promise<{ src: string; type: string } | null>
   }
   network: {
     get(): Promise<NetworkState>

@@ -96,6 +96,10 @@ class Player {
   /** Set on launch: where to resume once the restored track is actually loaded. */
   private pendingResume: { id: string; position: number } | null = null
   private lastSaveAt = 0
+  /** Local artwork converted to a data URL, keyed by its viby-media URL. */
+  private artDataUrls = new Map<string, { src: string; type: string }>()
+  /** Guards an async artwork conversion against a track change in the meantime. */
+  private metadataToken = 0
   /**
    * Video id currently loaded in the <audio> element. Kept separate from
    * `current` so a stale event can never act on a track the UI has moved past.
@@ -880,14 +884,51 @@ class Player {
       navigator.mediaSession.metadata = null
       return
     }
+    const thumbnail = track.thumbnail
+    // Chromium accepts only http(s)/data/blob artwork, so a downloaded cover on
+    // the viby-media scheme is dropped and Now Playing shows no art. Convert it
+    // once, then swap the metadata in if this track is still the current one.
+    const localArt = thumbnail ? !/^(?:https?|data|blob):/i.test(thumbnail) : false
+    const token = ++this.metadataToken
+
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
       artist: track.artist,
       album: 'Viby',
-      artwork: track.thumbnail
-        ? [{ src: track.thumbnail, sizes: '512x512', type: 'image/jpeg' }]
-        : []
+      artwork: thumbnail && !localArt ? [{ src: thumbnail, sizes: '512x512', type: 'image/jpeg' }] : []
     })
+
+    if (!localArt || !thumbnail) return
+    void this.localArtwork(thumbnail).then((art) => {
+      if (!art || token !== this.metadataToken || this.current?.id !== track.id) return
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title,
+        artist: track.artist,
+        album: 'Viby',
+        artwork: [{ src: art.src, sizes: '512x512', type: art.type }]
+      })
+    })
+  }
+
+  /** Read a cached cover through main and hand Chromium a data URL it accepts. */
+  private async localArtwork(src: string): Promise<{ src: string; type: string } | null> {
+    const cached = this.artDataUrls.get(src)
+    if (cached) return cached
+    try {
+      // A custom scheme cannot be fetched from the renderer, so main reads the
+      // file (after checking it lives under userData) and returns the bytes.
+      const art = await api.images.dataUrl(src)
+      if (!art) return null
+      // A handful of covers is plenty; the entry is tiny next to the file itself.
+      if (this.artDataUrls.size >= 8) {
+        const oldest = this.artDataUrls.keys().next().value
+        if (oldest) this.artDataUrls.delete(oldest)
+      }
+      this.artDataUrls.set(src, art)
+      return art
+    } catch {
+      return null
+    }
   }
 
   private syncPlaybackState(): void {

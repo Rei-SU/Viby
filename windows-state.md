@@ -312,3 +312,38 @@ After pulling `windows-fixes` on the Windows PC:
 3. Repeat §9: titlebar drag/overlay, media keys/SMTC, offline/download flow,
    in-client update, `backdrop-filter`, and audio.
 4. Record the result here; Windows 10 is the remaining platform pass.
+
+## 12. Downloaded album showed "Unknown artist" and had no lyrics (0.2.1)
+
+Found while testing a downloaded album (*Hard To Imagine The Neighbourhood Ever
+Changing*, 21 songs) on Windows. Every row and the player showed "Unknown
+artist", and only 5 of 21 songs had lyrics on disk.
+
+**Cause:** an album page keeps the artist in the header's `straplineTextOne`
+(the line above the title); its subtitle is only `Album - 2021`, and the track
+rows carry no artist of their own. An album opened from Home, a track's album
+link or history therefore stored each row as "Unknown artist". Downloads saved
+that snapshot. LRCLIB's `artist_name` filter is strict, so "Unknown artist"
+returned no results and the miss was cached for 24 hours. Title-only fallback
+matching also pinned wrong lyrics for the five songs fetched during the
+download ("Dust" matched *Another One Bites the Dust*).
+
+**Fix (ed790c3):**
+- `extractHeader` reads the strapline for album/single/EP/compilation headers
+  (playlist owners are still ignored); `toTrack` no longer uses a duration or
+  play count as an artist name.
+- `DownloadManager.repairCredits()` runs at startup and when the connection
+  returns: it fills `artist`/`artistId`/`album` from the album page, drops
+  lyrics that were looked up without a usable artist, then backfills them.
+- Lyrics lookup ignores `Unknown artist`/`Various Artists` and rejects results
+  credited to a different artist.
+
+**Verified live on Windows 11:** all 21 entries now read "The Neighbourhood" and
+the album name; 21/21 have correct synced lyrics (checked against LRCLIB), the
+Downloads page, player and offline lyrics panel all show the right artist and
+text. Existing libraries are repaired in place; nothing is re-downloaded.
+
+Also fixed while testing (ace9512): downloaded covers are on the `viby-media:`
+scheme, which the media session rejects, so Now Playing/SMTC lost the artwork
+for offline songs. Main now returns the cover as a data URL
+(`images:data-url`), and streaming artwork still uses the original https URL.
