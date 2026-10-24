@@ -287,13 +287,20 @@ async function works(command: string, script: string): Promise<boolean> {
  * running the zipapp, so a stale or broken interpreter falls back cleanly.
  */
 function findPython(): string | null {
-  const names = IS_WINDOWS ? ['python.exe', 'python3.exe'] : ['python3', 'python']
+  // `py.exe` is the Python Launcher for Windows: a small, real executable that
+  // resolves to an installed interpreter, and is a safer fallback than scanning
+  // PATH for `python.exe` (which on Windows may resolve to a Store shim).
+  const names = IS_WINDOWS ? ['python.exe', 'python3.exe', 'py.exe'] : ['python3', 'python']
   const fromPath: string[] = []
   const dirs = (process.env.PATH ?? '').split(delimiter).filter(Boolean)
-
+ 
   for (const name of names) {
     for (const dir of dirs) {
       const candidate = join(dir, name)
+      // Skip the Microsoft Store "App execution alias" shims: they are zero-byte
+      // stubs on PATH that open the Store instead of running Python, and would
+      // otherwise pop a Store window during the `works()` probe.
+      if (IS_WINDOWS && /\\WindowsApps\\/i.test(candidate)) continue
       if (isExecutable(candidate)) {
         fromPath.push(candidate)
         break
