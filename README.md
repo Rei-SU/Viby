@@ -5,61 +5,84 @@
 <h1 align="center">Viby</h1>
 
 <p align="center">
-  <strong>Listen without the noise.</strong><br />
-  A fast, ad-free desktop music player for macOS and Windows.
+  <strong>Music first. Everything else can wait.</strong><br />
+  An ad-free, account-free desktop music player for macOS and Windows.
 </p>
 
 <p align="center">
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20silicon%20%7C%20Intel-111111?style=flat-square&logo=apple&logoColor=white" />
-  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%7C%2011-111111?style=flat-square&logo=windows&logoColor=white" />
-  <img alt="Status" src="https://img.shields.io/badge/status-public%20beta-111111?style=flat-square" />
-  <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-111111?style=flat-square" />
+  <a href="https://github.com/Rei-SU/Viby/releases/latest/download/Viby-macos-arm.dmg"><img alt="Download Viby for macOS on Apple silicon" src="https://img.shields.io/badge/macOS-Apple%20silicon-111111?style=flat-square&logo=apple&logoColor=white" /></a>
+  <a href="https://github.com/Rei-SU/Viby/releases/latest/download/Viby-macos-intel.dmg"><img alt="Download Viby for macOS on Intel" src="https://img.shields.io/badge/macOS-Intel-111111?style=flat-square&logo=apple&logoColor=white" /></a>
+  <a href="https://github.com/Rei-SU/Viby/releases/latest/download/Viby-windows-x64.exe"><img alt="Download Viby for Windows" src="https://img.shields.io/badge/Windows-x64-111111?style=flat-square&logo=windows&logoColor=white" /></a>
+  <a href="https://github.com/Rei-SU/Viby/releases/latest"><img alt="Latest version" src="https://img.shields.io/github/v/release/Rei-SU/Viby?style=flat-square&color=111111&label=version" /></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-111111?style=flat-square" /></a>
 </p>
 
-Viby is a desktop music player for people who just want to press play.
+Viby opens on your music, not on an offer. No sign-up screen, no ad before the first song, no upsell sitting between you and play. Search for something, press play, and the app gets out of the way.
 
-Browse artists, albums and playlists. Build a library that stays yours. Follow along with lyrics that move with the song. Download music for offline listening. No subscription, no ads, nothing to sit through — and no account required.
+It plays from YouTube Music's catalogue, so almost anything you look for is there. The player, the library, the lyrics and the downloads are built here — which is why none of them are trying to sell you anything, and why what you keep stays on your machine.
 
 <p align="center">
-  <img src="docs/screenshots/artist.png" alt="Viby artist page with a full-width banner and monthly listeners" />
+  <img src="docs/screenshots/home.png" alt="Viby home screen with recently played and music shelves" />
 </p>
 <p align="center">
-  <sub>Artist pages with full-width artwork, monthly listeners and the full discography.</sub>
+  <sub>Home — what you played last, then something new.</sub>
 </p>
 
-## What's inside
+## Get Viby
 
-- **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a local cache that makes replays instant.
-- **A catalogue worth browsing.** Search from the titlebar as you type (`⌘K` / `Ctrl K`), then open the full results page with filters, home shelves, and artist and album pages with real discographies.
-- **Lyrics that keep up.** Time-synced lyrics from LRCLIB, with lyrics.ovh as a plain-text fallback, click-to-seek, and a docked sidebar that leaves the page usable.
-- **A library that stays yours.** Liked songs, playlists and history stored locally and fully usable signed out. Optional encrypted backup and sync is planned after the beta.
-- **Offline when you need it.** Download songs, albums, playlists or Liked Songs and play them without a connection. Search and browsing need the network; your downloads do not.
-- **Import from a link.** Paste a public Spotify, Apple Music, Deezer, YouTube Music or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.
-- **Quiet by design.** A monochrome interface, a slim icon sidebar, a light idle footprint (well under 400 MB in our macOS tests), and a warm start around a second.
+Download the latest release with the badges above: **Apple silicon** for an M-series Mac, **Intel** for an older one, **x64** for Windows 10 or 11. Every version and its notes are on the [releases page](https://github.com/Rei-SU/Viby/releases).
 
-## Look around
+The macOS build is unsigned, so the first launch needs **right-click → Open**. After that it opens normally. The Windows installer is per-user and needs no administrator password; updates install in place.
+
+## What it does
+
+- **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a cache that makes a replay instant.
+- **A library that stays yours.** Liked songs, playlists and history on your disk, fully usable signed out. No account, no cloud, no "syncing…" spinner.
+- **Offline that means offline.** Download songs, albums, playlists or Liked Songs. The app follows your connection and falls back to what is on the device.
+- **Lyrics that keep up.** Time-synced lyrics from LRCLIB, plain text from lyrics.ovh as a backup, click any line to seek, and a docked panel that leaves the page usable.
+- **Your playlists, not a fresh start.** Paste a public Spotify, Apple Music, Deezer, YouTube Music or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is flagged for review, never silently swapped.
+- **Quiet by design.** A monochrome interface, a slim icon rail, search from the titlebar (`⌘K` / `Ctrl K`), and a light footprint — under 400 MB at idle in our macOS tests.
+
+## A closer look
 
 <p align="center">
-  <img src="docs/screenshots/album.png" alt="Album page with a real track list, play counts and durations" />
+  <img src="docs/screenshots/artist.png" width="49%" alt="Artist page with a full-width banner, monthly listeners and the discography" />
+  <img src="docs/screenshots/album.png" width="49%" alt="Album page with the artist, year, track list and durations" />
 </p>
 <p align="center">
-  <sub>Album pages with real track lists, play counts and durations.</sub>
+  <sub>Artist pages with real discographies &nbsp;·&nbsp; Album pages with real track lists, artist and year</sub>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/lyrics.png" alt="Time-synced lyrics docked beside an artist page" />
 </p>
 <p align="center">
-  <sub>Time-synced lyrics docked beside the page; click any line to seek.</sub>
+  <sub>Lyrics docked beside the page. Click any line to jump to that moment.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/search.png" width="49%" alt="Search results with filters for songs, albums, artists and playlists" />
-  <img src="docs/screenshots/settings.png" width="49%" alt="Playback, offline mode, downloads and cache settings" />
+  <img src="docs/screenshots/search.png" width="49%" alt="Search results with a top result, songs and artists" />
+  <img src="docs/screenshots/downloads.png" width="49%" alt="A downloaded album with offline badge, track list and file sizes" />
 </p>
 <p align="center">
-  <sub>Search across songs, albums, artists and playlists &nbsp;·&nbsp; Playback, offline mode and storage, all local</sub>
+  <sub>Search across songs, albums, artists and playlists &nbsp;·&nbsp; Downloads keep their credits and play with the network off</sub>
 </p>
+
+## Where it stands
+
+Viby is small on purpose and still early. The version badge at the top always shows the latest release; the [releases page](https://github.com/Rei-SU/Viby/releases) has the notes for each one.
+
+- **macOS builds are unsigned and unnotarized.** Updates download the matching DMG; in-place macOS updates arrive with signing.
+- **Windows updates install in place.** Windows 11 is verified. Windows 10 has not been tested on real hardware yet.
+- **No accounts, no sync, no telemetry.** Your liked songs, playlists and history are local files. Optional, end-to-end encrypted backup and sync is planned, and it will never be required to listen.
+
+## What's next
+
+- Signed, notarized macOS builds — and with them, in-place macOS updates
+- Windows 10 validation on real hardware
+- Manual search for import rows that don't match on their own, plus album and single links in the importer
+- Drag-to-reorder playlists, add-to-playlist from the player bar, virtualized lists for very long playlists
+- Optional accounts: private, end-to-end encrypted backup and sync across devices
 
 ## Build from source
 
@@ -82,23 +105,9 @@ npm run dist:win   # Windows x64 installer
 
 Packaged builds need no Python install, no configuration file and no first-run setup screen.
 
-## What's next
-
-Viby is a public beta. The core is in place; the edges are still being sanded.
-
-- Signed and notarized macOS builds (which also enable in-place macOS updates)
-- Windows 10 validation on real hardware
-- Windows 11 Electron 45 re-check (Electron 37 checks pass, including offline/downloads and in-client updates)
-- Manual search for import rows that don't match automatically
-- Album and single links in the importer
-- Virtualized lists for playlists with thousands of tracks
-- Drag-to-reorder playlists
-- Add to playlist from the player bar
-- Optional accounts with private, end-to-end encrypted backup and sync across devices — planned after the core is fully polished
-
 ## Privacy
 
-No account is required, and this beta has no sign-in. No analytics, no telemetry, no ad tracking. Your library, playlists, history, downloads and cache live in your user data folder by default, and the app only talks to the network to browse, play, fetch lyrics, download music and import a link you paste. If optional accounts ship later, they will only back up and sync your library; listening will never require one.
+No account is required. No analytics, no telemetry, no ad tracking. Your library, playlists, history, downloads and cache live in your user data folder, and the app only talks to the network to browse, play, fetch lyrics, download music and import a link you paste. If optional accounts ship later, they will only back up and sync your library; listening will never require one.
 
 ## Contributing
 
