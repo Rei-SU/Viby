@@ -40,6 +40,7 @@
   ]
 
   const isMac = api.platform === 'darwin'
+  const isWin = api.platform === 'win32'
 
   // The lyrics sidebar is sized in viewport units. Disable the grid transition
   // while the window is being resized, otherwise the track chases the pointer
@@ -154,7 +155,7 @@
 <div class="layout" class:lyrics-open={lyrics.open} class:resizing>
   <!-- The window has no native title bar on macOS, so this strip is the only
        draggable area. Everything interactive inside it must opt out. -->
-  <header class="titlebar" class:mac={isMac}>
+  <header class="titlebar" class:mac={isMac} class:win={isWin}>
     <div class="chrome-left">
       <div class="history">
         <button
@@ -368,6 +369,12 @@
 
   .titlebar.mac {
     padding-left: 84px;
+  }
+
+  /* Windows draws the min/max/close buttons as an overlay on the right of the
+     hidden title bar; reserve room so they never sit on top of app content. */
+  .titlebar.win {
+    padding-right: 150px;
   }
 
   .chrome-left {
