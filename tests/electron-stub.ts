@@ -7,21 +7,22 @@
  */
 import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
- 
+
 export const app = {
   isPackaged: false,
   getAppPath: (): string => process.cwd(),
   getPath: (name: string): string => {
     if (name !== 'userData') return process.cwd()
-    // Mirror Electron's real userData location per platform so the stub does not
-    // invent a macOS-style path on Windows/Linux.
+    // Development runs pin userData before app.setName('Viby'), so the
+    // directory stays lowercase on every platform. Match that here; this stub
+    // represents a development app (isPackaged is false), not a packaged one.
     if (platform() === 'win32') {
-      return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Viby')
+      return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'viby')
     }
     if (platform() === 'darwin') {
-      return join(homedir(), 'Library', 'Application Support', 'Viby')
+      return join(homedir(), 'Library', 'Application Support', 'viby')
     }
-    return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'Viby')
+    return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'viby')
   }
 }
 

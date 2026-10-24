@@ -5,7 +5,7 @@ import { BrowserWindow, app, shell } from 'electron'
 export function createWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
   const isWin = process.platform === 'win32'
- 
+
   const win = new BrowserWindow({
     width: 1180,
     height: 760,

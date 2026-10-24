@@ -293,7 +293,7 @@ function findPython(): string | null {
   const names = IS_WINDOWS ? ['python.exe', 'python3.exe', 'py.exe'] : ['python3', 'python']
   const fromPath: string[] = []
   const dirs = (process.env.PATH ?? '').split(delimiter).filter(Boolean)
- 
+
   for (const name of names) {
     for (const dir of dirs) {
       const candidate = join(dir, name)

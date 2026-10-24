@@ -41,9 +41,11 @@ if (unknown.length > 0) {
 }
 
 const selected = requested.length > 0 ? requested : Object.keys(suites)
-// Invoke esbuild through Node rather than the `.bin` shim, which is not
-// resolvable by execFileSync on Windows (ENOENT for the extensionless name).
+// On Windows, bin/esbuild is a Node.js shim, so it must be run through Node.
+// On macOS/Linux npm replaces it with the native esbuild executable, so run it
+// directly. The `.bin` shim is not resolvable by execFileSync on Windows.
 const esbuildEntry = join(process.cwd(), 'node_modules', 'esbuild', 'bin', 'esbuild')
+const esbuildCommand = process.platform === 'win32' ? process.execPath : esbuildEntry
 
 let failures = 0
 for (const name of selected) {
@@ -51,7 +53,7 @@ for (const name of selected) {
   const out = join(tmpdir(), `viby-${name}.mjs`)
 
   const args = [
-    esbuildEntry,
+    ...(process.platform === 'win32' ? [esbuildEntry] : []),
     `tests/${suite.file}`,
     '--bundle',
     '--platform=node',
@@ -64,7 +66,7 @@ for (const name of selected) {
 
   console.log(`\n▶ ${name}`)
   try {
-    execFileSync(process.execPath, args, { stdio: 'inherit' })
+    execFileSync(esbuildCommand, args, { stdio: 'inherit' })
     execFileSync(process.execPath, [out], { stdio: 'inherit' })
   } catch {
     failures++
