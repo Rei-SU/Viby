@@ -72,14 +72,12 @@ The macOS build is unsigned, so the first launch needs **right-click → Open**.
 
 Viby is small on purpose and still early. The version badge at the top always shows the latest release; the [releases page](https://github.com/Rei-SU/Viby/releases) has the notes for each one.
 
-- **macOS builds are unsigned and unnotarized.** Updates download the matching DMG; in-place macOS updates arrive with signing.
-- **Windows updates install in place.** Windows 11 is verified. Windows 10 has not been tested on real hardware yet.
+- **macOS builds are unsigned and unnotarized.** Updates download the matching DMG; in-place macOS updates remain deferred until Developer ID signing is available.
+- **Windows updates install in place.** Windows 11 is verified on Electron 45. Windows 10 uses the same x64 build and is expected to behave the same; no separate hardware pass is planned.
 - **No accounts, no sync, no telemetry.** Your liked songs, playlists and history are local files. Optional, end-to-end encrypted backup and sync is planned, and it will never be required to listen.
 
 ## What's next
 
-- Signed, notarized macOS builds — and with them, in-place macOS updates
-- Windows 10 validation on real hardware
 - Manual search for import rows that don't match on their own, plus album and single links in the importer
 - Drag-to-reorder playlists, add-to-playlist from the player bar, virtualized lists for very long playlists
 - Optional accounts: private, end-to-end encrypted backup and sync across devices

@@ -83,9 +83,10 @@ running per-user install on a real machine.
    its installer (or temporarily edit the manifest asset); the download must be
    deleted and the state must show the verification failure, never install.
 
-Verified on Windows 11 (2026-10-24, Electron 37): the NSIS installer replaced the
-running per-user install and relaunched successfully. Re-run this on Electron 45,
-on Windows 10, and after any updater change.
+Verified on Windows 11 (2026-10-25, Electron 45): the NSIS installer replaced the
+running per-user install and relaunched successfully. Windows 10 uses the same
+x64 build and is covered by the Windows 11 pass by maintainer decision. Re-run
+this after any updater change.
 
 ### E2E scenarios (app must be running)
 

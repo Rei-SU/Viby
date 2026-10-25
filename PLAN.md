@@ -342,10 +342,10 @@ appears, tracks are matched or visibly flagged, and the playlist is created in s
 Today's Top Hits (50) → 48 auto / 2 review / 0 missing; a 951-track YouTube playlist imports in ~11s.
 Deferred beyond this slice: moods/genres browsing, private/collaborative Spotify playlists, and Liked Songs. The CSV/text floor was dropped by decision (link-only interaction).
 
-**P5 — Ship. Partially done.**
-Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. Still missing: signing/notarization (which also enables in-place macOS updates), Windows 10 validation on real hardware, and the Electron 45 re-check on Windows 11; Windows 11 manual checks pass on Electron 37, including in-client updates. The update-signing key is generated and pinned in `src/main/update-key.ts`; CI must provide its private half as `VIBY_UPDATE_KEY`, or the release workflow refuses to publish.
+**P5 — Ship. Shipped, with macOS signing deferred.**
+Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies and installs in place (NSIS, per-user); macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. Windows 11 manual checks pass on Electron 45, including in-client updates; Windows 10 uses the same x64 build and is covered by that pass by maintainer decision. macOS signing/notarization is deferred because it requires a paid Apple Developer account, so unsigned DMGs remain the current release path. The update-signing key is generated and pinned in `src/main/update-key.ts`; CI must provide its private half as `VIBY_UPDATE_KEY`, or the release workflow refuses to publish.
 
-*Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. Not yet verified.
+*Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. The unsigned DMG needs the documented right-click → Open first launch; this has not been formally verified with an external user.
 
 **P6 — Accounts and sync. Deferred on purpose.**
 Not started. Begins only once P5 is done and the core experience is fully polished — playback correct, the look and feel settled, and no open fundamentals. Until then the profile avatar stays a placeholder.
@@ -357,13 +357,13 @@ Scope: optional accounts with end-to-end encrypted backup and sync of favorites,
 **P7 — Offline mode and downloads. Shipped (P7a–P7c); P7d's packaged/manual pass remains.**
 The full specification and current behavior are in §17. Connectivity + offline shell, the download engine, Library integration, collections, artwork and the offline Search notice are all shipped.
 
-*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs. Met in macOS development tests; the Windows 11 manual offline/download pass is done on Electron 37, and the Electron 45 re-check plus Windows 10 hardware validation remain (P7d).
+*Acceptance:* with the network off, the app opens into an offline Home showing downloaded music; a downloaded album plays end-to-end offline after a relaunch; undownloaded cached tracks still play silently; uncached playback fails fast with a human message; deleting a playlist removes only downloads no other source still needs. Met in macOS development tests; the Windows 11 manual offline/download pass is done on Electron 45, and Windows 10 is covered by the same x64 build by maintainer decision. P7d's remaining manual edge cases are listed in §17.8.
 
 ## 10. Open items
 
 Settled: cache cap (1GB), quality policy (never downgrade), Spotify (no credentials), phase order (skip spike, straight to P1), language (English), charts (dedicated page removed; shelves stay in Home), accounts (optional, local-first, post-v1 — see §9 P6), repeat-one (restarts the track), and history retention (last 5,000 plays).
 
-No blocking product questions remain; P5, P7d's packaged/manual pass and P6 track the remaining work.
+No blocking product questions remain. P5 is shipped with macOS signing deferred; P7d's remaining manual edge cases and P6 track the remaining work.
 
 ## 11. Build notes and gotchas
 
@@ -772,7 +772,7 @@ Shipping contract: install and play. The user never installs Python and never se
 
 ## 17. Offline mode and downloads (shipped)
 
-Status: shipped 2026-10-22 (`2059183`, `86abfe4`). P7a–P7c are complete; P7d's automated coverage is in place, and the Windows 11 manual offline/download pass is done on Electron 37; the Electron 45 re-check and Windows 10 hardware validation remain. The specification below describes the current app.
+Status: shipped 2026-10-22 (`2059183`, `86abfe4`). P7a–P7c are complete; P7d's automated coverage is in place, and the Windows 11 manual offline/download pass is done on Electron 45. Windows 10 uses the same x64 build and is covered by that pass by maintainer decision. P7d's remaining manual edge cases are listed in §17.8. The specification below describes the current app.
 
 ### 17.1 The distinction that drives everything
 
@@ -971,8 +971,8 @@ Storage/index, manager, progress, per-song action, Library integration (songs + 
 Album/playlist/Liked actions with coverage and partial re-download; grouped Library with downloaded filters and badges; reference-based pruning; offline artwork for saved collections; faded unavailable rows; Search offline notice; settings copy; low-disk warnings; queue polish.
 *Acceptance:* download a playlist and play it fully offline; a saved but undownloaded playlist still opens offline with cached art, all rows visible and non-downloaded rows faded; deleting the playlist removes only unreferenced files; a track shared with a downloaded album survives; Search shows the offline notice until the connection returns.
 
-**P7d — Hardening. Packaged/manual pass pending.**
-Offline e2e, failure-classification tests and docs are in place. Network flapping, failed-download recovery, quit mid-download, long playlists, the Electron 45 re-check and Windows 10 hardware validation still need the manual/packaged pass; automated tests do not replace it.
+**P7d — Hardening. Manual edge cases pending.**
+Offline e2e, failure-classification tests and docs are in place. The Windows 11 offline/download pass is done on Electron 45, and Windows 10 is covered by the same x64 build by maintainer decision. Network flapping, failed-download recovery, quit mid-download, long playlists, disk-full simulation and captive-portal handling still need the manual/packaged pass; automated tests do not replace it.
 
 ### 17.9 Test coverage
 
@@ -980,7 +980,7 @@ Offline e2e, failure-classification tests and docs are in place. Network flappin
 
 **E2E (`tests/e2e/offline.mjs`)** uses the manual switch, so it never depends on the machine's real network. It covers: local-first Home, the offline pill, disabled Import, the Charts page staying gone, the offline Search page, downloaded playback when the profile has a download, Library filters and badges, and reconnect. It deliberately does not download through yt-dlp.
 
-**Manual/packaged pass:** download one short track and a collection, relaunch offline, play both; clear the cache and confirm downloads remain; delete a playlist and confirm only unreferenced files go; airplane mode on both platforms, Wi-Fi drop mid-download, quit mid-download, disk-full simulation, captive portal (`unreachable`). The Electron 45 re-check and Windows 10 hardware validation are still pending.
+**Manual/packaged pass:** download one short track and a collection, relaunch offline, play both; clear the cache and confirm downloads remain; delete a playlist and confirm only unreferenced files go; airplane mode on both platforms, Wi-Fi drop mid-download, quit mid-download, disk-full simulation, captive portal (`unreachable`). The Windows 11 pass is done on Electron 45; Windows 10 is covered by the same x64 build by maintainer decision. The remaining edge cases are the P7d items above.
 
 ### 17.10 Risks
 
