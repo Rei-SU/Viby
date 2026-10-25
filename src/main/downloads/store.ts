@@ -602,13 +602,24 @@ export class DownloadsStore {
       // Album tracks often arrive without their own thumbnail. Once the
       // collection cover is on disk, make it the entry's cover too, so the
       // artwork survives for downloads made before this fallback existed.
+      //
+      // A stale index can point at art that was removed outside Viby (or was
+      // never copied from another install). Drop those references before
+      // handing them to the renderer, where a dead `viby-media://` URL is just
+      // a broken image.
       const collections = Object.values(data.collections)
+      for (const collection of collections) {
+        if (collection.art && !existsSync(join(this.root, collection.art))) {
+          delete collection.art
+        }
+      }
       for (const [id, entry] of Object.entries(data.entries)) {
         if (entry.art && existsSync(join(this.root, entry.art))) continue
         const owner = collections.find(
           (collection) => collection.art && collection.trackIds.includes(id)
         )
-        entry.art = owner?.art
+        if (owner?.art) entry.art = owner.art
+        else delete entry.art
       }
 
       for (const [id, job] of Object.entries(data.jobs)) {
@@ -741,13 +752,21 @@ export class DownloadsStore {
     rmSync(this.lyricsPath(trackId), { force: true })
   }
 
+  /** Art that still exists on disk, as a path relative to the downloads root. */
+  private existingArt(art: string | undefined): string | undefined {
+    return art && existsSync(join(this.root, art)) ? art : undefined
+  }
+
   /** The entry's own cover, or the cover of a downloaded collection it belongs to. */
   private artForEntry(entry: DownloadEntry): string | undefined {
-    if (entry.art) return entry.art
-    const owner = Object.values(this.store.get().collections).find(
-      (collection) => collection.art && collection.trackIds.includes(entry.track.id)
-    )
-    return owner?.art
+    const own = this.existingArt(entry.art)
+    if (own) return own
+    for (const collection of Object.values(this.store.get().collections)) {
+      if (!collection.trackIds.includes(entry.track.id)) continue
+      const art = this.existingArt(collection.art)
+      if (art) return art
+    }
+    return undefined
   }
 
   private decorateEntry(entry: DownloadEntry): DownloadEntry {
@@ -761,10 +780,11 @@ export class DownloadsStore {
   }
 
   private decorateCollection(collection: DownloadCollection): DownloadCollection {
+    const art = this.existingArt(collection.art)
     return {
       ...collection,
       trackIds: [...collection.trackIds],
-      artUrl: collection.art ? mediaUrlFor(join(this.root, collection.art)) : undefined
+      artUrl: art ? mediaUrlFor(join(this.root, art)) : undefined
     }
   }
 }

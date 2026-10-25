@@ -118,6 +118,11 @@ check(
   entryArt(entry('a', ['album:a1']), collections) === 'viby-media://local/album-art.jpg'
 )
 check(
+  'collection thumbnail covers tracks when local art is gone',
+  entryArt(entry('a', ['album:a1']), [{ ...album, artUrl: undefined }]) ===
+    'https://example.test/album.jpg'
+)
+check(
   'remote thumbnail is the last resort',
   entryArt(entry('d', ['track:d'], undefined, 'https://example.test/d.jpg'), collections) ===
     'https://example.test/d.jpg'

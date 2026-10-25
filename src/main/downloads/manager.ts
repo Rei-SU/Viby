@@ -534,7 +534,7 @@ export class DownloadManager {
       collection.trackIds.includes(track.id)
     )
     if (!owner) return null
-    if (owner.art) return owner.art
+    if (owner.art && existsSync(join(this.store.dir, owner.art))) return owner.art
     return owner.thumbnail ? fetchArt(owner.thumbnail, this.store) : null
   }
 

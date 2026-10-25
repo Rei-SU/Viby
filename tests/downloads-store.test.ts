@@ -197,6 +197,29 @@ fresh.addCollection({
 })
 fresh.setCollectionArt('album:fa', albumArtRel)
 check('collection art is used before a restart', Boolean(fresh.entry('f')?.artUrl))
+// A collection can outlive its art file (removed outside Viby, or copied from
+// another install). It must fall back instead of handing the renderer a dead
+// `viby-media://` URL.
+const missingArtRel = fresh.artNameFor('https://example.test/missing.jpg', 'jpg')
+fresh.addCollection({
+  key: 'album:missing',
+  kind: 'album',
+  title: 'Missing',
+  thumbnail: 'https://example.test/missing.jpg',
+  trackIds: ['g']
+})
+fresh.setCollectionArt('album:missing', missingArtRel)
+const tmpG = makeFile(join(fresh.tmpDir, 'g'), 'g.m4a', 2048)
+fresh.put(track('g'), tmpG, 'm4a', ['album:missing'], 'best')
+check(
+  'dead collection art is not decorated',
+  fresh.collection('album:missing')?.artUrl === undefined
+)
+check('dead entry art is not decorated', fresh.entry('g')?.artUrl === undefined)
+check(
+  'collection keeps its remote thumbnail',
+  fresh.collection('album:missing')?.thumbnail === 'https://example.test/missing.jpg'
+)
 // A lyrics file left behind by a crash has no entry to belong to.
 makeFile(fresh.lyricsDir, 'ghost.json', 8)
 // A file with no entry (Windows deferred deletion) is swept on the next launch.
@@ -216,6 +239,15 @@ check('orphan lyrics removed', existsSync(join(fresh.lyricsDir, 'ghost.json')) =
 check('valid entry survives', reopened.entry('d') !== null)
 check('entry keeps its art path', reopened.entry('e')?.art === artRel)
 check('entry without a thumbnail keeps the album cover', reopened.entry('f')?.art === albumArtRel)
+check(
+  'missing collection art is cleared on startup',
+  reopened.collection('album:missing')?.art === undefined
+)
+check('missing entry art is cleared on startup', reopened.entry('g')?.art === undefined)
+check(
+  'collection keeps its thumbnail after healing',
+  reopened.collection('album:missing')?.thumbnail === 'https://example.test/missing.jpg'
+)
 
 
 console.log('\ncorrupt index recovery:')
