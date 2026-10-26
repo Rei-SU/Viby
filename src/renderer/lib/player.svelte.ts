@@ -884,6 +884,9 @@ class Player {
       title: track.title,
       artist: track.artist,
       artistId: track.artistId,
+      album: track.album,
+      albumId: track.albumId,
+      durationSec: track.durationSec,
       playedAt: Date.now(),
       completion,
       thumbnail: track.thumbnail

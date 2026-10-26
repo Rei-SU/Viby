@@ -22,6 +22,7 @@ const suites = {
   'downloads-manager': { file: 'downloads-manager.test.ts', electron: true },
   'download-groups': { file: 'download-groups.test.ts' },
   'library-items': { file: 'library-items.test.ts' },
+  listening: { file: 'listening.test.ts' },
   'player-source': { file: 'player-source.test.ts' },
   'rail-fit': { file: 'rail-fit.test.ts' },
   images: { file: 'images.test.ts', electron: true },

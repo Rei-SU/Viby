@@ -29,6 +29,7 @@ import type {
   YtDlpInfo
 } from '@shared/types'
 import { CH, type LyricsRequest, type ResolveRequest } from '@shared/ipc'
+import { summarizeHistory } from '@shared/listening'
 import { qualityCapKbps, setSettings, settings } from './settings'
 import { session } from './session'
 import { cachedLyrics, getLyrics } from './lyrics'
@@ -473,6 +474,24 @@ let importResolveController: AbortController | null = null
     }
   )
 
+  ipcMain.handle(
+    CH.catalogArtistImage,
+    async (_e, artistId: unknown, name: unknown): Promise<Result<string | null>> => {
+      if (typeof name !== 'string' || !name.trim()) return ok(null)
+      if (offline()) return ok(null)
+      try {
+        return ok(
+          await innertube.artistImage(
+            typeof artistId === 'string' ? artistId : undefined,
+            name.slice(0, 200)
+          )
+        )
+      } catch (err) {
+        return fail(err)
+      }
+    }
+  )
+
   ipcMain.on(CH.playerState, (_e, playing: boolean) => {
     playingTrackId = playing ? lastResolvedId : null
     if (playing && blockerId === null) {
@@ -491,7 +510,7 @@ let importResolveController: AbortController | null = null
     return lib().removeHistory(Array.isArray(titles) ? titles : [])
   })
 
-  ipcMain.handle(CH.historyList, (_e, limit?: number): HistoryEntry[] => {
+  const historyEntries = (limit: number): HistoryEntry[] => {
     const known = trackStore().get()
     // Old entries predate thumbnails (and were written before catalog art
     // existed). Backfill from the track store so Recently played is never blank.
@@ -504,10 +523,19 @@ let importResolveController: AbortController | null = null
           title: entry.title || track?.title || 'Unknown title',
           artist: entry.artist || track?.artist || '',
           artistId: entry.artistId ?? track?.artistId,
+          album: entry.album ?? track?.album,
+          albumId: entry.albumId ?? track?.albumId,
+          durationSec: entry.durationSec ?? track?.durationSec,
           thumbnail: entry.thumbnail ?? track?.thumbnail
         }
       })
-  })
+  }
+
+  ipcMain.handle(CH.historyList, (_e, limit?: number): HistoryEntry[] => historyEntries(limit ?? 100))
+
+  ipcMain.handle(CH.historySummary, () =>
+    summarizeHistory(historyEntries(5000), Date.now() - 7 * 24 * 60 * 60 * 1000)
+  )
 
   ipcMain.handle(CH.favoritesList, (): Track[] => lib().favorites())
 

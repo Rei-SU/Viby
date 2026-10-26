@@ -1,3 +1,4 @@
+import type { ListeningSummary } from './listening'
 import type {
   BrowseResult,
   CacheStats,
@@ -44,6 +45,7 @@ export const CH = {
 
   historyAdd: 'history:add',
   historyList: 'history:list',
+  historySummary: 'history:summary',
   historyForget: 'history:forget',
 
   favoritesList: 'favorites:list',
@@ -61,6 +63,7 @@ export const CH = {
   catalogHome: 'catalog:home',
   catalogRadio: 'catalog:radio',
   catalogAudioTrack: 'catalog:audio-track',
+  catalogArtistImage: 'catalog:artist-image',
 
   cacheStats: 'cache:stats',
   cacheClear: 'cache:clear',
@@ -156,10 +159,14 @@ export interface VibyApi {
     radio(videoId: string): Promise<Result<CatalogItem[]>>
     /** The released audio track for a music video, when YouTube knows one. */
     audioTrack(videoId: string, title: string, artist: string): Promise<Result<CatalogItem | null>>
+    /** Square artist portrait, resolved from a lightweight catalogue search. */
+    artistImage(artistId: string | undefined, name: string): Promise<Result<string | null>>
   }
   history: {
     add(entry: HistoryEntry): Promise<void>
     list(limit?: number): Promise<HistoryEntry[]>
+    /** Seven-day listening time and artist shares from local history only. */
+    summary(): Promise<ListeningSummary>
   }
   favorites: {
     list(): Promise<Track[]>

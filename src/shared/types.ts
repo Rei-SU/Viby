@@ -187,6 +187,9 @@ export type HistoryEntry = {
   artist: string
   /** Browse id of the artist, so history rows can link to them. */
   artistId?: string
+  album?: string
+  albumId?: string
+  durationSec?: number
   playedAt: number
   completion: number
   thumbnail?: string

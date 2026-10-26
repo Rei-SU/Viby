@@ -81,6 +81,36 @@ function normalizeTitle(title: string): string {
 }
 
 const audioTrackCache = new Map<string, CatalogItem | null>()
+const artistImageCache = new Map<string, string | null>()
+
+/**
+ * Artist search cards carry a square artist portrait; history only stores the
+ * album cover of the played track. Resolve the portrait once per artist and keep
+ * the lookup bounded for the session.
+ */
+export async function artistImage(
+  artistId: string | undefined,
+  name: string
+): Promise<string | null> {
+  const key = artistId || name.trim().toLowerCase()
+  if (artistImageCache.has(key)) return artistImageCache.get(key) ?? null
+
+  const wanted = name.trim().toLowerCase()
+  const results = (await search(name, 'artists')).filter(
+    (item) => item.kind === 'artist' && (item.browseId || item.id)
+  )
+  const match =
+    (artistId
+      ? results.find((item) => item.browseId === artistId || item.id === artistId)
+      : undefined) ??
+    results.find((item) => item.title.trim().toLowerCase() === wanted) ??
+    results[0]
+  const image = match?.thumbnail ?? null
+
+  if (artistImageCache.size > 200) artistImageCache.clear()
+  artistImageCache.set(key, image)
+  return image
+}
 
 /**
  * Given a music video, find the released audio track for the same song. This is

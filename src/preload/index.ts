@@ -55,11 +55,14 @@ const api: VibyApi = {
     home: () => ipcRenderer.invoke(CH.catalogHome),
     radio: (videoId: string) => ipcRenderer.invoke(CH.catalogRadio, videoId),
     audioTrack: (videoId: string, title: string, artist: string) =>
-      ipcRenderer.invoke(CH.catalogAudioTrack, videoId, title, artist)
+      ipcRenderer.invoke(CH.catalogAudioTrack, videoId, title, artist),
+    artistImage: (artistId: string | undefined, name: string) =>
+      ipcRenderer.invoke(CH.catalogArtistImage, artistId, name)
   },
   history: {
     add: (entry: HistoryEntry) => ipcRenderer.invoke(CH.historyAdd, entry),
-    list: (limit?: number) => ipcRenderer.invoke(CH.historyList, limit)
+    list: (limit?: number) => ipcRenderer.invoke(CH.historyList, limit),
+    summary: () => ipcRenderer.invoke(CH.historySummary)
   },
   favorites: {
     list: () => ipcRenderer.invoke(CH.favoritesList),
