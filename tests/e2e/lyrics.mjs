@@ -59,6 +59,8 @@ export async function run(app, check) {
         mainWidth: Math.round(mainRect?.width ?? 0),
         mainRight: Math.round(mainRect?.right ?? 0),
         panelLeft: Math.round(panelRect?.left ?? 0),
+        panelRight: Math.round(panelRect?.right ?? 0),
+        listRight: Math.round(document.querySelector('.lines')?.getBoundingClientRect().right ?? 0),
         panelWidth: Math.round(panelRect?.width ?? 0),
         panelBorder: panel ? getComputedStyle(panel).borderLeftWidth : null,
         panelBorderStyle: panel ? getComputedStyle(panel).borderLeftStyle : null,
@@ -110,6 +112,11 @@ export async function run(app, check) {
     JSON.stringify({ closedWidth, ...state })
   )
   check('lyrics sidebar has usable width', state.panelWidth >= 300, `${state.panelWidth}px`)
+  check(
+    'lyrics content stays inside the panel',
+    state.listRight <= state.panelRight,
+    `${state.listRight}px vs ${state.panelRight}px`
+  )
   check(
     'lyrics panel has a subtle hairline divider',
     (() => {
@@ -186,4 +193,50 @@ export async function run(app, check) {
     Math.abs(restoredWidth - closedWidth) <= 1,
     `${restoredWidth}px vs ${closedWidth}px`
   )
+
+  // The lyrics are cached now. Opening again must still show the loading motion,
+  // with no status pills leaking in beside the skeleton.
+  const reopenStarted = Date.now()
+  await app.evaluate(`document.querySelector('button[aria-label="Lyrics"]')?.click(); true`, {
+    userGesture: true
+  })
+  await sleep(120)
+  const opening = await app.evaluate(`
+    ({
+      loading: Boolean(document.querySelector('.loading')),
+      role: document.querySelector('.loading')?.getAttribute('role') ?? null,
+      badge: document.querySelector('.panel .sync-badge')?.textContent?.trim() ?? null,
+      source: document.querySelector('.panel .source')?.textContent?.trim() ?? null
+    })
+  `)
+  check(
+    'cached lyrics still show the loading motion',
+    opening.loading && opening.role === 'status',
+    JSON.stringify(opening)
+  )
+  check(
+    'loading hides the synced badge and source',
+    opening.badge === null && opening.source === null,
+    JSON.stringify(opening)
+  )
+
+  let contentAfter = 0
+  for (let i = 0; i < 100 && !contentAfter; i++) {
+    await sleep(25)
+    if (await app.evaluate(`document.querySelectorAll('.line').length > 0`)) {
+      contentAfter = Date.now() - reopenStarted
+    }
+  }
+  check(
+    'the loading motion holds for at least 1.5 seconds',
+    contentAfter >= 1400,
+    `${contentAfter}ms`
+  )
+  check(
+    'the synced badge returns after loading',
+    (await app.evaluate(`document.querySelector('.panel .sync-badge')?.textContent?.trim()`)) ===
+      'Synced'
+  )
+  await app.evaluate(`document.querySelector('.panel .close')?.click(); true`, { userGesture: true })
+  await sleep(500)
 }

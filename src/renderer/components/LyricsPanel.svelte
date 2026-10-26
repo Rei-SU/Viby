@@ -8,6 +8,26 @@
   let wasOpen = false
   let lastData: typeof lyrics.data = null
 
+  /** The skeleton is part of opening the panel, even when the lyrics are cached. */
+  const MIN_LOADING_MS = 1500
+  let loadingHold = $state(false)
+  let heldOpen = false
+
+  $effect(() => {
+    const open = lyrics.open
+    if (open === heldOpen) return
+    heldOpen = open
+    if (!open) {
+      loadingHold = false
+      return
+    }
+    loadingHold = true
+    const timer = setTimeout(() => (loadingHold = false), MIN_LOADING_MS)
+    return () => clearTimeout(timer)
+  })
+
+  const showingLoading = $derived(lyrics.loading || loadingHold)
+
   const lines = $derived(lyrics.data?.kind === 'synced' ? (lyrics.data.lines ?? []) : [])
 
   /** Index of the line that is playing right now. */
@@ -64,7 +84,16 @@
   <div class="panel-inner">
     <header>
       <span class="eyebrow">Lyrics</span>
-      {#if lyrics.data?.source}
+      {#if !showingLoading && lyrics.data?.kind === 'synced'}
+        <span class="sync-badge synced" title="Lyrics follow the track">
+          <span class="sync-dot" aria-hidden="true"></span>Synced
+        </span>
+      {:else if !showingLoading && lyrics.data?.kind === 'plain'}
+        <span class="sync-badge" title="Lyrics are not time-synced">
+          <span class="sync-dot" aria-hidden="true"></span>Unsynced
+        </span>
+      {/if}
+      {#if !showingLoading && lyrics.data?.source}
         <span class="source">{lyrics.data.source}</span>
       {/if}
       <button class="close" onclick={() => lyrics.close()} aria-label="Close lyrics">
@@ -73,8 +102,20 @@
     </header>
 
     <div class="body" class:synced={lyrics.data?.kind === 'synced'}>
-      {#if lyrics.loading}
-        <p class="status">Finding lyrics…</p>
+      {#if showingLoading}
+        <div class="loading" role="status">
+          <div class="loading-head">
+            <span class="equalizer" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+            </span>
+            <span>Finding lyrics</span>
+          </div>
+          <div class="skeleton" aria-hidden="true">
+            {#each [64, 86, 48, 74, 56, 39] as width, i}
+              <span class="skeleton-line" style="--w: {width}%; --i: {i}"></span>
+            {/each}
+          </div>
+        </div>
       {:else if lyrics.error}
         <p class="status">{lyrics.error}</p>
       {:else if !lyrics.data || lyrics.data.kind === 'none'}
@@ -131,7 +172,7 @@
      the panel itself narrowed, every lyric line would reflow during the
      expansion. */
   .panel-inner {
-    width: var(--lyrics-w);
+    width: calc(var(--lyrics-w) - 1px);
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -159,6 +200,65 @@
     border: 1px solid var(--stroke);
     border-radius: 999px;
     padding: 1px 6px;
+  }
+
+  .sync-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 7px 1px 6px;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    color: var(--text-faint);
+    font-size: 9.5px;
+    font-weight: 550;
+    letter-spacing: 0.02em;
+  }
+
+  .sync-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .sync-badge.synced {
+    color: var(--text-dim);
+    border-color: var(--stroke-strong);
+    background: var(--glass-active);
+  }
+
+  .sync-badge.synced .sync-dot {
+    position: relative;
+    color: var(--text);
+  }
+
+  .sync-badge.synced .sync-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    animation: sync-pulse 2.4s var(--ease) infinite;
+  }
+
+  @keyframes sync-pulse {
+    0% {
+      opacity: 0.6;
+      transform: scale(1);
+    }
+    60%,
+    100% {
+      opacity: 0;
+      transform: scale(2.6);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sync-badge.synced .sync-dot::after {
+      animation: none;
+      opacity: 0;
+    }
   }
 
   .close {
@@ -217,6 +317,133 @@
     padding: 8px 22px;
     color: var(--text-faint);
     font-size: 13px;
+  }
+
+  .loading {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 22px;
+    animation: loading-in 220ms var(--ease);
+  }
+
+  .loading-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 24px;
+    color: var(--text-faint);
+    font-size: 10.5px;
+    font-weight: 550;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .equalizer {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 11px;
+  }
+
+  .equalizer span {
+    width: 2px;
+    height: 100%;
+    border-radius: 2px;
+    background: currentColor;
+    transform-origin: center;
+    animation: equalizer 900ms ease-in-out infinite alternate;
+  }
+
+  .equalizer span:nth-child(1) {
+    height: 6px;
+    animation-delay: -200ms;
+  }
+
+  .equalizer span:nth-child(2) {
+    height: 11px;
+    animation-delay: -650ms;
+  }
+
+  .equalizer span:nth-child(3) {
+    height: 8px;
+    animation-delay: -420ms;
+  }
+
+  .equalizer span:nth-child(4) {
+    height: 5px;
+    animation-delay: -810ms;
+  }
+
+  .skeleton {
+    display: grid;
+    gap: 18px;
+  }
+
+  .skeleton-line {
+    position: relative;
+    width: var(--w);
+    height: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .skeleton-line::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 48%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.11), transparent);
+    transform: translateX(-120%);
+    animation: skeleton-sweep 2.2s var(--ease) infinite;
+    animation-delay: calc(var(--i) * 70ms);
+  }
+
+  @keyframes loading-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  @keyframes equalizer {
+    from {
+      opacity: 0.45;
+      transform: scaleY(0.35);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+  }
+
+  @keyframes skeleton-sweep {
+    0% {
+      transform: translateX(-120%);
+    }
+    65%,
+    100% {
+      transform: translateX(330%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loading {
+      animation: none;
+    }
+
+    .equalizer span,
+    .skeleton-line::after {
+      animation: none;
+    }
+
+    .skeleton-line::after {
+      opacity: 0;
+    }
   }
 
   .plain {
