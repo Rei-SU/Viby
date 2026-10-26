@@ -72,7 +72,7 @@
       </button>
     </header>
 
-    <div class="body">
+    <div class="body" class:synced={lyrics.data?.kind === 'synced'}>
       {#if lyrics.loading}
         <p class="status">Finding lyrics…</p>
       {:else if lyrics.error}
@@ -93,7 +93,7 @@
               bind:this={lineEls[i]}
               onclick={() => seek(i)}
             >
-              {line.text}
+              <span>{line.text}</span>
             </button>
           {/each}
         </div>
@@ -186,6 +186,32 @@
     flex-direction: column;
   }
 
+  .body.synced {
+    position: relative;
+  }
+
+  /* Static overlays preserve the edge fades without masking the scrolling layer. */
+  .body.synced::before,
+  .body.synced::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 18%;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .body.synced::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--bg), transparent);
+  }
+
+  .body.synced::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--bg), transparent);
+  }
+
   .status {
     margin: 0;
     padding: 8px 22px;
@@ -212,14 +238,6 @@
     padding: 34vh 48px 34vh 22px;
     overflow-y: auto;
     scrollbar-width: none;
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      #000 18%,
-      #000 82%,
-      transparent 100%
-    );
-    mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
   }
 
   .lines::-webkit-scrollbar {
@@ -234,27 +252,39 @@
     font-size: 15.5px;
     line-height: 1.42;
     font-weight: 550;
-    color: var(--text-faint);
+    color: var(--text);
     /* Keep the left edge aligned with every other line; the reserved right
        padding absorbs the 8% growth. */
     transform-origin: left center;
-    transition:
-      color 240ms var(--ease),
-      opacity 240ms var(--ease),
-      transform 240ms var(--ease);
+    transition: transform 240ms var(--ease);
   }
 
-  .line:hover {
-    color: var(--text-dim);
+  /* Text opacity preserves the fade without repainting its color every frame. */
+  .line > span {
+    display: block;
+    opacity: 0.41;
+    transition: opacity 240ms var(--ease);
   }
 
-  .line.past {
-    opacity: 0.45;
+  .line.past > span {
+    opacity: 0.1845;
+  }
+
+  .line:hover > span {
+    opacity: 0.63;
+  }
+
+  .line.past:hover > span {
+    opacity: 0.2835;
   }
 
   .line.active {
-    color: var(--text);
     font-weight: 650;
     transform: scale(1.08);
+  }
+
+  .line.active > span,
+  .line.active:hover > span {
+    opacity: 1;
   }
 </style>
