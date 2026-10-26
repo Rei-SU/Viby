@@ -96,6 +96,14 @@ class Player {
   /** Set on launch: where to resume once the restored track is actually loaded. */
   private pendingResume: { id: string; position: number } | null = null
   private lastSaveAt = 0
+  /**
+   * Chromium fires `timeupdate` about four times a second. Updating the progress
+   * bar, clock and OS media session that often makes the glass dock re-composite
+   * on every tick; on this Intel Mac that alone costs ~4% of a core. A whole-second
+   * clock is enough for the UI, so update at most once per second. Seeks, pauses
+   * and track changes still update immediately.
+   */
+  private lastPositionUpdateAt = 0
   /** Local artwork converted to a data URL, keyed by its viby-media URL. */
   private artDataUrls = new Map<string, { src: string; type: string }>()
   /** Guards an async artwork conversion against a track change in the meantime. */
@@ -179,6 +187,23 @@ class Player {
     void api.session.save(snapshot)
   }
 
+  /**
+   * Mirror the element clock into the UI and the OS media session.
+   *
+   * `timeupdate` fires roughly four times a second, but a whole-second clock is
+   * all the player bar, lyrics and Now Playing need. Forcing skips the throttle
+   * for user-visible moments (play, pause, seek, track change).
+   */
+  private updatePosition(force = false, saveNow = false): void {
+    if (!this.loadedId) return
+    const now = Date.now()
+    if (!force && now - this.lastPositionUpdateAt < 1000) return
+    this.lastPositionUpdateAt = now
+    this.position = audio.currentTime
+    this.syncPositionState()
+    this.persistSession(saveNow)
+  }
+
   private wire(): void {
     audio.onplay = () => {
       this.playing = true
@@ -186,24 +211,31 @@ class Player {
       this.error = null
       api.player.setPlaying(true)
       this.syncPlaybackState()
+      // Do not make the clock wait up to a second to move after a resume.
+      this.updatePosition(true)
     }
     audio.onpause = () => {
+      const wasPlaying = this.playing
       this.playing = false
       api.player.setPlaying(false)
       this.syncPlaybackState()
+      // The throttled clock can be up to a second behind the real stop point.
+      // Capture and save it now, or resuming replays that last second.
+      if (wasPlaying) this.updatePosition(true, true)
     }
     audio.ontimeupdate = () => {
       // `removeAttribute('src')` can emit one last timeupdate with the old
       // currentTime; without this guard the player showed a position while idle.
       if (!this.loadedId) return
-      this.position = audio.currentTime
-      this.syncPositionState()
-      this.persistSession()
+      this.updatePosition()
     }
     audio.onloadedmetadata = () => {
       this.duration = Number.isFinite(audio.duration)
         ? audio.duration
         : (this.current?.durationSec ?? 0)
+      // Duration is only now known, so seed the OS progress bar immediately
+      // instead of waiting for the next throttled timeupdate.
+      this.syncPositionState()
     }
     audio.onended = () => {
       // Only advance if the element really finished the track the UI is showing.
@@ -284,6 +316,7 @@ class Player {
       this.stream = res.data.stream
       this.current = track
       this.position = 0
+      this.lastPositionUpdateAt = 0
       this.duration = track.durationSec
       audio.src = res.data.stream.url
       this.loadedId = track.id
@@ -373,11 +406,17 @@ class Player {
       const position = Math.max(0, Math.min(seconds, this.duration || seconds))
       this.position = position
       if (this.current) this.pendingResume = { id: this.current.id, position }
+      this.persistSession(true)
       return
     }
 
     audio.currentTime = Math.max(0, Math.min(seconds, this.duration || seconds))
     this.position = audio.currentTime
+    // A seek is user-visible and must be reflected and saved immediately, even
+    // when the throttled timeupdate handler is not due yet.
+    this.lastPositionUpdateAt = Date.now()
+    this.syncPositionState()
+    this.persistSession(true)
   }
 
   /** Underlying <audio> state, for diagnostics and the drive test. */
@@ -608,6 +647,7 @@ class Player {
     this.stream = null
     this.error = null
     this.position = 0
+    this.lastPositionUpdateAt = 0
     this.duration = track.durationSec
     this.busy = true
     this.startTimer()
