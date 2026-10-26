@@ -9,15 +9,13 @@ import { run } from './exec'
  * Stream resolution (PLAN §3, §7 R1).
  *
  * YouTube enforces PO tokens / SABR on stream URLs depending on the client, and
- * which clients work changes without notice. Measured on 2026-10-18: every
- * explicitly pinned client set (android_vr, tv, web, mweb, ios, web_safari)
- * returned SABR-only or failed outright, while yt-dlp's own default multi-client
- * selection returned five progressive HTTPS audio streams. So the default comes
- * first and pinning is only a last resort — the reverse of the original guess.
+ * which clients work changes without notice. Re-measured on 2026-10-26: the
+ * default client returned progressive HTTPS audio, while web/mweb/web_safari/
+ * web_embedded/tv_simply returned "Requested format is not available" and
+ * android_vr returned SABR-only formats. Hardcoded client fallbacks therefore
+ * replaced the real failure with a misleading one, so yt-dlp's default is the
+ * only selection path.
  */
-
-/** `null` means "let yt-dlp choose", which is currently the only thing that works. */
-const CLIENT_SETS: Array<string | null> = [null, 'ios,web_safari', 'web_safari,web']
 
 const URL_TTL_MS = 2 * 60 * 60 * 1000
 
@@ -150,43 +148,29 @@ export class Resolver {
     return this.semaphore.run(async () => {
       const started = Date.now()
       const runner = await ensureRunner()
-      let lastError: Error | null = null
 
-      for (const clients of CLIENT_SETS) {
-        if (opts.signal?.aborted) throw new ResolveError('cancelled', 'Cancelled.')
-
-        try {
-          const info = await this.inspect(runner, url, clients, opts.signal)
-          const parsed = parseInfo(info, clients, opts.maxKbps)
-          const result: ResolveResult = {
-            ...parsed,
-            client: clients ?? 'default',
-            resolveMs: Date.now() - started
-          }
-          this.urlCache.set(cacheKey, { result, expiresAt: Date.now() + URL_TTL_MS })
-          this.persistSoon()
-          return result
-        } catch (err) {
-          // A cancel is a decision, not a failure — report it as such rather than
-          // retrying the next client for a track nobody is waiting for.
-          if (opts.signal?.aborted) throw new ResolveError('cancelled', 'Cancelled.')
-          // Some failures are not client-specific, so retrying other clients just
-          // burns another 30 seconds of the user's life for the same answer.
-          if (err instanceof ResolveError && err.kind === 'unavailable') throw err
-          if (err instanceof ResolveError && err.kind === 'cancelled') throw err
-          if (err instanceof NoDirectUrlError) throw err
-          lastError = err as Error
+      try {
+        const info = await this.inspect(runner, url, opts.signal)
+        const parsed = parseInfo(info, opts.maxKbps)
+        const result: ResolveResult = {
+          ...parsed,
+          client: 'default',
+          resolveMs: Date.now() - started
         }
+        this.urlCache.set(cacheKey, { result, expiresAt: Date.now() + URL_TTL_MS })
+        this.persistSoon()
+        return result
+      } catch (err) {
+        // A cancel is a decision, not a failure.
+        if (opts.signal?.aborted) throw new ResolveError('cancelled', 'Cancelled.')
+        throw err
       }
-
-      throw lastError ?? new ResolveError('unknown', 'Could not resolve this track from YouTube.')
     })
   }
 
   private async inspect(
     runner: Runner,
     url: string,
-    clients: string | null,
     signal?: AbortSignal
   ): Promise<YtDlpInfo> {
     const args = [
@@ -196,7 +180,6 @@ export class Resolver {
       '--no-progress',
       '--no-simulate',
       '-J',
-      ...(clients ? ['--extractor-args', `youtube:player_client=${clients}`] : []),
       ...pluginArgs(),
       '--',
       url
@@ -332,7 +315,6 @@ export class NoDirectUrlError extends Error {
  */
 function parseInfo(
   info: YtDlpInfo,
-  clients: string | null,
   maxKbps?: number
 ): Pick<ResolveResult, 'track' | 'stream'> {
   const track = parseTrack(info)
@@ -461,6 +443,12 @@ function describeFailure(stderr: string, code: number): ResolveError {
   }
   if (text.includes('private video')) {
     return new ResolveError('unavailable', 'That track is private.')
+  }
+  if (text.includes('requested format is not available')) {
+    return new ResolveError(
+      'unavailable',
+      'YouTube did not offer a playable audio format for this track. Update the resolver in Settings, then try again.'
+    )
   }
 
   const line = lastErrorLine(stderr)
