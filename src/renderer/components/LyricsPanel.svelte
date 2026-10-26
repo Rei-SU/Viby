@@ -94,7 +94,7 @@
         </span>
       {/if}
       {#if !showingLoading && lyrics.data?.source}
-        <span class="source">{lyrics.data.source}</span>
+        <span class="source">{lyrics.data.source === 'lyrics.ovh' ? 'OVH' : lyrics.data.source}</span>
       {/if}
       <button class="close" onclick={() => lyrics.close()} aria-label="Close lyrics">
         <Icon name="close" size={15} />
