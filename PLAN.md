@@ -218,28 +218,28 @@ The budget is a hard constraint, not an aspiration. If a change breaks it, the c
 
 **Measured 2026-10-18** (`tests/resolver.test.ts`): warm resolve **0ms** from memory and **0ms** from the persisted URL cache after a restart; cold resolve **2.9s**; process startup **0.6s**. The first version of this measured **25–45s** — see §2.3, it was the `yt-dlp` binary, not the network. Clicks on prefetched rows (the top of every list, the hovered row, the next track) are therefore effectively instant.
 
-**Measured 2026-10-19 on the packaged x64 build** (`npm run measure`, Electron 37, Intel Mac, macOS 15.7.7). These numbers predate the Electron 45 upgrade and should be re-measured when the next release is cut. RSS is the sum across the Electron process tree; the physical footprint (`vmmap`) is shown because RSS counts shared framework pages once per process.
+**Measured 2026-10-26 on the packaged x64 build** (`npm run measure`, Electron 45.0.0, Intel Mac, macOS 15.7.7). The window was kept frontmost and the display awake for the whole run: an occluded window or a sleeping display is throttled by macOS and reports numbers that are too low. RSS is the sum across the Electron process tree.
 
-| State | Summed RSS | Physical footprint | CPU |
-|---|---|---|---|
-| Idle (Home) | 287–317 MB | ~239 MB | 0.13–0.19% |
-| Playing, window frontmost | 313–366 MB | ~200–260 MB | **5.4–8.9%** of one core (renderer ~4%, GPU ~3%) |
-| Playing, fully occluded | — | — | ~1.3% |
-| Playing + lyrics | 291–377 MB | ~200–260 MB | **10–22%** (largest state) |
-| Paused after playback | ~305 MB | — | 0.3–0.4% |
+| State | Summed RSS | CPU |
+|---|---|---|
+| Idle (Home, 60s after load) | 373 MB (373–374) | 0.39% |
+| Playing, window frontmost | 434 MB (422–448) | **7.63%** (renderer 4.0%, GPU 1.7%, utility 1.1%, main 0.9%) |
+| Playing + lyrics | 466 MB (451–474) | **12–18%** (renderer 8.4%, GPU 7.4% in the 17.7% sample) |
+| Paused after playback | 455 MB | 0.77% |
 
-- **Startup:** shell 858–902 ms warm; 1.2–1.7 s on the first launch after a build. Home cards render in the same frame when the shelf cache is warm.
-- **Bundle (2026-10-22, Electron 45 build):** 388 KB JS + 85 KB CSS raw = **~92 KB gzip**.
-- **Soak:** +2 MB RSS over 2 minutes of playback, no leak.
-- **Lyrics cost:** the old overlay's 32px `backdrop-filter` was the biggest GPU consumer (12.9% → 10.3% CPU with the blur disabled). The docked panel no longer uses it, so the “Playing + lyrics” row above predates that change and should be re-measured. The dock/titlebar glass showed no measurable cost. The 5% playing target in §6 is still **not met on this Intel machine** while the window is visible — it sits at ~9% of one core. The UI is still well inside the RAM ceiling, and idle CPU is effectively zero.
-- **Caveat:** CPU depends heavily on window visibility (macOS throttles an occluded window); samples were taken with the app frontmost via LaunchServices.
+- **Startup:** page 560–731 ms, shell 755–1106 ms, Home cards 755–1238 ms on warm launches. The first launch after a fresh unsigned build can take ~4 s while macOS scans the bundle.
+- **Bundle (Electron 45):** 425 KB JS + 92 KB CSS raw = **100 KB gzip**.
+- **Soak:** 452 → 455 MB over 2 minutes (+3 MB), no leak. CPU 11.61% with the lyrics panel open.
+- **What was eating the CPU:** hiding the player dock cut playing CPU from ~12.0% to ~6.2%; hiding just the scrubber got ~6.3%, while hiding only the seek input or only the time labels changed nothing. The JS profile was almost entirely idle: the cost was layout, style recalc and compositing triggered by `timeupdate` firing ~4×/s (`RecalcStyleCount` 39 → 10 and `LayoutCount` 21 → 10 per sample once throttled). `backdrop-filter`, animations, layer containment, `will-change` and moving the scrubber out of the dock made no meaningful difference.
+- **Fix:** the renderer now mirrors the clock into the UI and the OS media session at most once per second. Seeks, pauses, play and metadata load still update immediately, and pause/seek persist the exact position. Playing CPU fell from **11.97% to 7.63%**. The lyrics state stays at 12–18% across runs (14.3% before the change): it is dominated by the panel's smooth scrolling and masked, composited layer, not by the clock, and is the largest remaining consumer.
+- **Remaining floor:** with 1 Hz updates and the scrubber hidden, CPU is **5.23%** (renderer 3.20%, utility 1.07%, main 0.87%, GPU 0.10%). A visible live progress bar adds ~2.8 points even at 1 Hz, so the <5% playing target is **not reachable on this Intel Mac** without removing the scrubber. Idle is well inside its ceiling (0.39% CPU, 373 MB with 27 MB of RAM headroom); playing and lyrics exceed 400 MB only because of audio/GPU buffers, which the budget does not cap.
 
 Techniques that get us there:
 - **Paged lists on long collection pages.** Detail pages render 120 rows at a time; full list virtualization is still on the roadmap (README). The single biggest remaining win.
 - **Bounded caches with real eviction.** Audio 1GB LRU, art 256MB LRU, eviction in main. Never unbounded.
 - **Lazy everything.** Art at display size, placeholder first, `loading="lazy"`, off-screen rows never request art.
 - **One decode path.** Chromium's audio pipeline. No Web Audio graph, no transcoding.
-- **No UI polling or interval refresh.** Connectivity probes only while the monitor is running; downloads report progress from their own queue. Position updates come from `timeupdate`, only while the lyrics view is visible.
+- **No UI polling or interval refresh.** Connectivity probes only while the monitor is running; downloads report progress from their own queue. Position updates come from `timeupdate`, throttled to 1 Hz so the progress bar, clock and OS media session do not force a layout on every media tick.
 - **Svelte compile-time reactivity** instead of a runtime reconciler.
 - **Renderer stays dumb.** No catalog logic, no caching, no parsing — it renders and requests.
 - **`yt-dlp` concurrency capped at 2**, idle-shutdown so no process lingers after a resolve.
