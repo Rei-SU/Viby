@@ -15,6 +15,7 @@
     { bytes: 2 * 1024 * 1024 * 1024, label: '2 GB' },
     { bytes: 4 * 1024 * 1024 * 1024, label: '4 GB' }
   ]
+  const trayName = api.platform === 'darwin' ? 'menu bar' : 'system tray'
 
   let current = $state<Settings | null>(null)
   let stats = $state<CacheStats | null>(null)
@@ -212,6 +213,26 @@
         aria-checked={current?.autoplay}
         aria-label="Autoplay"
         onclick={() => patch({ autoplay: !current?.autoplay })}
+      >
+        <span class="thumb"></span>
+      </button>
+    </div>
+
+    <div class="row">
+      <div class="label">
+        <span>Keep playing when closed</span>
+        <span class="hint">
+          Closing the window hides Viby in the {trayName} and keeps music playing. Quit from
+          there to stop it.
+        </span>
+      </div>
+      <button
+        class="switch"
+        class:on={current?.backgroundPlayback}
+        role="switch"
+        aria-checked={current?.backgroundPlayback}
+        aria-label="Keep playing when the window is closed"
+        onclick={() => patch({ backgroundPlayback: !current?.backgroundPlayback })}
       >
         <span class="thumb"></span>
       </button>

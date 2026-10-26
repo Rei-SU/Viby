@@ -1,6 +1,6 @@
 import { sleep } from './lib.mjs'
 
-export const description = 'Settings: open from the sidebar, quality/cap/autoplay persist'
+export const description = 'Settings: open from the sidebar, playback/cache/window toggles persist'
 
 export async function run(app, check) {
   const original = await app.evaluate('window.__viby.api.settings.get()')
@@ -61,6 +61,37 @@ export async function run(app, check) {
     )
     check('autoplay toggle persists', autoplay.after !== autoplay.before, JSON.stringify(autoplay))
     check('player adopts autoplay immediately', autoplay.player === autoplay.after, JSON.stringify(autoplay))
+
+    const background = await app.evaluate(
+      `
+      (async () => {
+        const row = [...document.querySelectorAll('section .row')].find(
+          (item) => item.querySelector('.label > span')?.textContent?.trim() === 'Keep playing when closed'
+        )
+        const button = row?.querySelector('.switch')
+        const before = (await window.__viby.api.settings.get()).backgroundPlayback
+        button?.click()
+        await new Promise((r) => setTimeout(r, 500))
+        const after = (await window.__viby.api.settings.get()).backgroundPlayback
+        const on = button?.classList.contains('on') ?? false
+        button?.click()
+        await new Promise((r) => setTimeout(r, 500))
+        return {
+          found: Boolean(row && button),
+          before,
+          after,
+          on,
+          restored: (await window.__viby.api.settings.get()).backgroundPlayback
+        }
+      })()
+    `,
+      { userGesture: true }
+    )
+    check(
+      'background playback toggle persists and restores',
+      background.found && background.after !== background.before && background.restored === background.before,
+      JSON.stringify(background)
+    )
 
     const cap = await app.evaluate(
       `

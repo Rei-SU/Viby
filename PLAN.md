@@ -154,7 +154,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 - Resume where you left off on relaunch; restore queue.
 - Sleep prevention while playing (Electron `powerSaveBlocker`).
 - Media keys + OS Now Playing via `mediaSession`, with artwork.
-- Settings: quality (best available / data saver ~64kbps, honoured exactly — no auto-downgrade), autoplay, cache cap and clear cache, offline mode, and downloads storage.
+- Settings: quality (best available / data saver ~64kbps, honoured exactly — no auto-downgrade), autoplay, background playback (close hides to the tray/menu bar), cache cap and clear cache, offline mode, and downloads storage.
 - On a slow network: buffer, never silently reduce quality. If it can't keep up we tell you, we don't decide for you.
 
 ### 5.2 Search

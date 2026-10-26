@@ -64,6 +64,8 @@ export type Settings = {
   repeat: Repeat
   /** Keep playing related tracks when the queue runs out. */
   autoplay: boolean
+  /** The close button hides the window to the tray/menu bar instead of stopping playback. */
+  backgroundPlayback: boolean
   /** `auto` follows connectivity; `offline` is the manual switch. */
   offlineMode: OfflineMode
   /** Check GitHub for a newer release on launch. Updates are never silent. */

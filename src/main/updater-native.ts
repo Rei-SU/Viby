@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import { autoUpdater, CancellationToken } from 'electron-updater'
 import { isNewer } from './version'
+import { markQuitting } from './lifecycle'
 import type { NativeUpdater } from './updater'
 
 /** electron-updater emits progress often; a silent transfer is dead after this. */
@@ -98,6 +99,9 @@ export function createNativeUpdater(): NativeUpdater {
     },
 
     install(): void {
+      // quitAndInstall emits close before before-quit, which close-to-tray would
+      // otherwise intercept and turn into a hide.
+      markQuitting()
       // Not silent; relaunch afterwards so the user lands back in the app.
       autoUpdater.quitAndInstall(false, true)
     }

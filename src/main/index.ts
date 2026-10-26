@@ -3,7 +3,9 @@ import { app, dialog, protocol } from 'electron'
 import { MEDIA_SCHEME } from './media'
 import { handleMediaProtocol, registerIpc } from './ipc'
 import { installMenu } from './menu'
-import { createWindow } from './windows'
+import { createWindow, showMainWindow } from './windows'
+import { applyBackgroundPlayback } from './background'
+import { isQuitting, keepsAppAlive, markQuitting } from './lifecycle'
 import { settings } from './settings'
 
 // Dev-only: lets the app be driven and inspected over the DevTools protocol
@@ -55,12 +57,11 @@ const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
+  // Normal quits (menu, Cmd+Q, updater, OS shutdown) must win over close-to-tray.
+  app.on('before-quit', markQuitting)
+
   app.on('second-instance', () => {
-    const [win] = require('electron').BrowserWindow.getAllWindows()
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.focus()
-    }
+    if (app.isReady()) showMainWindow()
   })
 
   app
@@ -80,10 +81,10 @@ if (!gotLock) {
       handleMediaProtocol()
       registerIpc()
       createWindow()
+      applyBackgroundPlayback(settings().get().backgroundPlayback)
 
       app.on('activate', () => {
-        const { BrowserWindow } = require('electron')
-        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+        showMainWindow()
       })
     })
     .catch((error: unknown) => {
@@ -97,6 +98,7 @@ if (!gotLock) {
     })
 
   app.on('window-all-closed', () => {
+    if (isQuitting() || keepsAppAlive()) return
     if (process.platform !== 'darwin') app.quit()
   })
 }

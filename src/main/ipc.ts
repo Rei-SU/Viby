@@ -49,6 +49,7 @@ import { Updater } from './updater'
 import { createNativeUpdater } from './updater-native'
 import { fetchLatestRelease } from './release-feed'
 import { downloadMacInstaller } from './updater-manual'
+import { applyBackgroundPlayback } from './background'
 
 const resolver = new Resolver()
 const inflightDownloads = new Set<string>()
@@ -238,6 +239,11 @@ let importResolveController: AbortController | null = null
 
     // The offline switch may have been changed through the generic settings API.
     if (patch.offlineMode !== undefined) networkMonitor.applySettings()
+
+    // Closing must only hide the window while a tray icon exists to bring it back.
+    if (patch.backgroundPlayback !== undefined) {
+      applyBackgroundPlayback(next.backgroundPlayback)
+    }
 
     // Stream URLs were resolved for the old quality ceiling; drop them so the
     // next play honours the new setting instead of reusing a stale bitrate.

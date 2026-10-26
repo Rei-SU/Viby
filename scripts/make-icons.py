@@ -64,3 +64,31 @@ iconset.rmdir()
 for name in ("icon.png", "icon.icns", "icon.ico"):
     path = OUT / name
     print(f"{path.relative_to(ROOT)}  {path.stat().st_size / 1024:.0f} KB")
+
+# Tray icons: macOS wants a black template mask so it follows the menu bar;
+# Windows wants a multi-size ICO because the notification area rescales it.
+TRAY = OUT / "tray"
+TRAY.mkdir(exist_ok=True)
+
+alpha = source.convert("L").point(lambda value: 255 if value > 24 else 0)
+alpha = alpha.crop(alpha.getbbox())
+for scale in (1, 2):
+    size = 16 * scale
+    width = size - 2 * scale
+    height = round(alpha.height * width / alpha.width)
+    glyph = alpha.resize((width, height), Image.Resampling.LANCZOS)
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    black = Image.new("RGBA", glyph.size, (0, 0, 0, 255))
+    black.putalpha(glyph)
+    image.alpha_composite(black, ((size - width) // 2, (size - height) // 2))
+    suffix = "@2x" if scale == 2 else ""
+    image.save(TRAY / f"trayTemplate{suffix}.png")
+
+canvas.save(
+    TRAY / "tray-win.ico",
+    format="ICO",
+    sizes=[(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48)],
+)
+
+for path in sorted(TRAY.iterdir()):
+    print(f"{path.relative_to(ROOT)}  {path.stat().st_size / 1024:.1f} KB")

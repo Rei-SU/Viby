@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS: Settings = {
   shuffle: false,
   repeat: 'off',
   autoplay: true,
+  /** Off preserves the platform-default close behavior until the user opts in. */
+  backgroundPlayback: false,
   offlineMode: 'auto',
   /** Check GitHub for a newer release on launch. Updates are never silent. */
   autoUpdateCheck: true,
@@ -50,6 +52,9 @@ function sanitizePatch(patch: Partial<Settings> | null | undefined): Partial<Set
         : DEFAULT_SETTINGS.repeat
   }
   if (input.autoplay !== undefined) clean.autoplay = Boolean(input.autoplay)
+  if (input.backgroundPlayback !== undefined) {
+    clean.backgroundPlayback = Boolean(input.backgroundPlayback)
+  }
   if (input.offlineMode !== undefined) {
     clean.offlineMode = input.offlineMode === 'offline' ? 'offline' : 'auto'
   }

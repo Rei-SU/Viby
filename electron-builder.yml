@@ -23,6 +23,9 @@ extraResources:
   - from: resources/yt-dlp-plugins
     to: yt-dlp-plugins
     filter: ['**/*']
+  - from: resources/tray
+    to: tray
+    filter: ['**/*']
 
 asar: true
 

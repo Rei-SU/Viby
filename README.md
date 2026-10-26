@@ -37,6 +37,7 @@ The macOS build is unsigned, so the first launch needs **right-click → Open**.
 ## What it does
 
 - **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a cache that makes a replay instant.
+- **Background playback, if you want it.** Turn on “Keep playing when closed” and the close button hides Viby in the menu bar or system tray; playback continues until you quit from there.
 - **A library that stays yours.** Liked songs, playlists and history on your disk, fully usable signed out. No account, no cloud, no "syncing…" spinner.
 - **Offline that means offline.** Download songs, albums, playlists or Liked Songs. The app follows your connection and falls back to what is on the device.
 - **Lyrics that keep up.** Time-synced lyrics from LRCLIB, plain text from lyrics.ovh as a backup, click any line to seek, and a docked panel that leaves the page usable.

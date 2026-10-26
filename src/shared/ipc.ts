@@ -29,6 +29,7 @@ import type {
 export const CH = {
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
+  appOpenSettings: 'app:open-settings',
 
   playerResolve: 'player:resolve',
   playerPrefetch: 'player:prefetch',
@@ -120,6 +121,10 @@ export type ResolveRequest = {
 export interface VibyApi {
   /** `darwin` / `win32`, used to lay out the window chrome. */
   platform: string
+  app: {
+    /** The tray or menu bar asked the window to open Settings. */
+    onOpenSettings(callback: () => void): () => void
+  }
   settings: {
     get(): Promise<Settings>
     set(patch: Partial<Settings>): Promise<Settings>

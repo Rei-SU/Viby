@@ -1,8 +1,30 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, shell } from 'electron'
+import { shouldHideOnClose } from './lifecycle'
+
+let mainWindow: BrowserWindow | null = null
+
+export function getMainWindow(): BrowserWindow | null {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+}
+
+/** Restore the existing window, or recreate it after a crash or window close. */
+export function showMainWindow(): BrowserWindow {
+  const existing = getMainWindow()
+  if (existing) {
+    if (existing.isMinimized()) existing.restore()
+    existing.show()
+    existing.focus()
+    return existing
+  }
+  return createWindow()
+}
 
 export function createWindow(): BrowserWindow {
+  const existing = getMainWindow()
+  if (existing) return existing
+
   const isMac = process.platform === 'darwin'
   const isWin = process.platform === 'win32'
 
@@ -40,6 +62,15 @@ export function createWindow(): BrowserWindow {
   })
 
   win.once('ready-to-show', () => win.show())
+  mainWindow = win
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
+  })
+  win.on('close', (event) => {
+    if (!shouldHideOnClose()) return
+    event.preventDefault()
+    win.hide()
+  })
 
   // Surface renderer errors in the dev log. Without this, a renderer-side failure
   // is invisible from the terminal and you end up guessing at causes.

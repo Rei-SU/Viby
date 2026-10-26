@@ -147,6 +147,7 @@
     void downloads.init()
     void player.init()
     updates.init()
+    return api.app.onOpenSettings(() => nav.go('settings'))
   })
 </script>
 

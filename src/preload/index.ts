@@ -23,6 +23,13 @@ import type {
  */
 const api: VibyApi = {
   platform: process.platform,
+  app: {
+    onOpenSettings: (callback: () => void) => {
+      const handler = (): void => callback()
+      ipcRenderer.on(CH.appOpenSettings, handler)
+      return () => ipcRenderer.removeListener(CH.appOpenSettings, handler)
+    }
+  },
   settings: {
     get: () => ipcRenderer.invoke(CH.settingsGet),
     set: (patch: Partial<Settings>) => ipcRenderer.invoke(CH.settingsSet, patch)
