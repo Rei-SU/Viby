@@ -8,6 +8,14 @@
  * macOS-only for now: it reads `ps` RSS/cputime for the Electron process tree
  * and sums RSS across processes (shared pages are counted once per process, so
  * the total is an upper bound, matching the process-list method in PLAN §6).
+ *
+ * CPU is accumulated per PID between samples. Summing `cputime` across the tree
+ * before and after would go negative when a helper exits mid-sample; per-PID
+ * deltas count the work a process did while it was alive.
+ *
+ * The display is kept awake for the whole run. macOS sleeps it after a couple of
+ * idle minutes; a sleeping or occluded display throttles the renderer and lets
+ * the system purge its surfaces, which makes CPU and RSS incomparable.
  */
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -27,6 +35,14 @@ if (!existsSync(BINARY)) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const mb = (kb) => kb / 1024
+
+// Wake the display now, then keep it (and the system) awake for the whole run.
+// Without this, the default 2-minute display sleep turns the app into a
+// throttled background renderer halfway through the sample.
+try {
+  execFileSync('caffeinate', ['-u', '-t', '1'], { stdio: 'ignore' })
+} catch {}
+const caffeinate = spawn('caffeinate', ['-dimsu'], { stdio: 'ignore' })
 
 function cpuSeconds(value) {
   const parts = value.split(':').map(Number)
@@ -69,8 +85,7 @@ function snapshot(mainPid) {
   const procs = all.filter((p) => ids.has(p.pid))
   return {
     procs,
-    rssKb: procs.reduce((sum, p) => sum + p.rssKb, 0),
-    cpuSec: procs.reduce((sum, p) => sum + cpuSeconds(p.cputime), 0)
+    rssKb: procs.reduce((sum, p) => sum + p.rssKb, 0)
   }
 }
 
@@ -97,31 +112,43 @@ function describe(procs) {
 
 async function sample(mainPid, label, seconds) {
   const before = snapshot(mainPid)
-  const beforeCpu = new Map(
+  let previous = new Map(
     before.procs.map((p) => [p.pid, { cpu: cpuSeconds(p.cputime), role: roleOf(p.command) }])
   )
   const started = Date.now()
   const rss = [before.rssKb]
+  const cpuByRole = new Map()
+  let cpuSec = 0
 
   while (Date.now() - started < seconds * 1000) {
     await sleep(2000)
-    rss.push(snapshot(mainPid).rssKb)
+    const current = snapshot(mainPid)
+    rss.push(current.rssKb)
+
+    const next = new Map()
+    for (const p of current.procs) {
+      const cpu = cpuSeconds(p.cputime)
+      const role = roleOf(p.command)
+      const prev = previous.get(p.pid)
+      // A process that started after the previous tick has no baseline yet;
+      // its first interval is deliberately not attributed to this sample.
+      if (prev) {
+        const delta = Math.max(0, cpu - prev.cpu)
+        cpuSec += delta
+        cpuByRole.set(prev.role, (cpuByRole.get(prev.role) ?? 0) + delta)
+      }
+      next.set(p.pid, { cpu, role })
+    }
+    previous = next
   }
 
   const after = snapshot(mainPid)
   const wall = (Date.now() - started) / 1000
-  const cpuPct = ((after.cpuSec - before.cpuSec) / wall) * 100
+  const cpuPct = (cpuSec / wall) * 100
 
-  const byRole = new Map()
-  for (const p of after.procs) {
-    const prev = beforeCpu.get(p.pid)
-    if (!prev) continue
-    const delta = ((cpuSeconds(p.cputime) - prev.cpu) / wall) * 100
-    byRole.set(prev.role, (byRole.get(prev.role) ?? 0) + delta)
-  }
-  const cpuLine = [...byRole.entries()]
+  const cpuLine = [...cpuByRole.entries()]
     .sort((a, b) => b[1] - a[1])
-    .map(([role, pct]) => `${role} ${pct.toFixed(1)}%`)
+    .map(([role, sec]) => `${role} ${((sec / wall) * 100).toFixed(1)}%`)
     .join(' · ')
   const avg = rss.reduce((a, b) => a + b, 0) / rss.length
   const min = Math.min(...rss)
@@ -218,6 +245,20 @@ async function quit(child) {
   await sleep(1200)
 }
 
+/**
+ * Bring the window to the front. macOS throttles an occluded/background window,
+ * so CPU measured behind Terminal is not comparable to the numbers in PLAN §6.
+ */
+function activate() {
+  try {
+    execFileSync('osascript', ['-e', 'tell application id "com.viby.app" to activate'], {
+      stdio: 'ignore'
+    })
+  } catch {
+    console.log('  (could not activate Viby; CPU may be throttled behind another window)')
+  }
+}
+
 function bundleReport() {
   const dir = join(ROOT, 'out', 'renderer', 'assets')
   const files = readdirSync(dir).filter((f) => /\.(js|css)$/.test(f))
@@ -241,6 +282,13 @@ const quick = process.argv.includes('--quick')
 const startups = []
 let app = null
 
+// Never leave caffeinate (or a half-measured app) behind, including when the
+// playback guard below throws.
+process.on('exit', () => {
+  caffeinate.kill()
+  app?.child?.kill('SIGTERM')
+})
+
 console.log(quick ? 'startup (1 launch, quick mode)\n' : 'startup (3 launches)\n')
 for (let i = 0; i < (quick ? 1 : 3); i++) {
   if (app) await quit(app.child)
@@ -254,8 +302,12 @@ for (let i = 0; i < (quick ? 1 : 3); i++) {
 const { child, evaluate } = app
 const mainPid = child.pid
 
-// Let artwork, shelves and fonts settle before counting idle memory.
-await sleep(25_000)
+// Match the PLAN §6 method: sample idle 60s after load, once Home's artwork
+// and shelf refreshes have finished. At 25s the tail of that work still shows
+// up as several percent of CPU.
+await sleep(60_000)
+activate()
+await sleep(1000)
 
 console.log('\nresources\n')
 const idle = await sample(mainPid, 'idle (Home)', 30)
@@ -268,7 +320,12 @@ if (before.button !== 'Pause') {
   if (before.title && before.title !== 'Nothing playing') {
     await evaluate(`document.querySelector('.dock .play')?.click(); true`)
   } else {
-    await evaluate(`document.querySelector('.card')?.click(); true`)
+    // Cards put the click target on a nested button; clicking the card shell
+    // only navigates (or does nothing), so the old `.card` click never started
+    // audio.
+    await evaluate(
+      `(document.querySelector('.card .card-hit') ?? document.querySelector('.card button'))?.click(); true`
+    )
   }
 }
 
@@ -285,10 +342,15 @@ const nowPlaying = await evaluate(
       quality: document.querySelector('.dock .quality')?.textContent?.trim() ?? null })`
 )
 console.log(`playing: ${JSON.stringify(nowPlaying)} (${playing ? 'started' : 'DID NOT START'})\n`)
+if (!playing) {
+  throw new Error('playback did not start; refusing to report idle numbers as "playing"')
+}
 
 await sleep(3000)
+activate()
 const audio = await sample(mainPid, 'playing', 30)
 
+activate()
 await evaluate(`document.querySelector('button[aria-label="Lyrics"]')?.click(); true`)
 await sleep(2500)
 const withLyrics = await sample(mainPid, 'playing + lyrics', 20)
@@ -296,24 +358,37 @@ const withLyrics = await sample(mainPid, 'playing + lyrics', 20)
 let soakRss = [snapshot(mainPid).rssKb]
 if (!quick) {
   console.log('\nsoak (2 minutes while playing)\n')
-  const soakStart = snapshot(mainPid)
+  activate()
   const soakStarted = Date.now()
+  let previous = new Map(
+    snapshot(mainPid).procs.map((p) => [p.pid, cpuSeconds(p.cputime)])
+  )
+  let soakCpuSec = 0
   while (Date.now() - soakStarted < 120_000) {
     await sleep(5000)
-    soakRss.push(snapshot(mainPid).rssKb)
+    const current = snapshot(mainPid)
+    soakRss.push(current.rssKb)
+    const next = new Map()
+    for (const p of current.procs) {
+      const cpu = cpuSeconds(p.cputime)
+      const prev = previous.get(p.pid)
+      if (prev !== undefined) soakCpuSec += Math.max(0, cpu - prev)
+      next.set(p.pid, cpu)
+    }
+    previous = next
   }
-  const soakEnd = snapshot(mainPid)
   const soakWall = (Date.now() - soakStarted) / 1000
   console.log(
     `  RSS ${mb(soakRss[0]).toFixed(0)} → ${mb(soakRss[soakRss.length - 1]).toFixed(0)} MB ` +
       `(min ${mb(Math.min(...soakRss)).toFixed(0)}, max ${mb(Math.max(...soakRss)).toFixed(0)}) · ` +
-      `CPU ${(((soakEnd.cpuSec - soakStart.cpuSec) / soakWall) * 100).toFixed(2)}%`
+      `CPU ${((soakCpuSec / soakWall) * 100).toFixed(2)}%`
   )
 } else {
   console.log('\nsoak skipped (quick mode)')
 }
 
 await evaluate(`document.querySelector('.dock .play')?.click(); true`)
+activate()
 await sleep(3000)
 const paused = await sample(mainPid, 'paused after playback', 20)
 
