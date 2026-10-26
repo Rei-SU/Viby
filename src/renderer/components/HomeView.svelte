@@ -1,5 +1,7 @@
 <script lang="ts">
-  import type { CatalogItem, HistoryEntry } from '@shared/types'
+  import type { CatalogItem } from '@shared/types'
+  import type { ListeningSummary, RecentGroup } from '@shared/listening'
+  import { groupRecentHistory } from '@shared/listening'
   import { api } from '../lib/api'
   import { isPlayable, player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
@@ -7,13 +9,21 @@
   import { fitRail } from '../lib/rail-fit'
   import MediaCard from './MediaCard.svelte'
   import InlineAlert from './InlineAlert.svelte'
+  import ListeningDashboard from './ListeningDashboard.svelte'
+  import MoodGrid from './MoodGrid.svelte'
 
   // Shelves live in a store so leaving Home (or visiting a page) does not
   // refetch and flash a loading state every time.
   const page = homeShelves
 
-  let recent = $state<CatalogItem[]>([])
+  let recentGroups = $state<RecentGroup[]>([])
+  let summary = $state<ListeningSummary | null>(null)
   let recentRequest = 0
+
+  const moodArt = $derived([
+    ...recentGroups.map((group) => group.thumbnail),
+    ...page.shelves.flatMap((shelf) => shelf.items.map((item) => item.thumbnail))
+  ])
 
   $effect(() => {
     if (!page.attempted && !page.loading) void load()
@@ -44,31 +54,14 @@
   async function loadRecent(): Promise<void> {
     const request = ++recentRequest
     try {
-      const list = await api.history.list(24)
+      const [history, weekly] = await Promise.all([api.history.list(40), api.history.summary()])
       // The track changed again while this request was in flight.
       if (request !== recentRequest) return
-      const seen = new Set<string>()
-      recent = list
-        .filter((h: HistoryEntry) => {
-          if (seen.has(h.trackId)) return false
-          seen.add(h.trackId)
-          return true
-        })
-        .map((h: HistoryEntry) => ({
-          id: h.trackId,
-          kind: 'song' as const,
-          title: h.title,
-          subtitle: h.artist,
-          thumbnail: h.thumbnail,
-          artists: h.artist ? [h.artist] : undefined,
-          parts: h.artist
-            ? [{ text: h.artist, artistId: h.artistId, entity: 'artist' }]
-            : undefined
-        }))
-
-      player.prefetchList(recent, 2)
+      recentGroups = groupRecentHistory(history, 4, 2)
+      summary = weekly
+      player.prefetchList(recentGroups.flatMap((group) => group.tracks), 2)
     } catch {
-      // Recently played is a convenience; a failed read leaves the old list.
+      // Listening context is a convenience; a failed read leaves the old list.
     }
   }
 
@@ -84,14 +77,6 @@
     void player.playList(playable, Math.max(0, index))
   }
 
-  /**
-   * History is not a playlist. Playing something from Recently played starts that
-   * single song; when it ends, autoplay follows the radio for it.
-   */
-  function playOne(item: CatalogItem): void {
-    void player.playList([item], 0)
-  }
-
   function activate(items: CatalogItem[], item: CatalogItem): void {
     if (isPlayable(item)) play(items, item)
     else nav.open(item)
@@ -101,7 +86,7 @@
 <div class="view">
   <header class="head">
     <h1>Home</h1>
-    <p>Global — no region setup, no sign-in required.</p>
+    <p>Your listening, at a glance.</p>
   </header>
 
   {#if page.error}
@@ -117,16 +102,11 @@
     <p class="placeholder">Loading…</p>
   {/if}
 
-  {#if recent.length > 0}
-    <section class="shelf">
-      <h2>Recently played</h2>
-      <div class="rail" use:fitRail>
-        {#each recent as item (item.id)}
-          <MediaCard {item} onActivate={playOne} />
-        {/each}
-      </div>
-    </section>
+  {#if summary && recentGroups.length > 0}
+    <ListeningDashboard groups={recentGroups} {summary} />
   {/if}
+
+  <MoodGrid art={moodArt} />
 
   {#each page.shelves as shelf, si (shelf.title + si)}
     <section class="shelf">

@@ -55,6 +55,7 @@ ones that touch main-process modules.
 | `downloads-manager` | yt-dlp progress parsing (known/unknown totals) and transient-vs-permanent failure classification |
 | `download-groups` | Library download split: collection-owned vs loose songs, album order, offline artwork fallbacks |
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
+| `listening` | seven-day listening summaries, duration weighting, duplicate history, recent album/artist grouping |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
@@ -112,6 +113,7 @@ the app while they run — they own the queue.
 | Scenario | Covers |
 |---|---|
 | `images` | Home artwork actually renders, home carousels stay inside the docked page, no broken images |
+| `home` | listening snapshot, grouped recents, seven-day pulse, mood navigation |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |
@@ -166,7 +168,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics` · visual check |
 | `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics` |
-| `src/renderer/components/DetailView.svelte`, `MediaCard`, `HomeView` | e2e `navigation`, `images` |
+| `src/renderer/components/DetailView.svelte`, `MediaCard`, `HomeView`, `ListeningDashboard`, `MoodGrid` | e2e `home`, `navigation`, `images` · unit `listening` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |
 | `src/renderer/App.svelte` | all e2e (layout, routes, panels) |

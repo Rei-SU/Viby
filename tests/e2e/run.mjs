@@ -1,5 +1,6 @@
 import { makeCheck, openApp } from './lib.mjs'
 import * as autoplay from './autoplay.mjs'
+import * as home from './home.mjs'
 import * as images from './images.mjs'
 import * as importScenario from './import.mjs'
 import * as library from './library.mjs'
@@ -21,7 +22,7 @@ import * as settings from './settings.mjs'
  *   node tests/e2e/run.mjs lyrics library     # only what you changed
  *   node tests/e2e/run.mjs                    # everything
  */
-const scenarios = { images, playback, reconnect, autoplay, links, lyrics, 'lyrics-change': lyricsChange, library, resume, navigation, offline, 'quick-search': quickSearch, settings, import: importScenario }
+const scenarios = { images, home, playback, reconnect, autoplay, links, lyrics, 'lyrics-change': lyricsChange, library, resume, navigation, offline, 'quick-search': quickSearch, settings, import: importScenario }
 
 const requested = process.argv.slice(2)
 const unknown = requested.filter((name) => !scenarios[name])
