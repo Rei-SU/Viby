@@ -65,7 +65,7 @@ export async function run(app, check) {
             position: Math.round(p.position),
             loadingClass: button?.classList.contains('loading') ?? false,
             aria: button?.getAttribute('aria-label') ?? null,
-            notice: document.querySelector('.notice')?.textContent?.trim() ?? null
+            notice: document.querySelector('.alert-card')?.textContent?.trim() ?? null
           })
           if (p.playing && p.position > 0 && !p.reconnecting) break
         }

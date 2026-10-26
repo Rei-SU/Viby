@@ -118,4 +118,39 @@ export async function run(app, check) {
   )
   check('the seek preview hides when the pointer leaves', preview.hiddenAfterLeave === true)
   check('the seek slider exposes a readable time', /^\d+:\d{2}$/.test(preview.aria ?? ''), `aria="${preview.aria}"`)
+
+  const alert = await app.evaluate(`
+    (async () => {
+      window.__viby.nav.go('home')
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      const heading = document.querySelector('main.content h1')
+      const player = document.querySelector('.dock')
+      const beforeY = Math.round(heading?.getBoundingClientRect().top ?? -1)
+      window.__viby.player.error = 'A deliberately long playback error to verify that the alert wraps cleanly without moving the page underneath it.'
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const card = document.querySelector('.alert-card')
+      const cardRect = card?.getBoundingClientRect()
+      const playerRect = player?.getBoundingClientRect()
+      const duringY = Math.round(heading?.getBoundingClientRect().top ?? -1)
+      card?.querySelector('.alert-action')?.click()
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      const copyLabel = card?.querySelector('.alert-action')?.textContent?.trim() ?? null
+      card?.querySelector('.alert-close')?.click()
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      return {
+        shown: Boolean(card),
+        beforeY,
+        duringY,
+        title: card?.querySelector('strong')?.textContent?.trim() ?? null,
+        abovePlayer: cardRect && playerRect ? cardRect.bottom <= playerRect.top - 4 : false,
+        copyLabel,
+        dismissed: !document.querySelector('.alert-card')
+      }
+    })()
+  `)
+  check('playback errors use the floating alert', alert.shown && alert.title === 'Playback problem', JSON.stringify(alert))
+  check('the alert does not move page content', alert.beforeY === alert.duringY, JSON.stringify(alert))
+  check('the alert sits above the player', alert.abovePlayer === true, JSON.stringify(alert))
+  check('the alert error can be copied', alert.copyLabel === 'Copied', JSON.stringify(alert))
+  check('the alert can be dismissed', alert.dismissed === true, JSON.stringify(alert))
 }

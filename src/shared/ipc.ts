@@ -30,6 +30,7 @@ export const CH = {
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
   appOpenSettings: 'app:open-settings',
+  appCopyText: 'app:copy-text',
 
   playerResolve: 'player:resolve',
   playerPrefetch: 'player:prefetch',
@@ -124,6 +125,8 @@ export interface VibyApi {
   app: {
     /** The tray or menu bar asked the window to open Settings. */
     onOpenSettings(callback: () => void): () => void
+    /** Copy diagnostic text (for example a playback error) to the OS clipboard. */
+    copyText(text: string): Promise<boolean>
   }
   settings: {
     get(): Promise<Settings>

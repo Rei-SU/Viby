@@ -2,7 +2,7 @@ import { createReadStream, rmSync, statSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
-import { app, BrowserWindow, ipcMain, powerSaveBlocker, protocol } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, powerSaveBlocker, protocol } from 'electron'
 import type {
   BrowseResult,
   CatalogItem,
@@ -229,6 +229,12 @@ let importResolveController: AbortController | null = null
   })
 
   ipcMain.handle(CH.settingsGet, (): Settings => settings().get())
+
+  ipcMain.handle(CH.appCopyText, (_e, text: unknown): boolean => {
+    if (typeof text !== 'string' || text.length === 0 || text.length > 20_000) return false
+    clipboard.writeText(text)
+    return true
+  })
 
   ipcMain.handle(CH.settingsSet, (_e, patch: Partial<Settings>): Settings => {
     const previous = settings().get().audioQuality

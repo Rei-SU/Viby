@@ -12,6 +12,7 @@
   import MediaCard from './MediaCard.svelte'
   import EntityLink from './EntityLink.svelte'
   import Icon from './Icon.svelte'
+  import InlineAlert from './InlineAlert.svelte'
 
   let { item }: { item: CatalogItem } = $props()
 
@@ -379,11 +380,12 @@
   {/if}
 
   {#if error}
-    <div class="notice">
-      <strong>Could not open this</strong>
-      <span>{error}</span>
-      <button class="retry" onclick={retry}>Try again</button>
-    </div>
+    <InlineAlert
+      title="Could not open this"
+      message={error}
+      actionLabel="Try again"
+      onAction={retry}
+    />
   {/if}
 
   {#if loading}
@@ -764,36 +766,6 @@
   .more:hover {
     background: var(--glass-hover);
     color: var(--text);
-  }
-
-  .notice {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    border-radius: var(--radius-lg);
-    padding: 11px 14px;
-    font-size: 13px;
-    border: 1px solid rgba(255, 128, 128, 0.28);
-    background: rgba(255, 128, 128, 0.08);
-  }
-
-  .notice span {
-    color: var(--text-dim);
-    font-size: 12.5px;
-  }
-
-  .notice .retry {
-    align-self: flex-start;
-    margin-top: 6px;
-    border: 1px solid var(--stroke);
-    border-radius: 999px;
-    padding: 5px 12px;
-    color: var(--text);
-    font-size: 12px;
-  }
-
-  .notice .retry:hover {
-    background: var(--glass-hover);
   }
 
   .placeholder {

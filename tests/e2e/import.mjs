@@ -32,7 +32,7 @@ export async function run(app, check) {
           rows: document.querySelectorAll('.rows .row').length,
           source: document.querySelector('.source h2')?.textContent?.trim() ?? null,
           counts: document.querySelector('.counts')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
-          error: document.querySelector('.error')?.textContent?.trim() ?? null,
+          error: document.querySelector('.alert')?.textContent?.trim() ?? null,
           matching: Boolean(document.querySelector('.matching'))
         })
       `)
@@ -70,7 +70,7 @@ export async function run(app, check) {
       done = await app.evaluate(`
         ({
           heading: document.querySelector('.done h2')?.textContent?.trim() ?? null,
-          error: document.querySelector('.error')?.textContent?.trim() ?? null
+          error: document.querySelector('.alert')?.textContent?.trim() ?? null
         })
       `)
       if (done.heading || done.error) break

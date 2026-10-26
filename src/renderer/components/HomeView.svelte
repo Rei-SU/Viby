@@ -6,6 +6,7 @@
   import { homeShelves } from '../lib/catalog-cache.svelte'
   import { fitRail } from '../lib/rail-fit'
   import MediaCard from './MediaCard.svelte'
+  import InlineAlert from './InlineAlert.svelte'
 
   // Shelves live in a store so leaving Home (or visiting a page) does not
   // refetch and flash a loading state every time.
@@ -104,13 +105,12 @@
   </header>
 
   {#if page.error}
-    <div class="notice">
-      <div>
-        <strong>Could not load Home</strong>
-        <span>{page.error}</span>
-      </div>
-      <button class="link" onclick={() => load()}>Retry</button>
-    </div>
+    <InlineAlert
+      title="Could not load Home"
+      message={page.error}
+      actionLabel="Retry"
+      onAction={() => void load()}
+    />
   {/if}
 
   {#if page.loading && page.shelves.length === 0}
@@ -202,35 +202,5 @@
   .placeholder {
     color: var(--text-faint);
     font-size: 13px;
-  }
-
-  .notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    border-radius: var(--radius-lg);
-    padding: 11px 14px;
-    font-size: 13px;
-    border: 1px solid rgba(255, 128, 128, 0.28);
-    background: rgba(255, 128, 128, 0.08);
-  }
-
-  .notice div {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .notice span {
-    color: var(--text-dim);
-    font-size: 12.5px;
-  }
-
-  .link {
-    color: var(--accent);
-    font-size: 12px;
-    flex-shrink: 0;
   }
 </style>

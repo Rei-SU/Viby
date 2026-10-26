@@ -12,6 +12,7 @@
   import { playlists } from '../lib/playlists.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import InlineAlert from './InlineAlert.svelte'
 
   type Phase = 'idle' | 'resolving' | 'matching' | 'review' | 'creating' | 'done'
   type Row = { match: ImportMatch; include: boolean; chosenId: string | null }
@@ -207,10 +208,7 @@
   {/if}
 
   {#if error}
-    <div class="error" role="alert">
-      <Icon name="close" size={14} />
-      <span>{error}</span>
-    </div>
+    <InlineAlert title="Import failed" message={error} />
   {/if}
 
   {#if phase === 'resolving'}
@@ -424,19 +422,6 @@
     padding: 6px 13px;
     border-radius: 999px;
     font-size: 12px;
-  }
-
-  .error {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    border-radius: var(--radius);
-    padding: 10px 12px;
-    font-size: 12.5px;
-    line-height: 1.5;
-    color: var(--text-dim);
-    border: 1px solid rgba(255, 128, 128, 0.28);
-    background: rgba(255, 128, 128, 0.08);
   }
 
   .status {

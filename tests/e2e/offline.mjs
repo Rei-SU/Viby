@@ -31,7 +31,7 @@ export async function run(app, check) {
           importDisabled: navButton('Import')?.disabled ?? null,
           libraryPresent: Boolean(navButton('Library')),
           downloadsPresent: Boolean(navButton('Downloads')),
-          notice: document.querySelector('.content .notice')?.textContent?.trim() ?? null
+          notice: document.querySelector('.content .alert')?.textContent?.trim() ?? null
         }
       })()
     `,

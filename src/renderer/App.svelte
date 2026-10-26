@@ -74,6 +74,33 @@
   let backOnline = $state(false)
   let backOnlineTimer: ReturnType<typeof setTimeout> | null = null
   let wasLocalFirst = network.localFirst
+  let copiedError = $state(false)
+  let copiedErrorTimer: ReturnType<typeof setTimeout> | null = null
+
+  $effect(() => {
+    player.error
+    copiedError = false
+    if (copiedErrorTimer) {
+      clearTimeout(copiedErrorTimer)
+      copiedErrorTimer = null
+    }
+  })
+
+  async function copyPlaybackError(): Promise<void> {
+    const message = player.error
+    if (!message) return
+    try {
+      if (!(await api.app.copyText(message))) return
+      copiedError = true
+      if (copiedErrorTimer) clearTimeout(copiedErrorTimer)
+      copiedErrorTimer = setTimeout(() => {
+        copiedError = false
+        copiedErrorTimer = null
+      }, 1600)
+    } catch {
+      // Clipboard access is best-effort.
+    }
+  }
 
   // A reconnect should feel acknowledged, without stealing the view the user
   // was on. The pill disappears on its own; this is the only extra chrome.
@@ -269,18 +296,6 @@
   </aside>
 
   <main class="content scroll" bind:this={main} onscroll={onScroll}>
-    {#if player.error}
-      <div class="notice">
-        <div class="notice-text">
-          <strong>Playback problem</strong>
-          <span>{player.error}</span>
-        </div>
-        <button class="notice-close" onclick={() => (player.error = null)} aria-label="Dismiss">
-          <Icon name="close" size={15} />
-        </button>
-      </div>
-    {/if}
-
     {#if nav.track}
       <TrackView track={nav.track} />
     {:else if nav.detail}
@@ -323,11 +338,44 @@
   <PlayerBar />
   <PlaylistPicker />
 
-  {#if backOnline}
-    <div class="toast" role="status">
-      <Icon name="check" size={14} /> Back online
-    </div>
-  {/if}
+  <div class="alerts">
+    {#if backOnline}
+      <div class="toast" role="status">
+        <Icon name="check" size={14} /> Back online
+      </div>
+    {/if}
+
+    {#if player.error}
+      <div class="alert-card">
+        <span class="alert-mark" aria-hidden="true"><Icon name="alert" size={16} /></span>
+        <div class="alert-copy">
+          <strong>Playback problem</strong>
+          <p>{player.error}</p>
+        </div>
+        <div class="alert-actions">
+          <button
+            class="alert-action"
+            title={copiedError ? 'Copied' : 'Copy error message'}
+            aria-label={copiedError ? 'Error copied' : 'Copy error message'}
+            onclick={() => void copyPlaybackError()}
+          >
+            {#if copiedError}<Icon name="check" size={12} />{/if}
+            {copiedError ? 'Copied' : 'Copy'}
+          </button>
+          <button
+            class="alert-close"
+            onclick={() => (player.error = null)}
+            aria-label="Dismiss playback problem"
+          >
+            <Icon name="close" size={15} />
+          </button>
+        </div>
+      </div>
+    {/if}
+  </div>
+  <div class="sr-alert" role="alert" aria-atomic="true">
+    {player.error ? `Playback problem. ${player.error}` : ''}
+  </div>
 </div>
 
 <style>
@@ -753,11 +801,25 @@
     background: var(--accent-strong);
   }
 
-  .toast {
+  .alerts {
     position: fixed;
     left: 50%;
-    bottom: calc(var(--player-h) + 20px);
+    bottom: calc(var(--player-h) + 18px);
     z-index: 65;
+    width: min(540px, calc(100vw - 48px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .alerts > * {
+    pointer-events: auto;
+  }
+
+  .toast {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -771,58 +833,133 @@
     color: var(--text);
     font-size: 12.5px;
     font-weight: 550;
-    transform: translateX(-50%);
     animation: toast-in 180ms var(--ease);
   }
 
   @keyframes toast-in {
     from {
       opacity: 0;
-      transform: translate(-50%, 8px);
-    }
-    to {
-      opacity: 1;
-      transform: translate(-50%, 0);
+      transform: translateY(8px);
     }
   }
 
-  .notice {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+  .alert-card {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: start;
     gap: 12px;
-    border-radius: var(--radius-lg);
-    padding: 11px 14px;
-    font-size: 13px;
-    border: 1px solid rgba(255, 128, 128, 0.28);
-    background: rgba(255, 128, 128, 0.08);
-    margin-bottom: 18px;
+    padding: 12px 12px 12px 14px;
+    border: 1px solid rgba(255, 128, 128, 0.22);
+    border-radius: 14px;
+    background: #17171d;
+    box-shadow:
+      0 18px 48px rgba(0, 0, 0, 0.5),
+      inset 2px 0 0 rgba(255, 128, 128, 0.68),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    animation: alert-in 180ms var(--ease);
   }
 
-  .notice-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+  .alert-mark {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    background: rgba(255, 128, 128, 0.1);
+    color: var(--danger);
+  }
+
+  .alert-copy {
     min-width: 0;
+    padding-top: 2px;
   }
 
-  .notice strong {
-    font-weight: 550;
-  }
-
-  .notice span {
-    color: var(--text-dim);
-  }
-
-  .notice-close {
-    color: var(--text-dim);
-    padding: 2px;
-    border-radius: 6px;
-    flex-shrink: 0;
-  }
-
-  .notice-close:hover {
+  .alert-copy strong {
     color: var(--text);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .alert-copy p {
+    margin: 3px 0 0;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+
+  .alert-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .alert-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 58px;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--stroke);
+    border-radius: 7px;
+    color: var(--text-dim);
+    font-size: 10.5px;
+    font-weight: 550;
+    transition:
+      color var(--speed) var(--ease),
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .alert-action:hover {
+    border-color: var(--stroke-strong);
     background: var(--glass-hover);
+    color: var(--text);
+  }
+
+  .alert-close {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    color: var(--text-dim);
+    transition:
+      color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .alert-close:hover {
+    background: var(--glass-hover);
+    color: var(--text);
+  }
+
+  .sr-alert {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @keyframes alert-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .alert-card {
+      animation: none;
+    }
   }
 </style>

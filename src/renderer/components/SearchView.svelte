@@ -13,6 +13,7 @@
   import SubtitleParts from './SubtitleParts.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import InlineAlert from './InlineAlert.svelte'
 
   const filters: { id: SearchFilterName; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -168,10 +169,13 @@
       {#if searchState.loading && items.length === 0}
         <p class="placeholder">Searching…</p>
       {:else if searchState.error && items.length === 0}
-        <div class="notice">
-          <strong>Search failed</strong>
-          <span>{searchState.error}</span>
-          <button class="ghost" onclick={() => void searchState.load()}>Try again</button>
+        <div class="search-alert">
+          <InlineAlert
+            title="Search failed"
+            message={searchState.error}
+            actionLabel="Try again"
+            onAction={() => void searchState.load()}
+          />
         </div>
       {:else if items.length === 0}
         <p class="placeholder">No results for “{searchState.query.trim()}”.</p>
@@ -377,36 +381,8 @@
     font-size: 13px;
   }
 
-  .notice {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
+  .search-alert {
     margin-top: 18px;
-    padding: 14px 16px;
-    border: 1px solid var(--stroke);
-    border-radius: 10px;
-    background: var(--glass);
-    color: var(--text-dim);
-    font-size: 12.5px;
-  }
-
-  .notice strong {
-    color: var(--text);
-    font-weight: 600;
-  }
-
-  .notice .ghost {
-    margin-left: auto;
-    color: var(--text);
-    border: 1px solid var(--stroke);
-    border-radius: 999px;
-    padding: 5px 12px;
-    font-size: 12px;
-  }
-
-  .notice .ghost:hover {
-    background: var(--glass-hover);
   }
 
   .chips {
