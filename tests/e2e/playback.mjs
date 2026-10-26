@@ -82,4 +82,40 @@ export async function run(app, check) {
     typeof quality === 'string' && /^[A-Z]+ \d+k$/.test(quality),
     `tag="${quality}"`
   )
+
+  const preview = await app.evaluate(`
+    (async () => {
+      const input = document.querySelector('.seek input')
+      const rect = input.getBoundingClientRect()
+      const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      input.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerType: 'mouse',
+        clientX: rect.left + rect.width * 0.75,
+        clientY: rect.top + rect.height / 2
+      }))
+      await frame()
+      const bubble = document.querySelector('.seek-preview')
+      const text = bubble?.textContent?.trim() ?? null
+      const seconds = text?.split(':').map(Number)
+      const shown = seconds?.length === 2 ? seconds[0] * 60 + seconds[1] : -1
+      const expected = Math.round(Number(input.max) * 0.75)
+      input.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true, pointerType: 'mouse' }))
+      await frame()
+      return {
+        text,
+        shown,
+        expected,
+        aria: input.getAttribute('aria-valuetext'),
+        hiddenAfterLeave: !document.querySelector('.seek-preview')
+      }
+    })()
+  `)
+  check(
+    'hovering the seek bar previews the target time',
+    preview.shown >= 0 && Math.abs(preview.shown - preview.expected) <= 2,
+    JSON.stringify(preview)
+  )
+  check('the seek preview hides when the pointer leaves', preview.hiddenAfterLeave === true)
+  check('the seek slider exposes a readable time', /^\d+:\d{2}$/.test(preview.aria ?? ''), `aria="${preview.aria}"`)
 }

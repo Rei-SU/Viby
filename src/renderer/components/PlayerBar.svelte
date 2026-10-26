@@ -88,6 +88,36 @@
     dragging = false
   }
 
+  const PREVIEW_EDGE = 22
+  let seekEl = $state<HTMLDivElement | undefined>(undefined)
+  let preview = $state<{ percent: number; seconds: number } | null>(null)
+  let previewFrame = 0
+  let previewX = 0
+
+  function schedulePreview(event: PointerEvent): void {
+    previewX = event.clientX
+    if (previewFrame) return
+    previewFrame = requestAnimationFrame(() => {
+      previewFrame = 0
+      if (!seekEl || !track || player.duration <= 0) return
+      const rect = seekEl.getBoundingClientRect()
+      const ratio = Math.min(1, Math.max(0, (previewX - rect.left) / rect.width))
+      preview = { percent: ratio * 100, seconds: Math.round(ratio * player.duration) }
+    })
+  }
+
+  function clearPreview(): void {
+    if (previewFrame) cancelAnimationFrame(previewFrame)
+    previewFrame = 0
+    preview = null
+  }
+
+  $effect(() => {
+    player.current?.id
+    player.duration
+    clearPreview()
+  })
+
   function fmt(seconds: number): string {
     if (!Number.isFinite(seconds) || seconds < 0) return '0:00'
     const total = Math.floor(seconds)
@@ -187,18 +217,37 @@
 
     <div class="scrub">
       <span class="time tabular">{fmt(shownPosition)}</span>
-      <input
-        type="range"
-        min="0"
-        max={Math.max(player.duration, 1)}
-        step="1"
-        value={shownPosition}
-        style="--progress: {progress}%"
-        disabled={!track}
-        aria-label="Seek"
-        oninput={onSeekInput}
-        onchange={onSeekCommit}
-      />
+      <div
+        class="seek"
+        bind:this={seekEl}
+        role="presentation"
+        onpointerenter={schedulePreview}
+        onpointermove={schedulePreview}
+        onpointerleave={clearPreview}
+      >
+        {#if preview}
+          <span
+            class="seek-preview tabular"
+            style="left: clamp({PREVIEW_EDGE}px, {preview.percent}%, calc(100% - {PREVIEW_EDGE}px))"
+            aria-hidden="true"
+          >
+            {fmt(preview.seconds)}
+          </span>
+        {/if}
+        <input
+          type="range"
+          min="0"
+          max={Math.max(player.duration, 1)}
+          step="1"
+          value={shownPosition}
+          style="--progress: {progress}%"
+          disabled={!track}
+          aria-label="Seek"
+          aria-valuetext={track ? fmt(shownPosition) : undefined}
+          oninput={onSeekInput}
+          onchange={onSeekCommit}
+        />
+      </div>
       <span class="time tabular">{fmt(player.duration)}</span>
     </div>
   </div>
@@ -380,9 +429,63 @@
     width: 100%;
   }
 
-  .scrub input {
+  .seek {
+    position: relative;
     flex: 1;
     min-width: 0;
+    display: flex;
+    align-items: center;
+    height: 18px;
+  }
+
+  .seek input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .seek-preview {
+    position: absolute;
+    bottom: calc(100% + 5px);
+    z-index: 4;
+    padding: 4px 7px;
+    border: 1px solid var(--stroke-strong);
+    border-radius: 7px;
+    background: #1b1b22;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 550;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    transform: translateX(-50%);
+    animation: seek-preview-in 120ms var(--ease);
+  }
+
+  .seek-preview::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    border-right: 1px solid var(--stroke-strong);
+    border-bottom: 1px solid var(--stroke-strong);
+    background: inherit;
+    transform: translate(-50%, -3px) rotate(45deg);
+  }
+
+  @keyframes seek-preview-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 3px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .seek-preview {
+      animation: none;
+    }
   }
 
   .time {
