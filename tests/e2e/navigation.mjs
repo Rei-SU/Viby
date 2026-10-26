@@ -33,6 +33,12 @@ export async function run(app, check) {
       link.click()
       await new Promise((r) => setTimeout(r, 3000))
 
+      const bannerImg = document.querySelector('.artist-hero .banner-art')
+      for (let i = 0; i < 20; i++) {
+        if (bannerImg?.complete && bannerImg.naturalWidth > 0) break
+        await new Promise((r) => setTimeout(r, 100))
+      }
+
       return {
         ok: true,
         name,
@@ -40,6 +46,8 @@ export async function run(app, check) {
         header: document.querySelector('.artist-hero h1, .hero h1')?.textContent?.trim(),
         banner: Boolean(document.querySelector('.artist-hero .banner')),
         bannerArt: Boolean(document.querySelector('.banner-art')),
+        bannerTag: bannerImg?.tagName ?? null,
+        bannerLoaded: Boolean(bannerImg?.complete && bannerImg.naturalWidth > 0),
         listeners: document.querySelector('.banner .listeners')?.textContent?.trim() ?? null,
         rows: document.querySelectorAll('.tracks .row').length,
         tabs: [...document.querySelectorAll('.tab')].map((b) => b.textContent?.trim()),
@@ -52,7 +60,11 @@ export async function run(app, check) {
   check('search results render with artist links', artist.searchRows > 0, `${artist.searchRows} rows`)
   check('clicking an artist opens their page', artist.ok === true && artist.kind === 'artist', JSON.stringify(artist))
   check('artist page header matches', artist.header === artist.name, `"${artist.header}" vs "${artist.name}"`)
-  check('artist page uses a banner', artist.banner === true && artist.bannerArt === true, JSON.stringify({ banner: artist.banner, art: artist.bannerArt }))
+  check(
+    'artist page uses a loaded banner image',
+    artist.banner === true && artist.bannerArt === true && artist.bannerTag === 'IMG' && artist.bannerLoaded === true,
+    JSON.stringify({ banner: artist.banner, art: artist.bannerArt, tag: artist.bannerTag, loaded: artist.bannerLoaded })
+  )
   check('artist page lists tracks', artist.rows > 0, `${artist.rows} rows`)
   check(
     'artist page has a discography switcher',

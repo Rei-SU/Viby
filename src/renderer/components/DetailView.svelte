@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { BrowseResult, CatalogItem } from '@shared/types'
   import { api } from '../lib/api'
+  import { artwork } from '../lib/artwork.svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import { downloads } from '../lib/downloads.svelte'
@@ -65,6 +66,25 @@
 
   const total = $derived(songs.reduce((acc, i) => acc + (i.durationSec ?? 0), 0))
   const art = $derived(result?.header?.thumbnail ?? item.thumbnail)
+
+  let failedBanner = $state<string[]>([])
+  const bannerPrimary = $derived(artwork.src(result?.header?.thumbnail ?? item.thumbnail))
+  const bannerFallback = $derived(
+    result?.header?.thumbnail && item.thumbnail && item.thumbnail !== result.header.thumbnail
+      ? artwork.src(item.thumbnail)
+      : undefined
+  )
+
+  function bannerFailed(src: string | undefined): void {
+    if (!src) return
+    if (!failedBanner.includes(src)) failedBanner = [...failedBanner, src]
+    artwork.broken(src)
+  }
+
+  $effect(() => {
+    item.id
+    failedBanner = []
+  })
 
   /**
    * Some releases (auto-generated singles, photo albums) return rows with no
@@ -259,8 +279,25 @@
   {#if isArtist}
     <header class="artist-hero">
       <div class="banner">
-        {#if art}
-          <span class="banner-art" style="background-image: url({art})"></span>
+        {#if bannerFallback && !failedBanner.includes(bannerFallback)}
+          <img
+            class="banner-art"
+            src={bannerFallback}
+            alt=""
+            decoding="async"
+            draggable="false"
+            onerror={() => bannerFailed(bannerFallback)}
+          />
+        {/if}
+        {#if bannerPrimary && !failedBanner.includes(bannerPrimary)}
+          <img
+            class="banner-art"
+            src={bannerPrimary}
+            alt=""
+            decoding="async"
+            draggable="false"
+            onerror={() => bannerFailed(bannerPrimary)}
+          />
         {/if}
         <span class="banner-shade"></span>
         <div class="banner-text">
@@ -444,8 +481,11 @@
   .banner-art {
     position: absolute;
     inset: 0;
-    background-size: cover;
-    background-position: center 28%;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 28%;
   }
 
   .banner-shade {
