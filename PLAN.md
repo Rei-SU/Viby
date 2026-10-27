@@ -679,7 +679,7 @@ Save appears only once the page's track list has loaded, so the tile can say `Al
 
 ### Song titles open their release (2026-10-27)
 
-Song titles in every list are now buttons. Clicking one opens where the song lives: an album or EP page, scrolled to that row and flashed for ~2.8s; a **single** opens the song page instead, because its one-track release adds nothing. The row itself still plays on click — the title stops propagation, and Space remains the global play/pause. The player-bar title keeps its existing behaviour (song page); the queue panel's titles gained the same affordance.
+Song titles in every list, on song cards and on Search's top result are now buttons. Clicking one opens where the song lives: an album or EP page, scrolled to that row and flashed for ~2.8s; a **single** opens the song page instead, because its one-track release adds nothing. The row, card, or top result itself still plays on click — the title stops propagation, and Space remains the global play/pause. A title button is only as wide as its text; it no longer stretches across the row, so the empty space to the right of the title stays part of the play target. The player-bar title keeps its existing behaviour (song page); the queue panel's titles gained the same affordance.
 
 Release identity had to travel with the song. `CatalogItem` and `Track` now carry `album`, `albumId` and `releaseType`; the parser fills them from row subtitle parts, and `DetailView.withDefaults()` stamps the page's own release onto every row so playback from an album page still knows its home. History entries keep `releaseType` too. `trackToItem()`, `toTrack()` and `historyItem()` preserve all three.
 

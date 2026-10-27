@@ -364,6 +364,7 @@
   }
 
   .title {
+    align-self: flex-start;
     font-size: 13.5px;
     font-weight: 550;
     text-align: left;

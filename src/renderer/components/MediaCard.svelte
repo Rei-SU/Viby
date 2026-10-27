@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CatalogItem } from '@shared/types'
+  import { openTrackFromItem } from '../lib/release'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
   import SubtitleParts from './SubtitleParts.svelte'
@@ -35,7 +36,21 @@
     />
     <span class="play-badge"><Icon name="play" size={14} solid /></span>
   </span>
-  <span class="card-title truncate" aria-hidden="true">{item.title}</span>
+  {#if item.kind === 'song'}
+    <button
+      type="button"
+      class="card-title truncate"
+      title={item.album ? `Open ${item.album}` : `Open ${item.title}`}
+      onclick={(event) => {
+        event.stopPropagation()
+        openTrackFromItem(item)
+      }}
+    >
+      {item.title}
+    </button>
+  {:else}
+    <span class="card-title truncate" aria-hidden="true">{item.title}</span>
+  {/if}
   <span class="card-sub truncate">
     <SubtitleParts
       parts={item.parts}
@@ -121,6 +136,27 @@
     font-weight: 500;
     color: var(--text);
     margin-top: 4px;
+  }
+
+  button.card-title {
+    display: block;
+    align-self: flex-start;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    text-align: left;
+  }
+
+  /* The card is a play target; its title opens the song. */
+  .card > button.card-title {
+    pointer-events: auto;
+  }
+
+  button.card-title:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .card-sub {

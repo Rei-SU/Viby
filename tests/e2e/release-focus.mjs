@@ -1,5 +1,5 @@
 export const description =
-  'A song title opens its release at the row, singles open the song page, and queue titles follow'
+  'Song titles open their release at the row while song/card bodies play; singles open the song page'
 
 export async function run(app, check) {
   // ---- album / EP: release page, scrolled to the row and flashed ----------
@@ -10,7 +10,7 @@ export async function run(app, check) {
       nav.go('search')
       await wait(300)
       searchState.setFilter('songs')
-      searchState.setQuery('daft punk')
+      searchState.setQuery('instant crush')
       searchState.submit('songs')
 
       let row = null
@@ -24,9 +24,37 @@ export async function run(app, check) {
       }
       if (!row) return { found: false }
 
-      const title = row.querySelector('button.title').textContent.trim()
+      row.scrollIntoView({ block: 'center' })
+      await wait(150)
+      const titleButton = row.querySelector('button.title')
+      const title = titleButton.textContent.trim()
       const albumName = row.querySelector('.entity-link[data-entity="album"]').textContent.trim()
       const clickedId = row.dataset.trackId
+      const titleBox = titleButton.getBoundingClientRect()
+      const textBox = row.querySelector('.text').getBoundingClientRect()
+      const outside = document.elementFromPoint(
+        titleBox.right + 16,
+        titleBox.top + titleBox.height / 2
+      )
+      const titleArea = {
+        button: Math.round(titleBox.width),
+        text: Math.round(textBox.width),
+        outsideTitle: outside === titleButton || titleButton.contains(outside)
+      }
+
+      // Clicking the song itself must play, not open a page.
+      player.clearQueue()
+      row.querySelector('.dur')?.click()
+      await wait(700)
+      const rowPlay = {
+        queueIds: player.queue.map((track) => track.id),
+        detail: nav.detail?.title ?? null,
+        track: nav.track?.title ?? null
+      }
+      player.clearQueue()
+      player.error = null
+      await wait(250)
+
       const before = player.current?.id ?? null
       row.querySelector('button.title').click()
 
@@ -49,6 +77,8 @@ export async function run(app, check) {
         title,
         albumName,
         clickedId,
+        titleArea,
+        rowPlay,
         before,
         after: player.current?.id ?? null,
         detail: nav.detail && { kind: nav.detail.kind, title: nav.detail.title, id: nav.detail.id },
@@ -59,6 +89,20 @@ export async function run(app, check) {
     { userGesture: true }
   )
 
+  check(
+    'only the title text is clickable on a row',
+    album.found &&
+      album.titleArea.button < album.titleArea.text - 20 &&
+      album.titleArea.outsideTitle === false,
+    JSON.stringify(album.titleArea)
+  )
+  check(
+    'clicking the song row plays it instead of opening a page',
+    album.rowPlay?.queueIds.includes(album.clickedId) &&
+      album.rowPlay.detail === null &&
+      album.rowPlay.track === null,
+    JSON.stringify(album.rowPlay)
+  )
   check(
     'a song title opens its release page',
     album.found && album.detail?.kind === 'album' && album.detail.title === album.albumName,
@@ -216,5 +260,61 @@ export async function run(app, check) {
     'the song page release name still opens the release',
     !!single.albumName && single.detail?.kind === 'album' && single.detail.title === single.albumName,
     JSON.stringify({ albumName: single.albumName, detail: single.detail })
+  )
+
+  // ---- song cards: title opens, the rest plays ---------------------------
+  const cards = await app.evaluate(
+    `(async () => {
+      const { nav, player } = window.__viby
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      player.clearQueue()
+      nav.go('home')
+
+      let card = null
+      for (let i = 0; i < 60 && !card; i++) {
+        await wait(150)
+        card = document.querySelector('.rail .card:has(button.card-title)')
+      }
+      if (!card) return { found: false }
+
+      const title = card.querySelector('button.card-title').textContent.trim()
+      card.querySelector('button.card-title').click()
+      let navigated = null
+      for (let i = 0; i < 50; i++) {
+        await wait(100)
+        if (nav.detail || nav.track) {
+          navigated = { detail: nav.detail?.title ?? null, track: nav.track?.title ?? null }
+          break
+        }
+      }
+
+      nav.go('home')
+      await wait(500)
+      const again = document.querySelector('.rail .card:has(button.card-title)')
+      again?.querySelector('.card-hit')?.click()
+      await wait(700)
+      const played = {
+        queue: player.queue.length,
+        detail: nav.detail?.title ?? null,
+        track: nav.track?.title ?? null
+      }
+      player.clearQueue()
+      player.error = null
+      return { found: true, title, navigated, played }
+    })()`,
+    { userGesture: true }
+  )
+  check(
+    'a song card title opens its release',
+    cards.found && Boolean(cards.navigated?.detail || cards.navigated?.track),
+    JSON.stringify(cards)
+  )
+  check(
+    'clicking the rest of a song card plays it',
+    cards.found &&
+      cards.played?.queue > 0 &&
+      cards.played.detail === null &&
+      cards.played.track === null,
+    JSON.stringify(cards.played)
   )
 }

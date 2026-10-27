@@ -392,6 +392,7 @@
 
   button.t {
     display: block;
+    align-self: flex-start;
     max-width: 100%;
     padding: 0;
     border: 0;

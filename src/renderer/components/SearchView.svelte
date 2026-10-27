@@ -6,6 +6,7 @@
   import { network } from '../lib/network.svelte'
   import { nav } from '../lib/nav.svelte'
   import { openArtist } from '../lib/artist'
+  import { openTrackFromItem } from '../lib/release'
   import { sidePanel } from '../lib/side-panel.svelte'
   import MediaCard from './MediaCard.svelte'
   import Rail from './Rail.svelte'
@@ -221,7 +222,21 @@
               <Cover src={top.thumbnail} size={96} radius={top.kind === 'artist' ? 48 : 12} alt={top.title} />
               <div class="top-meta">
                 <span class="top-type">{top.releaseType ?? top.kind}</span>
-                <span class="top-title">{top.title}</span>
+                {#if top.kind === 'song'}
+                  <button
+                    type="button"
+                    class="top-title"
+                    title={top.album ? `Open ${top.album}` : `Open ${top.title}`}
+                    onclick={(event) => {
+                      event.stopPropagation()
+                      openTrackFromItem(top)
+                    }}
+                  >
+                    {top.title}
+                  </button>
+                {:else}
+                  <span class="top-title">{top.title}</span>
+                {/if}
                 <span class="top-sub">
                   <SubtitleParts
                     parts={top.parts}
@@ -530,6 +545,23 @@
     font-weight: 600;
     color: var(--text);
     letter-spacing: -0.01em;
+  }
+
+  button.top-title {
+    display: block;
+    align-self: flex-start;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    pointer-events: auto;
+    text-align: left;
+  }
+
+  button.top-title:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .top-sub {
