@@ -1,5 +1,5 @@
-import { groupRecentHistory, summarizeHistory } from '../src/shared/listening'
-import type { HistoryEntry } from '../src/shared/types'
+import { albumMatch, groupRecentHistory, summarizeHistory } from '../src/shared/listening'
+import type { CatalogItem, HistoryEntry } from '../src/shared/types'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = ''): void {
@@ -108,6 +108,81 @@ check('recent groups keep navigation metadata', recent[0]?.albumId === 'one-id' 
 
 const fallback = groupRecentHistory(history, 4, 3)
 check('missing albums fall back to artist grouping', fallback[2]?.key === 'artist:beta' && fallback[2]?.title === 'Beta', JSON.stringify(fallback[2]))
+
+check(
+  'recent groups keep the release on replay',
+  recent[0]?.tracks[0]?.parts?.some((part) => part.albumId === 'one-id' && part.entity === 'album') === true,
+  JSON.stringify(recent[0]?.tracks[0]?.parts)
+)
+
+// Two releases can share a name ("Sociopath" has twenty on YouTube Music). They
+// must not merge, and a click must not open the other artist's release.
+const sameTitle = groupRecentHistory(
+  [
+    {
+      trackId: 'x',
+      title: 'X',
+      artist: 'Alpha',
+      artistId: 'alpha-id',
+      album: 'Sociopath',
+      playedAt: NOW,
+      completion: 1
+    },
+    {
+      trackId: 'y',
+      title: 'Y',
+      artist: 'Beta',
+      artistId: 'beta-id',
+      album: 'Sociopath',
+      playedAt: NOW - 1000,
+      completion: 1
+    }
+  ],
+  4,
+  2
+)
+check(
+  'same-named releases by different artists stay separate',
+  sameTitle.length === 2 && sameTitle[0]?.tracks[0]?.id === 'x' && sameTitle[1]?.tracks[0]?.id === 'y',
+  JSON.stringify(sameTitle.map((group) => group.key))
+)
+
+const sociopathGroup = {
+  key: 'album:sociopath|pause-id',
+  title: 'Sociopath',
+  artist: 'Pause',
+  artistId: 'pause-id',
+  tracks: []
+}
+const release = (id: string, artists: string[]): CatalogItem => ({
+  id,
+  browseId: id,
+  kind: 'album',
+  title: 'Sociopath',
+  subtitle: '',
+  artists
+})
+check(
+  'release matching requires the credited artist',
+  albumMatch([release('stranger', ['razudaisu']), release('right', ['Pause'])], sociopathGroup)?.id === 'right',
+  'picked the release credited to Pause'
+)
+check(
+  'a same-named release by another artist is never opened',
+  albumMatch([release('stranger', ['razudaisu'])], sociopathGroup) === null,
+  'no title-only fallback'
+)
+check(
+  'a one-word artist does not match a longer name',
+  albumMatch([release('other', ['Pause flow'])], sociopathGroup) === null,
+  'Pause != Pause flow'
+)
+check(
+  'a multi-word artist matches a collaboration credit',
+  albumMatch([release('collab', ['Yung Vision', 'Young Lime'])], { ...sociopathGroup, artist: 'Yung Vision' })
+    ?.id === 'collab',
+  'Yung Vision on a joint release'
+)
 
 const noDurations = history.map((entry) => ({ ...entry, durationSec: undefined }))
 const withoutTime = summarizeHistory(noDurations, NOW - WEEK)

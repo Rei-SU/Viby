@@ -43,7 +43,7 @@ ones that touch main-process modules.
 | Suite | Covers |
 |---|---|
 | `resolver` | yt-dlp runner, client selection, parsing, URL cache, no-direct-URL fallback |
-| `innertube` | parsing of a captured response, search filters, browse |
+| `innertube` | parsing of a captured response, search filters, browse, YouTube's release labels |
 | `catalog` | live catalog: filters, ranking, artist shelves, radio, audio-first |
 | `thumbs` | thumbnail URLs across surfaces + CDN status |
 | `artist-shelves` | prints an artist page's real shelf structure (diagnostic) |
@@ -55,7 +55,7 @@ ones that touch main-process modules.
 | `downloads-manager` | yt-dlp progress parsing (known/unknown totals) and transient-vs-permanent failure classification |
 | `download-groups` | Library download split: collection-owned vs loose songs, album order, offline artwork fallbacks |
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
-| `listening` | seven-day listening summaries, duration weighting, duplicate history, recent album/artist grouping |
+| `listening` | seven-day listening summaries, duration weighting, duplicate history, recent release grouping, artist-checked release matching |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
@@ -113,7 +113,7 @@ the app while they run — they own the queue.
 | Scenario | Covers |
 |---|---|
 | `images` | Home artwork actually renders, home carousels stay inside the docked page, no broken images |
-| `home` | listening snapshot, grouped recents, seven-day pulse, mood navigation |
+| `home` | listening snapshot, grouped recents, release labels, seven-day pulse, mood navigation |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |

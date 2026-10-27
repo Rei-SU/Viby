@@ -127,6 +127,16 @@
   )
   const headerSubtitle = $derived(result?.header?.subtitle ?? item.subtitle)
 
+  /**
+   * YouTube labels releases itself: "Single", "EP", "Album", "Audiobook".
+   * `item.kind` is Viby's routing type and says "album" for all of them, which
+   * showed a one-track single as an album. Prefer YouTube's label; when it did
+   * not provide one, show no label rather than inventing a type.
+   */
+  const releaseLabel = $derived(
+    item.kind === 'album' ? (result?.header?.releaseType ?? item.releaseType ?? null) : item.kind
+  )
+
   function withDefaults(track: CatalogItem): CatalogItem {
     let next = track
     if ((track.artists?.length ?? 0) === 0 && fallbackArtist) {
@@ -333,7 +343,9 @@
       {/if}
       <Cover src={art} size={168} radius={14} alt={result?.header?.title ?? item.title} />
       <div class="hero-text">
-        <span class="kind">{item.kind}</span>
+        {#if releaseLabel}
+          <span class="kind">{releaseLabel}</span>
+        {/if}
         <h1>{result?.header?.title ?? item.title}</h1>
         {#if albumArtist}
           <p class="album-byline">

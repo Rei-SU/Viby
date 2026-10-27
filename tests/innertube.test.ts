@@ -127,6 +127,59 @@ check(
     releaseHeader?.artist?.id === 'UCr_iyUANcn9OX_yy9piYoLw',
   `${releaseHeader?.artist?.name ?? 'none'}`
 )
+check(
+  "album header keeps YouTube's release type",
+  releaseHeader?.releaseType === 'Album',
+  releaseHeader?.releaseType ?? 'none'
+)
+
+// A single must never be shown as an album: the label comes from YouTube, not
+// from Viby's internal `kind`.
+const singleHeader = {
+  header: {
+    musicResponsiveHeaderRenderer: {
+      title: { runs: [{ text: 'Sociopath' }] },
+      subtitle: { runs: [{ text: 'Single' }, { text: ' • ' }, { text: '2022' }] }
+    }
+  }
+}
+check(
+  'single header is not labelled an album',
+  extractHeader(singleHeader)?.releaseType === 'Single',
+  extractHeader(singleHeader)?.releaseType ?? 'none'
+)
+
+// Search cards carry the same label in their subtitle.
+const singleCard = {
+  contents: {
+    musicTwoRowItemRenderer: {
+      title: { runs: [{ text: 'Sociopath' }] },
+      subtitle: {
+        runs: [
+          { text: 'Single' },
+          { text: ' • ' },
+          { text: 'razudaisu' },
+          { text: ' • ' },
+          { text: '2022' }
+        ]
+      },
+      navigationEndpoint: {
+        browseEndpoint: {
+          browseId: 'MPREb_single',
+          browseEndpointContextSupportedConfigs: {
+            browseEndpointContextMusicConfig: { pageType: 'MUSIC_PAGE_TYPE_ALBUM' }
+          }
+        }
+      }
+    }
+  }
+}
+const singleCardItem = extractItems(singleCard)[0]
+check(
+  'release cards keep the release type',
+  singleCardItem?.kind === 'album' && singleCardItem?.releaseType === 'Single',
+  `${singleCardItem?.kind ?? 'none'} / ${singleCardItem?.releaseType ?? 'none'}`
+)
 
 // A playlist strapline is the owner, so it must never become the track artist.
 const playlistHeader = {
@@ -146,6 +199,11 @@ const playlistHeader = {
   }
 }
 check('playlist owner strapline is not an artist', extractHeader(playlistHeader)?.artist === undefined)
+check(
+  'playlist headers carry no release type',
+  extractHeader(playlistHeader)?.releaseType === undefined,
+  extractHeader(playlistHeader)?.releaseType ?? 'none'
+)
 
 // ---- live -------------------------------------------------------------------
 const songs = await search('daft punk', 'songs')

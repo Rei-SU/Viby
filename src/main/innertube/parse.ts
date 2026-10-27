@@ -15,6 +15,17 @@ type AnyObj = Record<string, any>
 const TIME_RE = /^\d{1,2}:\d{2}(?::\d{2})?$/
 const VIEWS_RE = /^[\d.,]+\s*[KMB]?\s*(?:plays|views)$/i
 
+/**
+ * The release label YouTube prints before the year ("Single • 2022"). Kept
+ * verbatim: YouTube distinguishes Album, Single, EP, Audiobook and Compilation,
+ * and a single shown as an album is simply wrong. Returns undefined when the
+ * text is not a release line, so callers can omit the label instead of guessing.
+ */
+function releaseTypeOf(text: string): string | undefined {
+  const match = /^(album|single|ep|compilation|audiobook)\b/i.exec(text.trim())
+  return match ? match[0] : undefined
+}
+
 /** Separator-only subtitle fragments (" • ", ", ") carry no link. */
 function isSeparator(part: SubtitlePart): boolean {
   return !part.artistId && !part.albumId && /^[\s,&•·|/+-]+$/.test(part.text)
@@ -111,10 +122,10 @@ export function extractHeader(response: unknown): BrowseHeader | undefined {
     // link, history) still knows its artist; otherwise every row fell back to
     // "Unknown artist". Playlists are excluded: their strapline, when present,
     // is the owner, not the artist.
-    const releaseKind = /^(?:album|single|ep|compilation)\b/i.test(subtitle.trim())
+    const releaseType = releaseTypeOf(subtitle)
     const creditedRun =
       artistRun ??
-      (releaseKind
+      (releaseType
         ? runsOf(node.straplineTextOne).find((run) => refId(run, 'artist'))
         : undefined)
     const artistId = creditedRun ? refId(creditedRun, 'artist') : undefined
@@ -129,6 +140,7 @@ export function extractHeader(response: unknown): BrowseHeader | undefined {
       title: heading,
       subtitle: subtitle ? subtitle.slice(0, 200) : undefined,
       thumbnail: best,
+      releaseType,
       monthlyListeners,
       artist:
         creditedRun && artistId
@@ -309,6 +321,7 @@ function fromResponsiveListItem(renderer: AnyObj): CatalogItem | null {
     id: videoId || browseId,
     browseId: browseId || undefined,
     kind,
+    releaseType: kind === 'album' ? releaseTypeOf(subtitle) : undefined,
     title,
     subtitle,
     parts: parts.length ? parts : undefined,
@@ -337,11 +350,14 @@ function fromTwoRowItem(renderer: AnyObj): CatalogItem | null {
   const subtitle = textOf(renderer.subtitle)
   const pageKind = kindFromPageType(pageTypeOf(renderer))
   const parts = partsFrom(runsOf(renderer.subtitle))
+  const kind: CatalogKind =
+    videoId ? 'song' : pageKind !== 'unknown' ? pageKind : kindFromSubtitle(subtitle)
 
   return {
     id: videoId || browseId,
     browseId: browseId || undefined,
-    kind: videoId ? 'song' : pageKind !== 'unknown' ? pageKind : kindFromSubtitle(subtitle),
+    kind,
+    releaseType: kind === 'album' ? releaseTypeOf(subtitle) : undefined,
     title,
     subtitle,
     parts: parts.length ? parts : undefined,

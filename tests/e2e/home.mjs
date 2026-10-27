@@ -110,14 +110,17 @@ export async function run(app, check) {
           if (group) break
         }
         group?.querySelector('.group-head')?.click()
-        for (let i = 0; i < 50; i++) {
+        let label = null
+        for (let i = 0; i < 80; i++) {
           await new Promise((resolve) => setTimeout(resolve, 100))
-          if (nav.detail?.kind === 'album') break
+          label = document.querySelector('.hero .kind')?.textContent?.trim() ?? null
+          if (nav.detail?.kind === 'album' && label) break
         }
         return {
           groupFound: Boolean(group),
           kind: nav.detail?.kind ?? null,
           title: document.querySelector('.hero h1')?.textContent?.trim() ?? null,
+          label,
           view: nav.view
         }
       })()`,
@@ -127,6 +130,11 @@ export async function run(app, check) {
       'clicking a release opens its album page directly',
       album.groupFound && album.kind === 'album' && album.title === 'Random Access Memories',
       JSON.stringify(album)
+    )
+    check(
+      "the release label comes from YouTube, not Viby's kind",
+      album.label === 'Album',
+      `${album.label ?? 'none'}`
     )
     await app.evaluate(`window.__viby.nav.go('home'); true`)
 

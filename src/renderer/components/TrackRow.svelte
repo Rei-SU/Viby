@@ -165,7 +165,7 @@
     <span class="text">
       <span class="title truncate">{item.title}</span>
       <span class="sub truncate">
-        {#if item.kind !== 'song'}<span class="tag">{item.kind}</span>{/if}
+        {#if item.kind !== 'song'}<span class="tag">{item.releaseType ?? item.kind}</span>{/if}
         <SubtitleParts parts={item.parts} fallback={item.subtitle} />
         {#if item.views}
           <span class="views">{item.parts?.length ? ' · ' : ''}{item.views}</span>

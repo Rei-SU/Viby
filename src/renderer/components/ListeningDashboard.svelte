@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ListeningArtist, ListeningSummary, RecentGroup } from '@shared/listening'
+  import { albumMatch, artistMatch } from '@shared/listening'
   import type { CatalogItem } from '@shared/types'
   import { api } from '../lib/api'
   import { player } from '../lib/player.svelte'
@@ -65,18 +66,7 @@
   function openGroup(group: RecentGroup): void {
     if (opening) return
     if (group.albumId) {
-      nav.open({
-        id: group.albumId,
-        browseId: group.albumId,
-        kind: 'album',
-        title: group.title,
-        subtitle: group.artist,
-        thumbnail: group.thumbnail,
-        artists: [group.artist],
-        parts: group.artistId
-          ? [{ text: group.artist, artistId: group.artistId, entity: 'artist' }]
-          : undefined
-      })
+      openRelease(group, group.albumId)
       return
     }
     if (!group.key.startsWith('album:') && group.artistId) {
@@ -87,60 +77,80 @@
     void resolveGroup(group)
   }
 
+  function openRelease(group: RecentGroup, albumId: string): void {
+    nav.open({
+      id: albumId,
+      browseId: albumId,
+      kind: 'album',
+      title: group.title,
+      subtitle: group.artist,
+      thumbnail: group.thumbnail,
+      artists: [group.artist],
+      parts: group.artistId
+        ? [{ text: group.artist, artistId: group.artistId, entity: 'artist' }]
+        : undefined
+    })
+  }
+
+  /**
+   * Old history entries carry the release name but not its id. The id is in the
+   * song's own credits, so look the track up and read it from there: a name
+   * search cannot tell the twenty releases called "Sociopath" apart.
+   */
+  async function releaseIdFor(group: RecentGroup): Promise<string | null> {
+    for (const track of group.tracks.slice(0, 2)) {
+      const result = await api.catalog.search(`${track.title} ${group.artist}`, 'songs')
+      if (!result.ok) continue
+      const hit = result.data.find((item) => item.id === track.id)
+      const albumId = hit?.parts?.find((part) => part.albumId)?.albumId
+      if (albumId) return albumId
+    }
+    return null
+  }
+
   async function resolveGroup(group: RecentGroup): Promise<void> {
     const isAlbum = group.key.startsWith('album:')
-    const query = isAlbum ? group.title : group.artist
     try {
-      const result = await api.catalog.search(query, isAlbum ? 'albums' : 'artists')
-      if (result.ok) {
-        const match = isAlbum ? albumMatch(result.data, group) : artistMatch(result.data, group)
-        if (match) {
-          nav.open(match)
+      if (isAlbum) {
+        const albumId = await releaseIdFor(group)
+        if (albumId) {
+          openRelease(group, albumId)
           return
+        }
+        const result = await api.catalog.search(group.title, 'albums')
+        if (result.ok) {
+          const match = albumMatch(result.data, group)
+          if (match) {
+            nav.open(match)
+            return
+          }
+        }
+      } else {
+        const result = await api.catalog.search(group.artist, 'artists')
+        if (result.ok) {
+          const match = artistMatch(result.data, group)
+          if (match) {
+            nav.open(match)
+            return
+          }
         }
       }
     } catch {
-      // Fall through to the search page with the query prefilled.
+      // Fall through to the artist page or the prefilled search.
     } finally {
       opening = null
     }
+
+    // A same-named release is not evidence that it is the right one. The artist
+    // is known, so land on their page instead of a stranger's album.
+    if (group.artistId) {
+      nav.openArtist(group.artistId, group.artist, group.thumbnail)
+      return
+    }
+    const query = isAlbum ? group.title : group.artist
     searchState.setQuery(query)
     searchState.submit(isAlbum ? 'albums' : 'artists')
     nav.go('search')
-  }
-
-  function normalized(value: string): string {
-    return value
-      .toLowerCase()
-      .normalize('NFKD')
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .trim()
-  }
-
-  function albumMatch(items: CatalogItem[], group: RecentGroup): CatalogItem | null {
-    const title = normalized(group.title)
-    const artist = normalized(group.artist.split(',')[0] ?? '')
-    const albums = items.filter((item) => item.kind === 'album' && (item.browseId || item.id))
-    const credits = (item: CatalogItem): string =>
-      normalized(`${item.subtitle} ${(item.artists ?? []).join(' ')}`)
-    return (
-      albums.find((item) => normalized(item.title) === title && credits(item).includes(artist)) ??
-      albums.find((item) => normalized(item.title) === title) ??
-      albums.find((item) => normalized(item.title).startsWith(title) && credits(item).includes(artist)) ??
-      null
-    )
-  }
-
-  function artistMatch(items: CatalogItem[], group: RecentGroup): CatalogItem | null {
-    const wanted = normalized(group.artist)
-    const artists = items.filter((item) => item.kind === 'artist' && (item.browseId || item.id))
-    return (
-      (group.artistId
-        ? artists.find((item) => item.browseId === group.artistId || item.id === group.artistId)
-        : undefined) ??
-      artists.find((item) => normalized(item.title) === wanted) ??
-      null
-    )
   }
 
   function monogram(name: string): string {

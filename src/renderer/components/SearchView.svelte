@@ -220,7 +220,7 @@
               ></button>
               <Cover src={top.thumbnail} size={96} radius={top.kind === 'artist' ? 48 : 12} alt={top.title} />
               <div class="top-meta">
-                <span class="top-type">{top.kind}</span>
+                <span class="top-type">{top.releaseType ?? top.kind}</span>
                 <span class="top-title">{top.title}</span>
                 <span class="top-sub">
                   <SubtitleParts

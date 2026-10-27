@@ -144,6 +144,13 @@ export type CatalogItem = {
   /** Present when the item has its own page (album, artist, playlist). */
   browseId?: string
   kind: CatalogKind
+  /**
+   * YouTube's own label for a release: "Album", "Single", "EP", "Audiobook" or
+   * "Compilation". Copied verbatim from the card or page header; never
+   * synthesised, because a release YouTube calls a single must not be shown as
+   * an album. Absent when YouTube did not say.
+   */
+  releaseType?: string
   title: string
   subtitle: string
   /** Subtitle split into plain text and linked parts. */
@@ -162,6 +169,11 @@ export type BrowseHeader = {
   title: string
   subtitle?: string
   thumbnail?: string
+  /**
+   * Release pages only: the type YouTube itself prints above the title
+   * ("Single • 2022" → "Single"). Displayed as-is; see `CatalogItem.releaseType`.
+   */
+  releaseType?: string
   /** Artist pages: "71.8M" from YouTube Music's monthly audience. */
   monthlyListeners?: string
   /** Present when the header subtitle links to an artist. */
