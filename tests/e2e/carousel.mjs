@@ -30,6 +30,8 @@ export async function run(app, check) {
       const railRect = overflowing.getBoundingClientRect()
       const buttonRect = next?.getBoundingClientRect() ?? null
       const scrollbarWidth = getComputedStyle(overflowing).scrollbarWidth
+      overflowing.scrollLeft = 0
+      await new Promise((resolve) => setTimeout(resolve, 100))
       const before = overflowing.scrollLeft
       next?.click()
       await new Promise((resolve) => setTimeout(resolve, 800))

@@ -141,20 +141,14 @@
     align-items: center;
   }
 
-  /* Spotify-style: two bare chevrons at the end of the shelf header, shown
-     while the shelf is hovered or focused. */
+  /* Two bare chevrons at the end of the shelf header; they stay visible so
+     the carousel reads as scrollable without hunting for a hover target. A
+     shelf with nothing to scroll renders no controls at all. */
   .navs {
     display: flex;
     flex-shrink: 0;
     align-items: center;
     gap: 2px;
-    opacity: 0;
-    transition: opacity var(--speed) var(--ease);
-  }
-
-  .shelf:hover .navs,
-  .shelf:focus-within .navs {
-    opacity: 1;
   }
 
   .nav {
