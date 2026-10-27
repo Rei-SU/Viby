@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 10)
+Last updated: 2026-10-27 (rev 11)
 
 ---
 
@@ -652,6 +652,12 @@ Two pitfalls shaped the code. `history.load()` reads its cache guard through `un
 The **Start something** cards borrowed random artwork from Home shelves and sent the user to a name search. They now carry motion icons — a brain for Focus, a bolt for Energy, a crescent for Late night, a spinning disc for Throwbacks — that animate on hover/focus (and stay still under reduced motion), and open YouTube Music's own mood/genre pages: Focus → Focus, Energy → **Energize**, Late night → **Chill**, Throwbacks → **Decades**.
 
 `catalog.moods()` reads the `musicNavigationButtonRenderer` tiles (title + params) and caches them for the session; `catalog.browse()` now takes the tile's params, which is the only way to reach `FEmusic_moods_and_genres_category`. `MoodView` renders the resulting playlist shelves with the shared `MediaCard`/rail and caches each page for ten minutes; `nav.mood` joins the Back/Forward snapshots. If the tiles fail to load, the grid offers Retry instead of silently falling back to search. This follows the same params flow ytmusicapi documents for `get_mood_playlists`.
+
+### Carousel controls (2026-10-27)
+
+Every rail hid its overflow behind a thin scrollbar, so shelves read as desktop scroll areas and Windows users had to grab the bar to see more. Rails now render through a shared `Rail` component: the shelf header keeps its title (and **Show all** / **See all** where one exists), adds two Spotify-style chevrons on hover or focus, and the scrollbar is hidden. The unavailable direction is dimmed; a shelf that fits shows no controls. Paging scrolls by ~85% of the visible width (instant under `prefers-reduced-motion`). The `fitRail` action now only fits the cards and (on Windows) routes the wheel; the controls live in `Rail.svelte`. One component covers Home, Search's All rails, artist discography, mood pages and offline Home, with no new dependency.
+
+On Windows only, a vertical wheel over a rail scrolls it horizontally and prevents the page from moving; at either end the wheel falls through so the page keeps scrolling (nested-scroll behaviour). macOS keeps its native trackpad gesture. The rollover is deliberately scoped: hijacking the wheel on every platform would fight the trackpad.
 
 ## 14. Library (shipped)
 

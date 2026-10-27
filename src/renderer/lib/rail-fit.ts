@@ -6,6 +6,10 @@
  *
  * The rail owns the calculation. Each card inherits --rail-card-width, so a
  * rail can change from six cards to four without changing the card markup.
+ *
+ * On Windows a vertical mouse wheel over the rail scrolls it horizontally
+ * instead of the page; macOS keeps the native trackpad gesture. The header
+ * chevrons live in Rail.svelte.
  */
 
 export const RAIL_GAP_FALLBACK = 18
@@ -43,21 +47,18 @@ export function railLayout(available: number, itemCount: number, gap = RAIL_GAP_
   return { cols, cardWidth }
 }
 
+/** Mouse-wheel-to-horizontal is a Windows nicety; macOS keeps the trackpad. */
+function wantsWheelScroll(): boolean {
+  return typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
+}
+
 /**
  * Observe a rail's width and item count. Writes --rail-card-width so the
- * cards in the rail all take the same fitted width, and records the column
- * count for tests/debugging.
+ * cards in the rail all take the same fitted width, records the column count
+ * for tests/debugging, and routes the Windows wheel sideways.
  */
 export function fitRail(node: HTMLElement): { destroy(): void } {
   let frame = 0
-
-  const schedule = (): void => {
-    if (frame) return
-    frame = requestAnimationFrame(() => {
-      frame = 0
-      update()
-    })
-  }
 
   const update = (): void => {
     const style = getComputedStyle(node)
@@ -73,6 +74,34 @@ export function fitRail(node: HTMLElement): { destroy(): void } {
     node.dataset.railCols = String(cols)
   }
 
+  const schedule = (): void => {
+    if (frame) return
+    frame = requestAnimationFrame(() => {
+      frame = 0
+      update()
+    })
+  }
+
+  const onWheel = (event: WheelEvent): void => {
+    if (!wantsWheelScroll() || event.ctrlKey) return
+    const max = node.scrollWidth - node.clientWidth
+    if (max <= 1) return
+
+    const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+    let delta = horizontal ? event.deltaX : event.deltaY
+    if (event.deltaMode === 1) delta *= 16
+    else if (event.deltaMode === 2) delta *= node.clientWidth
+    if (delta === 0) return
+
+    const nextLeft = Math.max(0, Math.min(max, node.scrollLeft + delta))
+    // At either end let the page take the wheel, like nested scrolling.
+    if (nextLeft === node.scrollLeft) return
+    event.preventDefault()
+    node.scrollLeft = nextLeft
+  }
+
+  node.addEventListener('wheel', onWheel, { passive: false })
+
   const resize = new ResizeObserver(schedule)
   resize.observe(node)
 
@@ -86,6 +115,7 @@ export function fitRail(node: HTMLElement): { destroy(): void } {
     destroy(): void {
       resize.disconnect()
       mutations.disconnect()
+      node.removeEventListener('wheel', onWheel)
       if (frame) cancelAnimationFrame(frame)
     }
   }

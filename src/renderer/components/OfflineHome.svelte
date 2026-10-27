@@ -10,8 +10,8 @@
     formatSize as size,
     standaloneEntries
   } from '../lib/download-groups'
-  import { fitRail } from '../lib/rail-fit'
   import MediaCard from './MediaCard.svelte'
+  import Rail from './Rail.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
 
@@ -115,45 +115,36 @@
     </section>
   {:else}
     {#if recent.length > 0}
-      <section class="shelf">
-        <div class="shelf-head">
-          <h2>Continue listening</h2>
+      <Rail title="Continue listening">
+        {#snippet action()}
           <button class="link" onclick={() => nav.go('library')}>See all</button>
-        </div>
-        <div class="rail" use:fitRail>
-          {#each recent as item (item.id)}
-            <MediaCard {item} onActivate={() => playCollection([item])} />
-          {/each}
-        </div>
-      </section>
+        {/snippet}
+        {#each recent as item (item.id)}
+          <MediaCard {item} onActivate={() => playCollection([item])} />
+        {/each}
+      </Rail>
     {/if}
 
     {#if albums.length > 0}
-      <section class="shelf">
-        <h2>Albums</h2>
-        <div class="rail" use:fitRail>
-          {#each albums as group (group.collection.key)}
-            <MediaCard
-              item={collectionItem(group.collection, group.items)}
-              onActivate={() => openCollection(group.collection)}
-            />
-          {/each}
-        </div>
-      </section>
+      <Rail title="Albums">
+        {#each albums as group (group.collection.key)}
+          <MediaCard
+            item={collectionItem(group.collection, group.items)}
+            onActivate={() => openCollection(group.collection)}
+          />
+        {/each}
+      </Rail>
     {/if}
 
     {#if playlists.length > 0}
-      <section class="shelf">
-        <h2>Playlists</h2>
-        <div class="rail" use:fitRail>
-          {#each playlists as group (group.collection.key)}
-            <MediaCard
-              item={collectionItem(group.collection, group.items)}
-              onActivate={() => openCollection(group.collection)}
-            />
-          {/each}
-        </div>
-      </section>
+      <Rail title="Playlists">
+        {#each playlists as group (group.collection.key)}
+          <MediaCard
+            item={collectionItem(group.collection, group.items)}
+            onActivate={() => openCollection(group.collection)}
+          />
+        {/each}
+      </Rail>
     {/if}
 
     {#if standalone.length > 0}
@@ -306,47 +297,6 @@
     color: var(--text-faint);
     font-size: 12.5px;
     line-height: 1.55;
-  }
-
-  .shelf {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  .shelf-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 14px;
-  }
-
-  h2 {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: -0.012em;
-  }
-
-  .rail {
-    display: flex;
-    gap: 18px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 2px 4px 8px;
-    margin: -2px -4px 0;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-  }
-
-  .rail::-webkit-scrollbar {
-    height: 8px;
-  }
-
-  .rail::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
   }
 
   .rows {

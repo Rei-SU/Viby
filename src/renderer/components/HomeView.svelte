@@ -7,8 +7,8 @@
   import { nav } from '../lib/nav.svelte'
   import { homeShelves } from '../lib/catalog-cache.svelte'
   import { history } from '../lib/history.svelte'
-  import { fitRail } from '../lib/rail-fit'
   import MediaCard from './MediaCard.svelte'
+  import Rail from './Rail.svelte'
   import InlineAlert from './InlineAlert.svelte'
   import ListeningDashboard from './ListeningDashboard.svelte'
   import MoodGrid from './MoodGrid.svelte'
@@ -117,14 +117,11 @@
   <MoodGrid />
 
   {#each page.shelves as shelf, si (shelf.title + si)}
-    <section class="shelf">
-      <h2>{shelf.title || 'More'}</h2>
-      <div class="rail" use:fitRail>
-        {#each shelf.items as item (item.kind + item.id + item.title)}
-          <MediaCard {item} onActivate={(x) => activate(shelf.items, x)} />
-        {/each}
-      </div>
-    </section>
+    <Rail title={shelf.title || 'More'}>
+      {#each shelf.items as item (item.kind + item.id + item.title)}
+        <MediaCard {item} onActivate={(x) => activate(shelf.items, x)} />
+      {/each}
+    </Rail>
   {/each}
 </div>
 
@@ -151,40 +148,6 @@
     margin: 0;
     color: var(--text-faint);
     font-size: 12.5px;
-  }
-
-  .shelf {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  h2 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0;
-    letter-spacing: -0.012em;
-  }
-
-  .rail {
-    display: flex;
-    gap: 18px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 2px 4px 8px;
-    margin: -2px -4px 0;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-  }
-
-  .rail::-webkit-scrollbar {
-    height: 8px;
-  }
-
-  .rail::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
   }
 
   .placeholder {

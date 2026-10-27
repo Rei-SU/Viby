@@ -7,9 +7,9 @@
   import { nav } from '../lib/nav.svelte'
   import { openArtist } from '../lib/artist'
   import { sidePanel } from '../lib/side-panel.svelte'
-  import { fitRail } from '../lib/rail-fit'
-  import TrackRow from './TrackRow.svelte'
   import MediaCard from './MediaCard.svelte'
+  import Rail from './Rail.svelte'
+  import TrackRow from './TrackRow.svelte'
   import SubtitleParts from './SubtitleParts.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -259,51 +259,42 @@
         {/if}
 
         {#if artists.length > 0}
-          <section class="section">
-            <div class="section-head">
-              <h2>Artists</h2>
+          <Rail title="Artists">
+            {#snippet action()}
               {#if artists.length > 6}
                 <button class="show-all" onclick={() => showAll('artists')}>Show all</button>
               {/if}
-            </div>
-            <div class="rail" use:fitRail>
-              {#each artists.slice(0, 6) as item (item.kind + item.id + item.title)}
-                <MediaCard item={item} size={152} onActivate={() => activate(item)} />
-              {/each}
-            </div>
-          </section>
+            {/snippet}
+            {#each artists.slice(0, 6) as item (item.kind + item.id + item.title)}
+              <MediaCard item={item} size={152} onActivate={() => activate(item)} />
+            {/each}
+          </Rail>
         {/if}
 
         {#if albums.length > 0}
-          <section class="section">
-            <div class="section-head">
-              <h2>Albums</h2>
+          <Rail title="Albums">
+            {#snippet action()}
               {#if albums.length > 6}
                 <button class="show-all" onclick={() => showAll('albums')}>Show all</button>
               {/if}
-            </div>
-            <div class="rail" use:fitRail>
-              {#each albums.slice(0, 6) as item (item.kind + item.id + item.title)}
-                <MediaCard item={item} size={152} onActivate={() => activate(item)} />
-              {/each}
-            </div>
-          </section>
+            {/snippet}
+            {#each albums.slice(0, 6) as item (item.kind + item.id + item.title)}
+              <MediaCard item={item} size={152} onActivate={() => activate(item)} />
+            {/each}
+          </Rail>
         {/if}
 
         {#if playlists.length > 0}
-          <section class="section">
-            <div class="section-head">
-              <h2>Playlists</h2>
+          <Rail title="Playlists">
+            {#snippet action()}
               {#if playlists.length > 6}
                 <button class="show-all" onclick={() => showAll('playlists')}>Show all</button>
               {/if}
-            </div>
-            <div class="rail" use:fitRail>
-              {#each playlists.slice(0, 6) as item (item.kind + item.id + item.title)}
-                <MediaCard item={item} size={152} onActivate={() => activate(item)} />
-              {/each}
-            </div>
-          </section>
+            {/snippet}
+            {#each playlists.slice(0, 6) as item (item.kind + item.id + item.title)}
+              <MediaCard item={item} size={152} onActivate={() => activate(item)} />
+            {/each}
+          </Rail>
         {/if}
       {/if}
     {/if}
@@ -605,27 +596,6 @@
 
   /* The "All" result categories stay on one row and scroll sideways, matching
      Home and artist pages. Only the filtered "Show all" views use a grid. */
-  .rail {
-    display: flex;
-    gap: 18px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 2px 4px 8px;
-    margin: -2px -4px 0;
-    min-width: 0;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-  }
-
-  .rail::-webkit-scrollbar {
-    height: 8px;
-  }
-
-  .rail::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
-  }
-
   .results {
     list-style: none;
     margin: 0;

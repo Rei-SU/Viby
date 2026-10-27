@@ -145,6 +145,15 @@ input {
   background-clip: content-box;
 }
 
+/* Rails hide their scrollbar; the header chevrons are the affordance. */
+.rail {
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
 .truncate {
   overflow: hidden;
   text-overflow: ellipsis;

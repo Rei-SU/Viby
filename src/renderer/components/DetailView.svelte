@@ -6,7 +6,7 @@
   import { nav } from '../lib/nav.svelte'
   import { downloads } from '../lib/downloads.svelte'
   import { cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
-  import { fitRail } from '../lib/rail-fit'
+  import Rail from './Rail.svelte'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
   import MediaCard from './MediaCard.svelte'
@@ -421,29 +421,28 @@
     {/if}
 
     {#if currentShelf && otherShelves.length > 0}
-      <section class="shelf">
-        <div class="tabs" role="tablist" aria-label="Release type">
-          {#each otherShelves as shelf, i (shelf.title)}
-            <button
-              class="tab"
-              class:on={i === shelfIndex}
-              role="tab"
-              aria-selected={i === shelfIndex}
-              onclick={() => (activeShelf = i)}
-            >
-              {shelfLabel(shelf.title)}
-            </button>
+      {#key shelfIndex}
+        <Rail>
+          {#snippet header()}
+            <div class="tabs" role="tablist" aria-label="Release type">
+              {#each otherShelves as shelf, i (shelf.title)}
+                <button
+                  class="tab"
+                  class:on={i === shelfIndex}
+                  role="tab"
+                  aria-selected={i === shelfIndex}
+                  onclick={() => (activeShelf = i)}
+                >
+                  {shelfLabel(shelf.title)}
+                </button>
+              {/each}
+            </div>
+          {/snippet}
+          {#each currentShelf.items as entry (entry.kind + entry.id + entry.title)}
+            <MediaCard item={entry} onActivate={(target) => activate(currentShelf.items, target)} />
           {/each}
-        </div>
-
-        {#key shelfIndex}
-          <div class="rail" use:fitRail>
-            {#each currentShelf.items as entry (entry.kind + entry.id + entry.title)}
-              <MediaCard item={entry} onActivate={(target) => activate(currentShelf.items, target)} />
-            {/each}
-          </div>
-        {/key}
-      </section>
+        </Rail>
+      {/key}
     {/if}
   {:else if displaySongs.length > 0}
     <ol class="tracks">
@@ -735,26 +734,6 @@
     border-color: transparent;
     color: #08080b;
     font-weight: 550;
-  }
-
-  .rail {
-    display: flex;
-    gap: 18px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 2px 4px 8px;
-    margin: -2px -4px 0;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-  }
-
-  .rail::-webkit-scrollbar {
-    height: 8px;
-  }
-
-  .rail::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
   }
 
   .tracks {
