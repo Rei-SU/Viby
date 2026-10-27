@@ -55,6 +55,7 @@ ones that touch main-process modules.
 | `downloads-manager` | yt-dlp progress parsing (known/unknown totals) and transient-vs-permanent failure classification |
 | `download-groups` | Library download split: collection-owned vs loose songs, album order, offline artwork fallbacks |
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
+| `startup` | login-item payloads: dev no-op, Windows path/args, macOS bundle, unsupported platforms; defaults |
 | `listening` | seven-day summaries, duration weighting, duplicate history, history rows and their artist/release links |
 | `artist-credits` | credit parsing: the leading artist run, separator trimming, conservative splitting of combined names, structured credits winning over the fallback |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
@@ -155,7 +156,8 @@ Find the row for what you changed; run what it lists.
 | `src/main/library.ts` | unit `library` · e2e `library` · behaviour |
 | `src/main/session.ts` | e2e `resume` |
 | `src/main/cache/**`, `src/main/media.ts`, `viby-media://` handler | e2e `playback`, `resume` |
-| `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | e2e `settings`, `playback` (volume restore) · behaviour |
+| `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | unit `startup` · e2e `settings`, `playback` (volume restore) · behaviour |
+| `src/main/startup.ts`, `src/main/index.ts`, `src/main/windows.ts` | unit `startup` · e2e `settings` |
 | `src/main/updater*.ts`, `release-feed.ts`, `update-manifest.ts`, `src/renderer/lib/updates.svelte.ts` | unit `version`, `updates` · manual update smoke test (Windows) |
 | `.github/workflows/release.yml`, `scripts/check-release-notes.mjs` | unit `release-notes` · inspect the draft release body on the next tag |
 | `src/main/json-store.ts` | unit `library` · e2e `library`, `resume` |
@@ -206,6 +208,7 @@ Find the row for what you changed; run what it lists.
 - **Window drag/resize** — needs a human (the drag strip's computed style is
   asserted, but not that the window moves).
 - **Memory/CPU budget** — `npm run measure` against the packaged app (run `npm run dist:dir` first). It samples RSS/CPU per process across idle, playback, lyrics and a 2-minute soak.
+- **Login-item registration and a minimized login launch** — need a packaged build. Check Login Items (macOS) or Startup apps (Windows), sign out/in, and confirm Viby starts (minimized when that toggle is on). Dev runs never touch the OS login items.
 - **Packaging** — run `npm run dist:dir`, launch the app in `dist/mac/`, play a
   track, and confirm `ps` shows `Viby.app/Contents/Resources/python/bin/python3`
   running `yt-dlp-src/__main__.py`. That is the "no system Python" proof.

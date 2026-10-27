@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 13)
+Last updated: 2026-10-27 (rev 15)
 
 ---
 
@@ -154,7 +154,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 - Resume where you left off on relaunch; restore queue.
 - Sleep prevention while playing (Electron `powerSaveBlocker`).
 - Media keys + OS Now Playing via `mediaSession`, with artwork.
-- Settings: quality (best available / data saver ~64kbps, honoured exactly — no auto-downgrade), autoplay, background playback (close hides to the tray/menu bar), cache cap and clear cache, offline mode, and downloads storage.
+- Settings: quality (best available / data saver ~64kbps, honoured exactly — no auto-downgrade), autoplay, background playback (close hides to the tray/menu bar), launch at login (on by default) with an optional minimized start, cache cap and clear cache, offline mode, and downloads storage.
 - On a slow network: buffer, never silently reduce quality. If it can't keep up we tell you, we don't decide for you.
 
 ### 5.2 Search
@@ -364,6 +364,10 @@ The full specification and current behavior are in §17. Connectivity + offline 
 Settled: cache cap (1GB), quality policy (never downgrade), Spotify (no credentials), phase order (skip spike, straight to P1), language (English), charts (dedicated page removed; shelves stay in Home), accounts (optional, local-first, post-v1 — see §9 P6), repeat-one (restarts the track), and history retention (last 5,000 plays).
 
 No blocking product questions remain. P5 is shipped with macOS signing deferred; P7d's remaining manual edge cases and P6 track the remaining work.
+
+### Known debt
+
+- **Customisable keyboard shortcuts.** The player key set in §13 is fixed by the build. Settings should eventually let each action be rebound, flag conflicting bindings, offer a reset to defaults, and persist the map with the other settings; labels need to follow the platform (`⌘` on macOS, `Ctrl` on Windows). Deferred until the fixed set has seen real use, so the defaults are informed by it rather than guessed up front.
 
 ## 11. Build notes and gotchas
 
@@ -678,6 +682,14 @@ The renderer only handled Ctrl/Cmd+K and the search dropdown keys, so Space did 
 - **/** — focus search, alongside Ctrl/Cmd+K
 
 Text fields, selects, ranges and checkboxes keep their own keys; rows use Enter to play, because Space is the global toggle (the common click-a-row-then-pause flow depends on it). Native buttons and links are deliberately not exempt from Space for the same reason. Media keys and Now Playing still come from `navigator.mediaSession`.
+
+### Launch at login (2026-10-27)
+
+Settings gains **Launch at login** (on by default) and **Start minimized** (off by default). A packaged build registers a login item on startup and whenever either toggle changes (`src/main/startup.ts`). Registration is deliberately packaged-only: in development the executable is Electron itself, so a login item would point at the wrong app; dev runs just persist the setting.
+
+Windows registers `process.execPath` and adds `--launch-at-login` when Start minimized is on. A normal shortcut has no flag, so only a login start minimizes. macOS login items cannot carry arguments, so the app reads `wasOpenedAtLogin` from `getLoginItemSettings()`. Linux is left alone.
+
+A minimized login start shows the window inactive and then minimizes it, so it lands in the taskbar or Dock and can be restored without requiring the tray; it is never hidden. macOS may report the item as requiring approval in System Settings → Login Items (Electron exposes `requires-approval`); that is the OS's decision and is not surfaced in the app yet.
 
 ## 14. Library (shipped)
 

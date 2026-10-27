@@ -22,7 +22,7 @@ export function showMainWindow(): BrowserWindow {
   return createWindow()
 }
 
-export function createWindow(): BrowserWindow {
+export function createWindow(options: { startMinimized?: boolean } = {}): BrowserWindow {
   const existing = getMainWindow()
   if (existing) return existing
 
@@ -62,7 +62,16 @@ export function createWindow(): BrowserWindow {
     }
   })
 
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => {
+    if (options.startMinimized) {
+      // A login launch should not steal focus. Showing it inactive first is
+      // what gives the window a taskbar/Dock button it can be restored from.
+      win.showInactive()
+      win.minimize()
+    } else {
+      win.show()
+    }
+  })
   mainWindow = win
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null

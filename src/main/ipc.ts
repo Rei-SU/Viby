@@ -59,6 +59,7 @@ import { createNativeUpdater } from './updater-native'
 import { fetchLatestRelease } from './release-feed'
 import { downloadMacInstaller } from './updater-manual'
 import { applyBackgroundPlayback } from './background'
+import { applyLaunchAtLogin } from './startup'
 
 const resolver = new Resolver()
 const inflightDownloads = new Set<string>()
@@ -258,6 +259,11 @@ let importResolveController: AbortController | null = null
     // Closing must only hide the window while a tray icon exists to bring it back.
     if (patch.backgroundPlayback !== undefined) {
       applyBackgroundPlayback(next.backgroundPlayback)
+    }
+
+    // The OS login item must follow the toggle (and the minimized argument).
+    if (patch.launchAtLogin !== undefined || patch.launchMinimized !== undefined) {
+      applyLaunchAtLogin(next)
     }
 
     // Stream URLs were resolved for the old quality ceiling; drop them so the

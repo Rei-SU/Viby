@@ -237,6 +237,45 @@
         <span class="thumb"></span>
       </button>
     </div>
+
+    <div class="row">
+      <div class="label">
+        <span>Launch at login</span>
+        <span class="hint">Open Viby when you sign in to this computer.</span>
+      </div>
+      <button
+        class="switch"
+        class:on={current?.launchAtLogin}
+        role="switch"
+        aria-checked={current?.launchAtLogin}
+        aria-label="Launch at login"
+        onclick={() => patch({ launchAtLogin: !current?.launchAtLogin })}
+      >
+        <span class="thumb"></span>
+      </button>
+    </div>
+
+    <div class="row">
+      <div class="label">
+        <span>Start minimized</span>
+        <span class="hint">
+          A login launch opens in the taskbar or Dock without taking focus. Restore it from
+          there, or from the {trayName} when that is enabled.
+        </span>
+      </div>
+      <button
+        class="switch"
+        class:on={current?.launchMinimized}
+        role="switch"
+        aria-checked={current?.launchMinimized}
+        aria-label="Start minimized"
+        disabled={!current?.launchAtLogin}
+        title={current?.launchAtLogin ? undefined : 'Turn on Launch at login first'}
+        onclick={() => patch({ launchMinimized: !current?.launchMinimized })}
+      >
+        <span class="thumb"></span>
+      </button>
+    </div>
   </section>
 
   <section>
@@ -518,6 +557,11 @@
     display: flex;
     align-items: center;
     transition: background var(--speed) var(--ease);
+  }
+
+  .switch:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 
   .switch .thumb {

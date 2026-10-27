@@ -90,6 +90,10 @@ export type Settings = {
   autoplay: boolean
   /** The close button hides the window to the tray/menu bar instead of stopping playback. */
   backgroundPlayback: boolean
+  /** Open Viby when the user signs in to this computer. */
+  launchAtLogin: boolean
+  /** When launched by the login item, start in the taskbar/Dock instead of frontmost. */
+  launchMinimized: boolean
   /** `auto` follows connectivity; `offline` is the manual switch. */
   offlineMode: OfflineMode
   /** Check GitHub for a newer release on launch. Updates are never silent. */

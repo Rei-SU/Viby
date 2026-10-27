@@ -8,6 +8,7 @@ import { applyBackgroundPlayback } from './background'
 import { initTaskbar } from './taskbar'
 import { isQuitting, keepsAppAlive, markQuitting } from './lifecycle'
 import { settings } from './settings'
+import { applyLaunchAtLogin, launchedAtLogin } from './startup'
 
 // Dev-only: lets the app be driven and inspected over the DevTools protocol
 // (PLAN §12). Never enabled in a packaged build.
@@ -85,13 +86,17 @@ if (!gotLock) {
       installMenu()
 
       // Touch settings once so defaults are written on first launch.
-      settings().get()
+      const current = settings().get()
+      // Keep the OS login item in sync with the saved choice (packaged only).
+      applyLaunchAtLogin(current)
+      const startMinimized =
+        current.launchAtLogin && current.launchMinimized && launchedAtLogin()
 
       handleMediaProtocol()
       registerIpc()
       initTaskbar()
-      createWindow()
-      applyBackgroundPlayback(settings().get().backgroundPlayback)
+      createWindow({ startMinimized })
+      applyBackgroundPlayback(current.backgroundPlayback)
 
       app.on('activate', () => {
         showMainWindow()

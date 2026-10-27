@@ -13,6 +13,10 @@ export const DEFAULT_SETTINGS: Settings = {
   autoplay: true,
   /** Off preserves the platform-default close behavior until the user opts in. */
   backgroundPlayback: false,
+  /** On by default: Viby is meant to be running before you reach for it. */
+  launchAtLogin: true,
+  /** A visible window is the least surprising first launch; this is opt-in. */
+  launchMinimized: false,
   offlineMode: 'auto',
   /** Check GitHub for a newer release on launch. Updates are never silent. */
   autoUpdateCheck: true,
@@ -55,6 +59,8 @@ function sanitizePatch(patch: Partial<Settings> | null | undefined): Partial<Set
   if (input.backgroundPlayback !== undefined) {
     clean.backgroundPlayback = Boolean(input.backgroundPlayback)
   }
+  if (input.launchAtLogin !== undefined) clean.launchAtLogin = Boolean(input.launchAtLogin)
+  if (input.launchMinimized !== undefined) clean.launchMinimized = Boolean(input.launchMinimized)
   if (input.offlineMode !== undefined) {
     clean.offlineMode = input.offlineMode === 'offline' ? 'offline' : 'auto'
   }

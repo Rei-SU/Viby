@@ -1,6 +1,7 @@
 import { sleep } from './lib.mjs'
 
-export const description = 'Settings: open from the sidebar, playback/cache/window toggles persist'
+export const description =
+  'Settings: playback, cache, window and startup toggles persist'
 
 export async function run(app, check) {
   const original = await app.evaluate('window.__viby.api.settings.get()')
@@ -93,6 +94,82 @@ export async function run(app, check) {
       JSON.stringify(background)
     )
 
+    const launch = await app.evaluate(
+      `
+      (async () => {
+        const rowByLabel = (label) =>
+          [...document.querySelectorAll('section .row')].find(
+            (item) => item.querySelector('.label > span')?.textContent?.trim() === label
+          )
+        const loginRow = rowByLabel('Launch at login')
+        const minimizedRow = rowByLabel('Start minimized')
+        const loginButton = loginRow?.querySelector('.switch')
+        const minimizedButton = minimizedRow?.querySelector('.switch')
+        const read = () => window.__viby.api.settings.get()
+        const wait = () => new Promise((r) => setTimeout(r, 350))
+        if (!loginRow || !minimizedRow || !loginButton || !minimizedButton) return { found: false }
+
+        const start = await read()
+        // Normalize to "login on" so the dependent switch is testable.
+        if (!start.launchAtLogin) {
+          loginButton.click()
+          await wait()
+        }
+        const loginOn = (await read()).launchAtLogin
+        const minStart = (await read()).launchMinimized
+        minimizedButton.click()
+        await wait()
+        const minAfter = (await read()).launchMinimized
+        loginButton.click()
+        await wait()
+        const loginAfter = (await read()).launchAtLogin
+        const disabled = minimizedButton.disabled
+        loginButton.click()
+        await wait()
+        if ((await read()).launchMinimized !== minStart) {
+          minimizedButton.click()
+          await wait()
+        }
+        if ((await read()).launchAtLogin !== start.launchAtLogin) {
+          loginButton.click()
+          await wait()
+        }
+        return {
+          found: true,
+          start,
+          loginOn,
+          minStart,
+          minAfter,
+          loginAfter,
+          disabled,
+          end: await read()
+        }
+      })()
+    `,
+      { userGesture: true }
+    )
+    check(
+      'launch at login toggle is available',
+      launch.found === true && launch.loginOn === true,
+      JSON.stringify(launch)
+    )
+    check(
+      'start minimized persists',
+      launch.minAfter === !launch.minStart,
+      JSON.stringify(launch)
+    )
+    check(
+      'start minimized depends on launch at login',
+      launch.loginAfter === false && launch.disabled === true,
+      JSON.stringify(launch)
+    )
+    check(
+      'startup toggles restore',
+      launch.end.launchAtLogin === launch.start.launchAtLogin &&
+        launch.end.launchMinimized === launch.start.launchMinimized,
+      JSON.stringify(launch)
+    )
+
     const cap = await app.evaluate(
       `
       (async () => {
@@ -125,7 +202,9 @@ export async function run(app, check) {
         const next = await window.__viby.api.settings.set({
           audioQuality: ${JSON.stringify(original.audioQuality)},
           autoplay: ${JSON.stringify(original.autoplay)},
-          cacheCapBytes: ${JSON.stringify(original.cacheCapBytes)}
+          cacheCapBytes: ${JSON.stringify(original.cacheCapBytes)},
+          launchAtLogin: ${JSON.stringify(original.launchAtLogin)},
+          launchMinimized: ${JSON.stringify(original.launchMinimized)}
         })
         window.__viby.player.applySettings(next)
         return true
