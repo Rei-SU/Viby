@@ -36,6 +36,8 @@ export const CH = {
   playerPrefetch: 'player:prefetch',
   playerCancel: 'player:cancel',
   playerState: 'player:state',
+  playerTaskbar: 'player:taskbar',
+  playerCommand: 'player:command',
 
   sessionGet: 'session:get',
   sessionSet: 'session:set',
@@ -109,6 +111,21 @@ export type LyricsRequest = {
   album?: string
 }
 
+/**
+ * What the Windows taskbar thumbnail toolbar needs to draw the right controls.
+ * Sent on every player state change; main keeps only the latest one, so the
+ * hover preview is always drawn from current state.
+ */
+export type TaskbarState = {
+  hasTrack: boolean
+  playing: boolean
+  canPrevious: boolean
+  canNext: boolean
+}
+
+/** A media command from the taskbar thumbnail toolbar. */
+export type PlayerCommand = 'toggle' | 'previous' | 'next'
+
 export type ResolveRequest = {
   /** A YouTube Music / YouTube URL, or a bare 11-character video id. */
   input: string
@@ -147,6 +164,10 @@ export interface VibyApi {
     cancel(): void
     /** Tells main whether audio is currently playing, for the power blocker. */
     setPlaying(playing: boolean): void
+    /** Windows: mirror playback into the taskbar thumbnail toolbar. */
+    setTaskbarControls(state: TaskbarState): void
+    /** Windows: play/pause, previous and next from the taskbar thumbnail toolbar. */
+    onCommand(callback: (command: PlayerCommand) => void): () => void
   }
   catalog: {
     search(query: string, filter?: SearchFilterName): Promise<Result<CatalogItem[]>>

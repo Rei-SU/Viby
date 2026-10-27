@@ -84,6 +84,7 @@ class Player {
 
   private wired = false
   private handlersSet = false
+  private taskbarWired = false
   private recovering = false
   private recoveringFor: string | null = null
   private recoverToken = 0
@@ -129,6 +130,7 @@ class Player {
       window.addEventListener('beforeunload', () => this.persistSession(true))
     }
     this.setMediaHandlers()
+    this.setTaskbarHandlers()
 
     try {
       this.applySettings(await api.settings.get())
@@ -915,6 +917,34 @@ class Player {
     bind('seekbackward', (d) => this.seek(this.position - (d.seekOffset ?? 10)))
     bind('seekforward', (d) => this.seek(this.position + (d.seekOffset ?? 10)))
     this.handlersSet = true
+  }
+
+  /**
+   * Windows taskbar thumbnail toolbar. The shell cannot see the player, so every
+   * change that affects its three buttons is mirrored to main; the buttons send
+   * their commands back over `player:command`.
+   */
+  private setTaskbarHandlers(): void {
+    if (this.taskbarWired || api.platform !== 'win32') return
+    this.taskbarWired = true
+    api.player.onCommand((command) => {
+      if (command === 'toggle') this.toggle()
+      else if (command === 'next') this.next()
+      else this.previous()
+    })
+  }
+
+  syncTaskbarControls(): void {
+    if (api.platform !== 'win32') return
+    const hasTrack = Boolean(this.current)
+    api.player.setTaskbarControls({
+      hasTrack,
+      playing: this.playing,
+      // Previous always does something while a track is loaded: past three
+      // seconds it restarts the song instead of skipping.
+      canPrevious: hasTrack,
+      canNext: hasTrack && (this.queue.length > 1 || this.repeat !== 'off' || this.autoplay)
+    })
   }
 
   private syncMetadata(): void {

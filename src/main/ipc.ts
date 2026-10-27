@@ -28,7 +28,13 @@ import type {
   Track,
   YtDlpInfo
 } from '@shared/types'
-import { CH, type LyricsRequest, type ResolveRequest } from '@shared/ipc'
+import {
+  CH,
+  type LyricsRequest,
+  type ResolveRequest,
+  type TaskbarState
+} from '@shared/ipc'
+import { setTaskbarState } from './taskbar'
 import { qualityCapKbps, setSettings, settings } from './settings'
 import { session } from './session'
 import { cachedLyrics, getLyrics } from './lyrics'
@@ -481,6 +487,10 @@ let importResolveController: AbortController | null = null
       powerSaveBlocker.stop(blockerId)
       blockerId = null
     }
+  })
+
+  ipcMain.on(CH.playerTaskbar, (_e, next: TaskbarState) => {
+    setTaskbarState(next)
   })
 
   ipcMain.handle(CH.historyAdd, (_e, entry: HistoryEntry): void => {

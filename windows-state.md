@@ -47,12 +47,17 @@ validation; document as a required step.
 §9 checks were repeated successfully on 2026-10-25 (§11). Windows 10 uses the
 same x64 build; the maintainer accepted the Windows 11 pass as representative.
 
-### 1.3 `npm run icons` cannot run on Windows — Minor
+### 1.3 `npm run icons` cannot run on Windows — Closed
 `scripts/make-icons.py` shells out to macOS-only `iconutil` to build
-`resources/icon.icns`. On Windows the script fails at the iconutil step. The
-committed `icon.ico`/`icon.png` are usable, so this only blocks regenerating
+`resources/icon.icns`. On Windows the script failed at the iconutil step. The
+committed `icon.ico`/`icon.png` are usable, so this only blocked regenerating
 icons on Windows.
 **File:** `scripts/make-icons.py`
+
+**Status:** Closed. `iconutil` is now optional (the existing `.icns` is kept when
+it is missing), and `npm run icons` runs `scripts/make-icons.mjs`, which finds
+whichever of `python`/`py`/`python3` exists. Verified on Windows 11 with Python
+3 + Pillow.
 
 ### 1.4 `npm run measure` is macOS-only — Minor
 Hard-codes `dist/mac/Viby.app`, `ps`, and macOS process paths. Not runnable on
@@ -151,6 +156,28 @@ Edit/View menu for reload and DevTools. Packaged builds still hide the menu.
 `Ctrl+K` is handled (`event.metaKey || event.ctrlKey`) and the shortcut hint
 shows `Ctrl K`. No change needed.
 **File:** `src/renderer/components/SearchBar.svelte`
+
+### 4.4 Taskbar thumbnail toolbar (hover preview) — Verified
+The preview shown when hovering the taskbar button had no playback controls.
+Implemented with `BrowserWindow.setThumbarButtons`: previous / play-pause / next,
+theme-aware 32px PNGs (`resources/thumbar/{dark,light}`), state mirrored from the
+renderer over `player:taskbar` and commands returned over `player:command`.
+
+Two Windows/Electron traps, both found the hard way:
+
+- **`flags: ['enabled']` makes the whole call fail.** Electron maps it to
+  `THB_FLAGS` with an all-zero `dwFlags`; Windows then rejects the toolbar and
+  `setThumbarButtons` returns `false` with no error. Enabled is the default, so
+  only `['disabled']` is ever passed (`src/main/taskbar.ts`, `thumbarButton`).
+- **The first call must wait for the window to be visible.** The renderer sends
+  its first state before `ready-to-show`; a hidden window has no taskbar button
+  yet and the call also returns `false`.
+
+Verified on Windows 11 (Electron 45, dev build): hover shows the three buttons,
+clicking play/pause toggles playback and the button redraws as pause/play.
+
+**Files:** `src/main/taskbar.ts`, `src/shared/ipc.ts`, `src/preload/index.ts`,
+`src/renderer/lib/player.svelte.ts`, `scripts/make-icons.py`
 
 ---
 

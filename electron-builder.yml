@@ -26,6 +26,9 @@ extraResources:
   - from: resources/tray
     to: tray
     filter: ['**/*']
+  - from: resources/thumbar
+    to: thumbar
+    filter: ['**/*']
 
 asar: true
 

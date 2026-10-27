@@ -169,6 +169,12 @@
     if (lyrics.open && track) void lyrics.load(track)
   })
 
+  // Windows draws the hover preview's controls from whatever main was told, so
+  // every change that affects them (track, play state, queue) is mirrored there.
+  $effect(() => {
+    player.syncTaskbarControls()
+  })
+
   onMount(() => {
     void network.init()
     void downloads.init()

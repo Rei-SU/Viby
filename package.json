@@ -11,7 +11,7 @@
     "preview": "electron-vite preview",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && svelte-check --tsconfig ./tsconfig.web.json",
-    "icons": "python3 scripts/make-icons.py",
+    "icons": "node scripts/make-icons.mjs",
     "runtime": "node scripts/fetch-runtime.mjs",
     "runtime:mac": "node scripts/fetch-runtime.mjs --platform darwin --arch x64 && node scripts/fetch-runtime.mjs --platform darwin --arch arm64",
     "dist:mac": "npm run build && npm run runtime:mac && electron-builder --mac",

@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { CH, type LyricsRequest, type ResolveRequest, type VibyApi } from '@shared/ipc'
+import {
+  CH,
+  type LyricsRequest,
+  type PlayerCommand,
+  type ResolveRequest,
+  type TaskbarState,
+  type VibyApi
+} from '@shared/ipc'
 import type {
   DownloadCollectionInput,
   DownloadProgress,
@@ -46,7 +53,13 @@ const api: VibyApi = {
     resolve: (req: ResolveRequest) => ipcRenderer.invoke(CH.playerResolve, req),
     prefetch: (input: string) => ipcRenderer.send(CH.playerPrefetch, input),
     cancel: () => ipcRenderer.send(CH.playerCancel),
-    setPlaying: (playing: boolean) => ipcRenderer.send(CH.playerState, playing)
+    setPlaying: (playing: boolean) => ipcRenderer.send(CH.playerState, playing),
+    setTaskbarControls: (state: TaskbarState) => ipcRenderer.send(CH.playerTaskbar, state),
+    onCommand: (callback: (command: PlayerCommand) => void) => {
+      const handler = (_event: unknown, command: PlayerCommand): void => callback(command)
+      ipcRenderer.on(CH.playerCommand, handler)
+      return () => ipcRenderer.removeListener(CH.playerCommand, handler)
+    }
   },
   catalog: {
     search: (query: string, filter?: SearchFilterName) =>
