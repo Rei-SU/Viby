@@ -1,7 +1,7 @@
 import { sleep } from './lib.mjs'
 
 export const description =
-  'Home: recent history rows, the history panel, weekly pulse and mood entry points'
+  'Home: recent history rows, the history panel, weekly listening stats and mood entry points'
 
 const titles = [
   'Home test one',
@@ -63,8 +63,23 @@ export async function run(app, check) {
             actions: row.querySelectorAll('.row-action').length
           })),
           showMore: Boolean(document.querySelector('.recent-card .more')),
+          weekTitle: document.querySelector('.week-head h2')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
+          weekClock: document.querySelector('.week-clock .pixel-clock')?.getAttribute('data-clock-value') ?? null,
+          weekClockLabel: document.querySelector('.week-clock .pixel-clock')?.getAttribute('aria-label') ?? null,
+          weekClockPixels: document.querySelectorAll('.week-clock .pixel-clock rect').length,
+          weekUnits: [...document.querySelectorAll('.week-clock .unit')].map((node) =>
+            node.textContent?.trim()
+          ),
+          weekSub: document.querySelector('.week-sub')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
           pulse: document.querySelectorAll('.week-pulse > span').length,
-          total: document.querySelector('.week-total')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
+          shares: document.querySelectorAll('.week-card .share').length,
+          weekRows: [...document.querySelectorAll('.week-card .artist')].map((row) => ({
+            rank: row.querySelector('.rank')?.textContent?.trim() ?? null,
+            name: row.querySelector('.artist-copy strong')?.textContent?.trim() ?? null,
+            meta: row.querySelector('.artist-copy span')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
+            time: row.querySelector('.artist-time')?.textContent?.trim() ?? null
+          })),
+          weekNote: document.querySelector('.week-note')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
           moods: [...document.querySelectorAll('.mood-copy strong')].map((node) => node.textContent?.trim()),
           overflow: document.documentElement.scrollWidth > window.innerWidth
         }))()
@@ -89,14 +104,89 @@ export async function run(app, check) {
       JSON.stringify(state?.rows)
     )
     check('the card offers Show more', state?.showMore === true)
-    check('the weekly card shows a seven-day pulse', state?.pulse === 7, `${state?.pulse}`)
-    check('the listening total is rendered', /\d/.test(state?.total ?? ''), state?.total ?? '')
+    check(
+      'the weekly card uses the Vibing Time title',
+      state?.weekTitle === 'Vibing Time this week',
+      String(state?.weekTitle)
+    )
+    check(
+      'the time is a pixel clock beside the title',
+      /^\d{2,3}:\d{2}$/.test(state?.weekClock ?? '') &&
+        state.weekClockPixels > 20 &&
+        /listened this week/.test(state?.weekClockLabel ?? '') &&
+        state.weekUnits.join(',') === 'HRS,MIN',
+      JSON.stringify({
+        clock: state?.weekClock,
+        label: state?.weekClockLabel,
+        pixels: state?.weekClockPixels,
+        units: state?.weekUnits
+      })
+    )
+    check(
+      'the plays and songs sit under the title',
+      /plays/.test(state?.weekSub ?? '') && /songs/.test(state?.weekSub ?? ''),
+      String(state?.weekSub)
+    )
+    check('the old week chart is gone', state?.pulse === 0, `${state?.pulse}`)
+    check(
+      'top artists are ranked without progress bars',
+      state?.shares === 0 &&
+        state.weekRows.length > 0 &&
+        state.weekRows.every((row) => row.rank && row.name && row.meta),
+      JSON.stringify(state?.weekRows)
+    )
+    check(
+      'the most active day is rendered',
+      (state?.weekNote ?? '').includes('Most active day'),
+      JSON.stringify({ note: state?.weekNote })
+    )
     check(
       'Home offers four mood cards',
       Array.isArray(state?.moods) && state.moods.join(',') === 'Focus,Energy,Late night,Throwbacks',
       JSON.stringify(state?.moods)
     )
     check('Home does not overflow horizontally', state?.overflow === false)
+
+    // The clock scrambles once per mount, then settles. Leaving and returning
+    // to Home remounts it; no CSS animation should keep running.
+    const boot = await app.evaluate(
+      `(async () => {
+        const { nav } = window.__viby
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+        const first = document.querySelector('.week-clock .pixel-clock')
+        nav.go('library')
+        await wait(350)
+        nav.go('home')
+        let second = null
+        for (let i = 0; i < 60 && !second; i++) {
+          await wait(100)
+          second = document.querySelector('.week-clock .pixel-clock')
+        }
+        const sawScramble = second?.getAttribute('data-scrambling') === 'true'
+        for (let i = 0; i < 40 && second?.getAttribute('data-scrambled') !== 'true'; i++) {
+          await wait(100)
+        }
+        const clock = document.querySelector('.week-clock .pixel-clock')
+        const style = clock ? getComputedStyle(clock.querySelector('.clock')) : null
+        return {
+          remounted: Boolean(first && clock && first !== clock),
+          sawScramble,
+          settled: clock?.getAttribute('data-scrambled') === 'true',
+          display: clock?.getAttribute('data-display') ?? null,
+          value: clock?.getAttribute('data-clock-value') ?? null,
+          animation: style?.animationName ?? null
+        }
+      })()`,
+      { userGesture: true }
+    )
+    check(
+      'the pixel clock scrambles once when Home returns',
+      boot.remounted &&
+        boot.settled &&
+        boot.display === boot.value &&
+        boot.animation === 'none',
+      JSON.stringify(boot)
+    )
 
     const panel = await app.evaluate(
       `(async () => {

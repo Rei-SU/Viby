@@ -59,6 +59,7 @@ ones that touch main-process modules.
 | `listening` | seven-day summaries, duration weighting, duplicate history, history rows and their artist/release links |
 | `artist-credits` | credit parsing: the leading artist run, separator trimming, conservative splitting of combined names, structured credits winning over the fallback |
 | `track-title` | recording identity: official video/audio/lyric/4K markers ignored, live/remix/acoustic kept distinct, case and spacing normalised |
+| `pixel-scramble` | dot-matrix boot: random digits, fixed colon, left-to-right lock order and the final landed value |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
@@ -116,7 +117,7 @@ the app while they run — they own the queue.
 | Scenario | Covers |
 |---|---|
 | `images` | Home artwork actually renders, home carousels stay inside the docked page, no broken images |
-| `home` | recent history rows, the history panel, weekly pulse, mood icons and mood pages |
+| `home` | recent history rows, the history panel, weekly listening stats (pixel clock with HRS/MIN units, no chart or progress bars), the one-shot scramble on return, mood icons and mood pages |
 | `carousel` | rails hide their scrollbar, header chevrons page the row, the wheel scrolls sideways on Windows |
 | `shortcuts` | Space, transport/seek/volume keys, mute/shuffle/repeat/like, Escape, `/`, and text-field guards |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
@@ -185,6 +186,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/keyboard.ts` | e2e `shortcuts` · behaviour |
 | `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel` |
 | `src/renderer/components/DetailView.svelte`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening` |
+| `src/renderer/components/PixelClock.svelte`, `src/renderer/lib/pixel-scramble.ts` | unit `pixel-scramble` · e2e `home` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |
 | `src/renderer/App.svelte` | all e2e (layout, routes, panels) |

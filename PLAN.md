@@ -651,6 +651,14 @@ The Home card grouped plays by release and capped each group at two songs, which
 
 Two pitfalls shaped the code. `history.load()` reads its cache guard through `untrack`, because Home calls it from an effect: a tracked read made every response re-trigger the effect, invalidating each request so the summary never stuck. Rows are not keyed by track id: the history can hold the same song several times, and Svelte aborts a keyed each with `each_key_duplicate` — the card keys by position, the panel by entry plus position.
 
+### Listening snapshot (2026-10-27)
+
+The weekly card carried a tiny seven-bar pulse chart and a share bar under every artist, which looked like a dashboard and answered questions nobody asked. It is now a clean reading of the week: **Vibing Time this week** is the only heading, the plays and unique songs sit underneath it, and the total time is a larger 5×7 dot-matrix clock on the right of the same row instead of a line of its own. The clock has no surrounding panel; the digits sit directly on the card. It is drawn in SVG (`PixelClock.svelte`), so it needs no pixel font, stays crisp and inherits the app's monochrome palette. Tiny **HRS** and **MIN** captions sit under their digit groups, so the colon cannot be mistaken for a time of day. The chart and every share bar are gone.
+
+The digits scramble like a slot display on mount: unlocked digits cycle randomly, then lock left-to-right onto the real `H:MM` in under a second (`lib/pixel-scramble.ts`). It runs **once per mount** — on the first launch and every return to Home, because Home is unmounted while you are elsewhere — and never loops while the page stays open or when the summary refreshes. Reduced motion shows the final value immediately.
+
+Top artists are ranked rows — `01`, a circular portrait, the name, `plays · songs`, and time on the right — separated by hairlines, following the clean artwork-led list used by Spotify's weekly Listening stats. The freed space ends with one quiet fact: **Most active day**, labelled from the end of the rolling 24-hour bucket so it names the calendar day it mostly covers. Clicking a row still opens the artist, and the artist portraits are the same session-cached lookups as before. Empty and duration-less history degrade to "0m" / "Nothing played yet" and a plays-only line rather than inventing time.
+
 ### Mood pages (2026-10-27)
 
 The **Start something** cards borrowed random artwork from Home shelves and sent the user to a name search. They now carry motion icons — a brain for Focus, a bolt for Energy, a crescent for Late night, a spinning disc for Throwbacks — that animate on hover/focus (and stay still under reduced motion), and open YouTube Music's own mood/genre pages: Focus → Focus, Energy → **Energize**, Late night → **Chill**, Throwbacks → **Decades**.

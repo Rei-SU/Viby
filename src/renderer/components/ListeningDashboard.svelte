@@ -9,24 +9,67 @@
   import { artwork } from '../lib/artwork.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import PixelClock from './PixelClock.svelte'
   import TrackRow from './TrackRow.svelte'
 
   let { items, summary }: { items: CatalogItem[]; summary: ListeningSummary } = $props()
 
+  const DAY_MS = 24 * 60 * 60 * 1000
   const latest = $derived(items[0])
-  const totalLabel = $derived(
-    summary.totalSeconds > 0 ? listeningTime(summary.totalSeconds) : `${summary.uniqueTracks} songs`
-  )
-  const totalDetail = $derived(
-    summary.totalSeconds > 0 ? `${summary.uniqueTracks} songs` : 'this week'
-  )
   const artists = $derived(summary.artists.filter((artist) => artist.name !== 'Unknown artist'))
+
+  /**
+   * Weekly listening shown as H:MM. The badge is a dot-matrix clock, not a
+   * time of day: 17 hours and 22 minutes across the last seven days.
+   */
+  const clock = $derived.by(() => {
+    const totalMinutes = Math.max(0, Math.round(summary.totalSeconds / 60))
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    return {
+      hasTime: summary.totalSeconds > 0 || summary.plays === 0,
+      value: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+      label: `${plural(hours, 'hour', 'hours')} ${plural(minutes, 'minute', 'minutes')} listened this week`
+    }
+  })
+
+  const fallbackLabel = $derived(plural(summary.plays, 'play', 'plays'))
+
+  const totalDetail = $derived.by(() => {
+    if (summary.plays === 0) return 'Nothing played yet'
+    const plays = plural(summary.plays, 'play', 'plays')
+    const songs = plural(summary.uniqueTracks, 'song', 'songs')
+    return summary.totalSeconds > 0 ? `${plays} · ${songs}` : songs
+  })
+
+  /**
+   * The busiest 24-hour bucket, labelled from its end date: the window is
+   * rolling, so the end of the bucket is the calendar day it mostly covers.
+   */
+  const bestDay = $derived.by(() => {
+    if (summary.plays === 0) return null
+    const byTime = summary.totalSeconds > 0
+    let best = 0
+    for (let i = 1; i < summary.days.length; i++) {
+      const value = byTime ? summary.days[i].seconds : summary.days[i].plays
+      const current = byTime ? summary.days[best].seconds : summary.days[best].plays
+      if (value > current) best = i
+    }
+    const bucket = summary.days[best]
+    if ((byTime ? bucket.seconds : bucket.plays) <= 0) return null
+
+    const end = new Date(summary.since + (best + 1) * DAY_MS - 1)
+    return {
+      label: new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(end),
+      seconds: bucket.seconds
+    }
+  })
 
   let artistImages = $state<Record<string, string | null>>({})
   const pendingImages = new Set<string>()
 
   $effect(() => {
-    for (const artist of artists.slice(0, 3)) {
+    for (const artist of artists.slice(0, 4)) {
       if (artist.key in artistImages || pendingImages.has(artist.key)) continue
       pendingImages.add(artist.key)
       void api.catalog
@@ -53,6 +96,10 @@
     return remainder ? `${hours}h ${remainder}m` : `${hours}h`
   }
 
+  function plural(count: number, one: string, many: string): string {
+    return `${count} ${count === 1 ? one : many}`
+  }
+
   function showHistory(): void {
     sidePanel.toggle('history')
   }
@@ -75,20 +122,6 @@
     searchState.setQuery(artist.name)
     searchState.submit('artists')
     nav.go('search')
-  }
-
-  function share(artist: ListeningArtist): number {
-    if (summary.totalSeconds > 0) return Math.min(1, artist.seconds / summary.totalSeconds)
-    return summary.plays > 0 ? Math.min(1, artist.plays / summary.plays) : 0
-  }
-
-  const pulsePeak = $derived(
-    Math.max(1, ...summary.days.map((day) => (summary.totalSeconds > 0 ? day.seconds : day.plays)))
-  )
-
-  function pulseHeight(day: { seconds: number; plays: number }): number {
-    const value = summary.totalSeconds > 0 ? day.seconds : day.plays
-    return Math.max(0.08, value / pulsePeak)
   }
 </script>
 
@@ -122,50 +155,60 @@
   </div>
 
   <aside class="week-card">
-    <span class="eyebrow">Past 7 days</span>
-    <h2>Listening snapshot</h2>
-    <div class="week-total">
-      <strong>{totalLabel}</strong>
-      <span>{totalDetail}</span>
-    </div>
+    <header class="week-head">
+      <div class="week-title">
+        <h2>Vibing Time <span>this week</span></h2>
+        <p class="week-sub">{totalDetail}</p>
+      </div>
+      <span
+        class="week-clock"
+        class:text={!clock.hasTime}
+        title={clock.hasTime ? clock.label : `${fallbackLabel} this week`}
+      >
+        {#if clock.hasTime}
+          <PixelClock value={clock.value} label={clock.label} height={38} units />
+        {:else}
+          <span class="week-clock-text">{fallbackLabel}</span>
+        {/if}
+      </span>
+    </header>
 
-    <div class="week-pulse" aria-hidden="true">
-      {#each summary.days as day, i}
-        <span class:pulse-current={i === 6}>
-          <span style="--height: {pulseHeight(day)}; --delay: {i * 45}ms"></span>
-        </span>
-      {/each}
-    </div>
-
+    <span class="list-label">Top artists</span>
     {#if artists.length > 0}
-      <span class="section-label">Top artists</span>
       <div class="artist-list">
-        {#each artists.slice(0, 3) as artist, i (artist.key)}
-          <button class="artist" onclick={() => openArtist(artist)}>
-            <span class="artist-main">
-              <span class="rank">0{i + 1}</span>
-              {#if artistImages[artist.key]}
-                <Cover src={artwork.src(artistImages[artist.key] ?? undefined)} size={30} radius={15} alt="" />
-              {:else}
-                <span class="artist-monogram" aria-hidden="true">{monogram(artist.name)}</span>
-              {/if}
-              <span class="artist-copy">
-                <strong>{artist.name}</strong>
-                <span>{artist.tracks} {artist.tracks === 1 ? 'song' : 'songs'}</span>
-              </span>
-              {#if artist.seconds > 0}<span class="artist-time">{listeningTime(artist.seconds)}</span>{/if}
+        {#each artists.slice(0, 4) as artist, i (artist.key)}
+          <button class="artist" onclick={() => openArtist(artist)} title={`Open ${artist.name}`}>
+            <span class="rank tabular">{String(i + 1).padStart(2, '0')}</span>
+            {#if artistImages[artist.key]}
+              <Cover src={artwork.src(artistImages[artist.key] ?? undefined)} size={36} radius={18} alt="" />
+            {:else}
+              <span class="artist-monogram" aria-hidden="true">{monogram(artist.name)}</span>
+            {/if}
+            <span class="artist-copy">
+              <strong class="truncate">{artist.name}</strong>
+              <span>{plural(artist.plays, 'play', 'plays')} · {plural(artist.tracks, 'song', 'songs')}</span>
             </span>
-            <span class="share" aria-hidden="true">
-              <span style="--share: {share(artist)}; --delay: {i * 60}ms"></span>
-            </span>
+            {#if artist.seconds > 0}
+              <span class="artist-time">{listeningTime(artist.seconds)}</span>
+            {/if}
           </button>
         {/each}
       </div>
     {:else}
-      <p class="empty">
+      <p class="empty artists-empty">
         {summary.plays > 0
           ? 'Artist names will appear as Viby learns more from the catalogue.'
           : 'Play something to start your weekly snapshot.'}
+      </p>
+    {/if}
+
+    {#if bestDay}
+      <p class="week-note">
+        <span>Most active day</span>
+        <span>
+          <strong>{bestDay.label}</strong>
+          {#if bestDay.seconds > 0}<span class="note-sep">·</span> {listeningTime(bestDay.seconds)}{/if}
+        </span>
       </p>
     {/if}
   </aside>
@@ -225,6 +268,54 @@
     letter-spacing: -0.025em;
   }
 
+  .week-head {
+    /* Align the title with the peer card's title, which sits under an eyebrow
+       of its own. The badge keeps the time on this line. */
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 14px;
+  }
+
+  .week-title {
+    min-width: 0;
+  }
+
+  .week-head h2 {
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .week-head h2 span {
+    color: var(--text-faint);
+    font-weight: 500;
+  }
+
+  .week-sub {
+    margin: 3px 0 0;
+    color: var(--text-faint);
+    font-size: 10.5px;
+  }
+
+  .week-clock {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    color: var(--text);
+  }
+
+  .week-clock.text {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .week-clock-text {
+    font-variant-numeric: tabular-nums;
+  }
+
   .resume {
     display: inline-flex;
     align-items: center;
@@ -276,102 +367,50 @@
     gap: 1px;
   }
 
-  .week-total {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin: 12px 0 16px;
-  }
-
-  .week-total strong {
-    color: var(--text);
-    font-size: 30px;
-    font-weight: 650;
-    letter-spacing: -0.045em;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .week-total span {
-    color: var(--text-faint);
-    font-size: 10.5px;
-  }
-
-  .week-pulse {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    align-items: end;
-    gap: 5px;
-    height: 24px;
-    margin: -3px 0 16px;
-  }
-
-  .week-pulse > span {
-    display: flex;
-    align-items: flex-end;
-    height: 100%;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.035);
-  }
-
-  .week-pulse > span > span {
-    width: 100%;
-    height: 100%;
-    border-radius: inherit;
-    background: rgba(255, 255, 255, 0.18);
-    transform: scaleY(var(--height));
-    transform-origin: bottom;
-    animation: pulse-in 500ms var(--ease) var(--delay) both;
-  }
-
-  .week-pulse > .pulse-current > span {
-    background: rgba(255, 255, 255, 0.78);
-  }
-
-  .section-label {
-    margin-bottom: 5px;
+  .list-label {
+    margin-top: 18px;
     color: var(--text-faint);
     font-size: 10px;
   }
 
   .artist-list {
     display: flex;
-    flex: 1;
     flex-direction: column;
-    gap: 2px;
+    margin-top: 2px;
   }
 
   .artist {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     width: 100%;
-    padding: 6px 0;
+    padding: 9px 0;
+    border-top: 1px solid var(--stroke);
     text-align: left;
   }
 
-  .artist-main {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
+  .artist:first-child {
+    border-top: 0;
   }
 
   .rank {
-    width: 16px;
+    width: 18px;
     flex-shrink: 0;
     color: var(--text-faint);
-    font-size: 9px;
-    font-variant-numeric: tabular-nums;
+    font-size: 9.5px;
   }
 
   .artist-monogram {
     display: grid;
     place-items: center;
-    width: 30px;
-    height: 30px;
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
     border: 1px solid var(--stroke);
     border-radius: 50%;
     background: linear-gradient(145deg, #1a1a21, #22222a);
     color: var(--text-faint);
-    font-size: 8.5px;
+    font-size: 9px;
     font-weight: 600;
     letter-spacing: 0.03em;
   }
@@ -385,16 +424,14 @@
   }
 
   .artist-copy strong {
-    overflow: hidden;
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 550;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     transition: color var(--speed) var(--ease);
   }
 
-  .artist:hover .artist-copy strong {
+  .artist:hover .artist-copy strong,
+  .artist:focus-visible .artist-copy strong {
     color: var(--text);
   }
 
@@ -406,28 +443,30 @@
   .artist-time {
     flex-shrink: 0;
     color: var(--text-dim);
-    font-size: 10px;
+    font-size: 10.5px;
     font-variant-numeric: tabular-nums;
   }
 
-  .share {
-    display: block;
-    height: 2px;
-    margin: 7px 0 0 24px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.055);
+  .week-note {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: auto 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--stroke);
+    color: var(--text-faint);
+    font-size: 10.5px;
   }
 
-  .share span {
-    display: block;
-    width: 100%;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.2));
-    transform: scaleX(var(--share));
-    transform-origin: left;
-    animation: share-in 650ms var(--ease) var(--delay) both;
+  .week-note strong {
+    color: var(--text-dim);
+    font-weight: 550;
+  }
+
+  .note-sep {
+    margin: 0 2px;
+    color: var(--text-faint);
   }
 
   .empty {
@@ -437,22 +476,14 @@
     line-height: 1.5;
   }
 
+  .artists-empty {
+    margin: 10px 0 0;
+  }
+
   @keyframes dashboard-in {
     from {
       opacity: 0;
       transform: translateY(6px);
-    }
-  }
-
-  @keyframes share-in {
-    from {
-      transform: scaleX(0);
-    }
-  }
-
-  @keyframes pulse-in {
-    from {
-      transform: scaleY(0);
     }
   }
 
@@ -463,9 +494,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .dashboard,
-    .share span,
-    .week-pulse > span > span {
+    .dashboard {
       animation: none;
     }
   }
