@@ -212,6 +212,40 @@ enable/disable in step with the buttons.
 **Files:** `src/renderer/App.svelte`, `src/main/windows.ts`, `src/shared/ipc.ts`,
 `src/preload/index.ts`
 
+### 4.6 Mouse wheel over the volume control — Verified
+The volume slider ignored the wheel. Chromium has no native wheel behaviour for
+`<input type="range">` and the app had no listener, so hovering it and scrolling
+did nothing. `PlayerBar.svelte` now accumulates `deltaY` and spends it in whole
+percent steps, 20px per point.
+
+- **A Windows notch is 100px, `deltaMode: 0`.** Measured with real
+  `WM_MOUSEWHEEL` input: one notch is exactly one `wheel` event with
+  `deltaY: 100`, targeted at the input, and nothing scrolls — the player bar
+  sits outside the scrolling area. 100px therefore maps to 5%.
+- **`preventDefault()` only works with the listener on an element.** Chromium
+  makes `wheel` passive by default on `window`/`document`/`body`; the handler
+  sits on a wrapper around the slider, so the call is honoured (verified:
+  `defaultPrevented` is true by the time the event reaches `window`).
+- **The hit area matters more than the maths.** The track is 4px tall, so the
+  slider is wrapped in an 8px-padded band (24px tall) that also reveals the
+  thumb on hover.
+- **Trackpads need the accumulator.** They send a stream of 1–20px deltas;
+  accumulating at 20px per percent gives the same 5% per notch instead of the
+  jump a 1:1 pixel mapping would cause. The accumulator resets on
+  `pointerleave` so a partial step cannot leak into the next gesture.
+- **Scrolling down while muted is ignored.** Muting does not clear the stored
+  volume, so lowering it from a muted state would silently change what plays
+  after unmuting — the gesture looks like it does nothing, so it should do
+  nothing. A raise still unmutes (that is `setVolume`'s existing behaviour) and
+  leaves the hint showing the new level.
+
+Verified on Windows 11 (Electron 45, dev build): one notch moves 5% in both
+directions, clamping at 0 and 100 holds, a muted player unmutes on a raise,
+a down-scroll while muted leaves both the volume and the muted flag alone, and
+the percentage hint shows for 800ms then fades.
+
+**Files:** `src/renderer/components/PlayerBar.svelte`
+
 ---
 
 ## 5. File system / paths

@@ -22,6 +22,45 @@
   )
   const volumeLevel = $derived(player.muted ? 0 : Math.round(player.volume * 100))
 
+  // Wheel over the volume control. A mouse notch is 100px on Windows while a
+  // trackpad sends a stream of 1–20px deltas, so pixels are accumulated and
+  // spent in whole percent: 20px per point, i.e. 5% per notch either way.
+  const WHEEL_PX_PER_PERCENT = 20
+  let wheelPx = 0
+  let volumeHint = $state(false)
+  let volumeHintTimer: ReturnType<typeof setTimeout> | null = null
+
+  function onVolumeWheel(event: WheelEvent): void {
+    // Chromium reports pixels (0); lines (1) and pages (2) only occur
+    // elsewhere, but the maths should not silently go 16x wrong if they do.
+    const px =
+      event.deltaMode === 1
+        ? event.deltaY * 16
+        : event.deltaMode === 2
+          ? event.deltaY * 100
+          : event.deltaY
+    if (!px) return
+    event.preventDefault()
+    wheelPx += px
+    const steps = Math.trunc(wheelPx / WHEEL_PX_PER_PERCENT)
+    if (!steps) return
+    wheelPx -= steps * WHEEL_PX_PER_PERCENT
+    // Muted is already silent: lowering the hidden volume would change what
+    // plays after unmuting, which is not what the gesture looks like it does.
+    if (player.muted && steps > 0) return
+    // deltaY is positive when scrolling down, which lowers the volume. Round
+    // to the slider's own 1% step so repeated steps cannot drift the float.
+    player.setVolume(Math.round((player.volume - steps / 100) * 100) / 100)
+    volumeHint = true
+    if (volumeHintTimer) clearTimeout(volumeHintTimer)
+    volumeHintTimer = setTimeout(() => (volumeHint = false), 800)
+  }
+
+  /** Drop a half-finished step so it cannot combine with the next gesture. */
+  function resetVolumeWheel(): void {
+    wheelPx = 0
+  }
+
   // What the stream actually is — not what the setting says it should be.
   const codec = $derived.by(() => {
     const ext = player.stream?.ext
@@ -274,17 +313,25 @@
     >
       <Icon name={player.muted || player.volume === 0 ? 'mute' : 'volume'} size={16} />
     </button>
-    <input
-      type="range"
-      class="volume"
-      min="0"
-      max="1"
-      step="0.01"
-      value={player.muted ? 0 : player.volume}
-      style="--progress: {volumeLevel}%"
-      aria-label="Volume"
-      oninput={(e) => player.setVolume(Number((e.currentTarget as HTMLInputElement).value))}
-    />
+    <div
+      class="volume-wrap"
+      role="presentation"
+      onwheel={onVolumeWheel}
+      onpointerleave={resetVolumeWheel}
+    >
+      <input
+        type="range"
+        class="volume"
+        min="0"
+        max="1"
+        step="0.01"
+        value={player.muted ? 0 : player.volume}
+        style="--progress: {volumeLevel}%"
+        aria-label="Volume"
+        oninput={(e) => player.setVolume(Number((e.currentTarget as HTMLInputElement).value))}
+      />
+      <span class="volume-hint" class:show={volumeHint} aria-hidden="true">{volumeLevel}%</span>
+    </div>
   </div>
 </footer>
 
@@ -502,8 +549,60 @@
     gap: 6px;
   }
 
+  .volume-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    /* The track is only 4px tall; this padding is the hover target that makes
+       the wheel usable. */
+    padding: 8px 0;
+  }
+
+  /* Hovering the band should reveal the thumb, as hovering the track does. */
+  .volume-wrap:hover .volume::-webkit-slider-thumb {
+    opacity: 1;
+  }
+
   .volume {
     width: 92px;
+  }
+
+  .volume-hint {
+    position: absolute;
+    bottom: calc(100% + 5px);
+    left: 50%;
+    padding: 4px 7px;
+    border: 1px solid var(--stroke-strong);
+    border-radius: 7px;
+    background: #1b1b22;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 550;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-50%);
+    transition: opacity 120ms var(--ease);
+  }
+
+  .volume-hint::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    border-right: 1px solid var(--stroke-strong);
+    border-bottom: 1px solid var(--stroke-strong);
+    background: inherit;
+    transform: translate(-50%, -3px) rotate(45deg);
+  }
+
+  .volume-hint.show {
+    opacity: 1;
   }
 
   .quality {
