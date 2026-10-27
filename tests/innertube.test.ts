@@ -4,8 +4,8 @@
  *   npx esbuild tests/innertube.test.ts --bundle --platform=node --format=esm \
  *     --alias:@shared=./src/shared --outfile=/tmp/it.mjs && node /tmp/it.mjs
  */
-import { dedupeTracks, extractHeader, extractItems, extractShelves } from '../src/main/innertube/parse'
-import { browse, home, search } from '../src/main/innertube/client'
+import { dedupeTracks, extractHeader, extractItems, extractMoodCategories, extractShelves } from '../src/main/innertube/parse'
+import { browse, home, moodCategories, search } from '../src/main/innertube/client'
 import type { CatalogItem } from '../src/shared/types'
 
 let failures = 0
@@ -14,6 +14,44 @@ function check(label: string, condition: boolean, detail = ''): void {
   if (!condition) failures++
   console.log(`  ${condition ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`)
 }
+
+// ---- mood tiles ------------------------------------------------------------
+const moodTiles = extractMoodCategories({
+  contents: [
+    {
+      musicNavigationButtonRenderer: {
+        buttonText: { runs: [{ text: 'Focus' }] },
+        clickCommand: { browseEndpoint: { params: 'params-focus' } }
+      }
+    },
+    {
+      musicNavigationButtonRenderer: {
+        buttonText: { simpleText: 'Energize' },
+        clickCommand: { browseEndpoint: { params: 'params-energy' } }
+      }
+    },
+    {
+      musicNavigationButtonRenderer: {
+        buttonText: { runs: [{ text: 'Focus' }] },
+        clickCommand: { browseEndpoint: { params: 'duplicate' } }
+      }
+    },
+    {
+      musicNavigationButtonRenderer: {
+        buttonText: { runs: [{ text: 'No params' }] },
+        clickCommand: { browseEndpoint: { browseId: 'x' } }
+      }
+    }
+  ]
+})
+check(
+  'mood tiles keep title and params',
+  moodTiles.length === 2 &&
+    moodTiles[0]?.title === 'Focus' &&
+    moodTiles[0]?.params === 'params-focus' &&
+    moodTiles[1]?.title === 'Energize',
+  JSON.stringify(moodTiles)
+)
 
 function show(label: string, items: CatalogItem[], limit = 5): void {
   console.log(`\n${label}: ${items.length} items`)
@@ -395,6 +433,23 @@ check(
   (gucciAlbums?.items.length ?? 0) > 100,
   `${gucciAlbums?.items.length ?? 0} albums`
 )
+
+const liveMoods = await moodCategories()
+check(
+  'mood categories resolve Focus and Decades',
+  liveMoods.some((tile) => tile.title === 'Focus' && tile.params) &&
+    liveMoods.some((tile) => tile.title === 'Decades' && tile.params),
+  liveMoods.map((tile) => tile.title).join(',')
+)
+const focusMood = liveMoods.find((tile) => tile.title === 'Focus')
+if (focusMood) {
+  const page = await browse('FEmusic_moods_and_genres_category', focusMood.params)
+  check(
+    'a mood page returns playlist shelves',
+    (page.shelves?.length ?? 0) > 0 && (page.shelves?.[0]?.items.length ?? 0) > 0,
+    `${page.shelves?.length ?? 0} shelves`
+  )
+}
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)

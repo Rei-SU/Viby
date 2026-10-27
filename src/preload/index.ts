@@ -70,8 +70,10 @@ const api: VibyApi = {
   catalog: {
     search: (query: string, filter?: SearchFilterName) =>
       ipcRenderer.invoke(CH.catalogSearch, query, filter),
-    browse: (browseId: string) => ipcRenderer.invoke(CH.catalogBrowse, browseId),
+    browse: (browseId: string, params?: string) =>
+      ipcRenderer.invoke(CH.catalogBrowse, browseId, params),
     home: () => ipcRenderer.invoke(CH.catalogHome),
+    moods: () => ipcRenderer.invoke(CH.catalogMoods),
     radio: (videoId: string) => ipcRenderer.invoke(CH.catalogRadio, videoId),
     audioTrack: (videoId: string, title: string, artist: string) =>
       ipcRenderer.invoke(CH.catalogAudioTrack, videoId, title, artist),

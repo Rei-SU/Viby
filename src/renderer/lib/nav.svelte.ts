@@ -14,11 +14,19 @@ export type CollectionRef =
   /** `album:<id>`, `playlist:<id>` or `liked` — rendered from local downloads. */
   | { kind: 'download'; key: string }
 
+/** A "Moods & moments" page: the title is the card's label, params select it. */
+export type MoodRef = {
+  title: string
+  params: string
+  thumbnail?: string
+}
+
 type Snapshot = {
   view: View
   detail: CatalogItem | null
   track: Track | null
   collection: CollectionRef | null
+  mood: MoodRef | null
 }
 
 /**
@@ -36,6 +44,8 @@ class Navigator {
   track = $state<Track | null>(null)
   /** The playlist / liked-songs page. */
   collection = $state<CollectionRef | null>(null)
+  /** A YouTube Music mood or genre page. */
+  mood = $state<MoodRef | null>(null)
 
   private backStack = $state<Snapshot[]>([])
   private forwardStack = $state<Snapshot[]>([])
@@ -50,12 +60,13 @@ class Navigator {
 
   go(view: View): void {
     // Clicking the tab you are already on should not create a history entry.
-    if (this.view === view && !this.detail && !this.track && !this.collection) return
+    if (this.view === view && !this.detail && !this.track && !this.collection && !this.mood) return
     this.record()
     this.view = view
     this.detail = null
     this.track = null
     this.collection = null
+    this.mood = null
   }
 
   open(item: CatalogItem): void {
@@ -63,6 +74,17 @@ class Navigator {
     if (this.detail?.kind === item.kind && this.detail?.id === item.id) return
     this.record()
     this.detail = item
+    this.track = null
+    this.collection = null
+    this.mood = null
+  }
+
+  /** A mood page from the Home "Start something" cards. */
+  openMood(ref: MoodRef): void {
+    if (!ref.params || (this.mood?.params === ref.params && this.mood?.title === ref.title)) return
+    this.record()
+    this.mood = ref
+    this.detail = null
     this.track = null
     this.collection = null
   }
@@ -88,6 +110,7 @@ class Navigator {
     this.track = { ...track }
     this.detail = null
     this.collection = null
+    this.mood = null
   }
 
   openCollection(ref: CollectionRef): void {
@@ -102,6 +125,7 @@ class Navigator {
     this.collection = ref
     this.detail = null
     this.track = null
+    this.mood = null
   }
 
   back(): void {
@@ -143,7 +167,8 @@ class Navigator {
       view: this.view,
       detail: this.detail,
       track: this.track,
-      collection: this.collection
+      collection: this.collection,
+      mood: this.mood
     }
   }
 
@@ -152,6 +177,7 @@ class Navigator {
     this.detail = snapshot.detail
     this.track = snapshot.track
     this.collection = snapshot.collection
+    this.mood = snapshot.mood
   }
 }
 

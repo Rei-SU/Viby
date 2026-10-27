@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 9)
+Last updated: 2026-10-27 (rev 10)
 
 ---
 
@@ -646,6 +646,12 @@ The Home card grouped plays by release and capped each group at two songs, which
 `historyItem()` in `shared/listening.ts` turns an entry into a row item: per-artist ids survive, separators are kept, and the release is a link even when the entry predates release ids (it resolves by name on click). A shared `history` store feeds Home and the panel, and a `favorites` store became the one source for every heart, replacing the player bar's per-track `favorites.list()` read. The old group helpers (`groupRecentHistory`, `albumMatch`, `artistMatch`) left with the grouped UI; release identity remains in the parser and page headers.
 
 Two pitfalls shaped the code. `history.load()` reads its cache guard through `untrack`, because Home calls it from an effect: a tracked read made every response re-trigger the effect, invalidating each request so the summary never stuck. Rows are not keyed by track id: the history can hold the same song several times, and Svelte aborts a keyed each with `each_key_duplicate` — the card keys by position, the panel by entry plus position.
+
+### Mood pages (2026-10-27)
+
+The **Start something** cards borrowed random artwork from Home shelves and sent the user to a name search. They now carry motion icons — a brain for Focus, a bolt for Energy, a crescent for Late night, a spinning disc for Throwbacks — that animate on hover/focus (and stay still under reduced motion), and open YouTube Music's own mood/genre pages: Focus → Focus, Energy → **Energize**, Late night → **Chill**, Throwbacks → **Decades**.
+
+`catalog.moods()` reads the `musicNavigationButtonRenderer` tiles (title + params) and caches them for the session; `catalog.browse()` now takes the tile's params, which is the only way to reach `FEmusic_moods_and_genres_category`. `MoodView` renders the resulting playlist shelves with the shared `MediaCard`/rail and caches each page for ten minutes; `nav.mood` joins the Back/Forward snapshots. If the tiles fail to load, the grid offers Retry instead of silently falling back to search. This follows the same params flow ytmusicapi documents for `get_mood_playlists`.
 
 ## 14. Library (shipped)
 

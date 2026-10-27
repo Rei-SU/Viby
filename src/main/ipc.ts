@@ -15,6 +15,7 @@ import type {
   ImportProgress,
   ImportSource,
   Lyrics,
+  MoodCategory,
   NetworkState,
   OfflineMode,
   PlaybackSession,
@@ -436,11 +437,12 @@ let importResolveController: AbortController | null = null
 
   ipcMain.handle(
     CH.catalogBrowse,
-    async (_e, browseId: string): Promise<Result<BrowseResult>> => {
+    async (_e, browseId: string, params?: unknown): Promise<Result<BrowseResult>> => {
       try {
         const blocked = offline()
         if (blocked) return blocked
-        return ok(await innertube.browse(browseId))
+        const category = typeof params === 'string' && params.length < 1024 ? params : undefined
+        return ok(await innertube.browse(browseId, category))
       } catch (err) {
         return fail(err)
       }
@@ -452,6 +454,16 @@ let importResolveController: AbortController | null = null
       const blocked = offline()
       if (blocked) return blocked
       return ok(await innertube.home())
+    } catch (err) {
+      return fail(err)
+    }
+  })
+
+  ipcMain.handle(CH.catalogMoods, async (): Promise<Result<MoodCategory[]>> => {
+    try {
+      const blocked = offline()
+      if (blocked) return blocked
+      return ok(await innertube.moodCategories())
     } catch (err) {
       return fail(err)
     }

@@ -12,6 +12,7 @@ import type {
   ImportProgress,
   ImportSource,
   Lyrics,
+  MoodCategory,
   NetworkState,
   OfflineMode,
   PlaybackSession,
@@ -64,6 +65,7 @@ export const CH = {
   catalogSearch: 'catalog:search',
   catalogBrowse: 'catalog:browse',
   catalogHome: 'catalog:home',
+  catalogMoods: 'catalog:moods',
   catalogRadio: 'catalog:radio',
   catalogAudioTrack: 'catalog:audio-track',
   catalogArtistImage: 'catalog:artist-image',
@@ -187,8 +189,14 @@ export interface VibyApi {
   }
   catalog: {
     search(query: string, filter?: SearchFilterName): Promise<Result<CatalogItem[]>>
-    browse(browseId: string): Promise<Result<BrowseResult>>
+    /**
+     * Browse a page. `params` selects a Moods & Genres category, whose page is
+     * only reachable with the params that produced its tile.
+     */
+    browse(browseId: string, params?: string): Promise<Result<BrowseResult>>
     home(): Promise<Result<Shelf[]>>
+    /** The "Moods & moments" and genre tiles YouTube Music offers. */
+    moods(): Promise<Result<MoodCategory[]>>
     /** Related tracks for autoplay, seeded by a video id. */
     radio(videoId: string): Promise<Result<CatalogItem[]>>
     /** The released audio track for a music video, when YouTube knows one. */

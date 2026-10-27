@@ -34,11 +34,6 @@
     return rows
   })
 
-  const moodArt = $derived([
-    ...history.entries.map((entry) => entry.thumbnail),
-    ...page.shelves.flatMap((shelf) => shelf.items.map((item) => item.thumbnail))
-  ])
-
   $effect(() => {
     if (!page.attempted && !page.loading) void load()
   })
@@ -119,7 +114,7 @@
     <ListeningDashboard items={recentItems} {summary} />
   {/if}
 
-  <MoodGrid art={moodArt} />
+  <MoodGrid />
 
   {#each page.shelves as shelf, si (shelf.title + si)}
     <section class="shelf">

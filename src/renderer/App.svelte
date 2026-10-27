@@ -9,6 +9,7 @@
   import SearchView from './components/SearchView.svelte'
   import SearchBar from './components/SearchBar.svelte'
   import DetailView from './components/DetailView.svelte'
+  import MoodView from './components/MoodView.svelte'
   import TrackView from './components/TrackView.svelte'
   import LibraryView from './components/LibraryView.svelte'
   import CollectionView from './components/CollectionView.svelte'
@@ -78,7 +79,7 @@
   }
 
   function isActive(id: View): boolean {
-    return nav.view === id && !nav.detail && !nav.track && !nav.collection
+    return nav.view === id && !nav.detail && !nav.track && !nav.collection && !nav.mood
   }
 
   function labelFor(item: (typeof navItems)[number]): string {
@@ -335,6 +336,8 @@
       <TrackView track={nav.track} />
     {:else if nav.detail}
       <DetailView item={nav.detail} />
+    {:else if nav.mood}
+      <MoodView mood={nav.mood} />
     {:else if nav.collection}
       {#if nav.collection.kind === 'download'}
         <DownloadCollectionView collectionKey={nav.collection.key} />

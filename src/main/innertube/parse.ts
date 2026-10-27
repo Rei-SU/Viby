@@ -1,4 +1,4 @@
-import type { BrowseHeader, CatalogItem, CatalogKind, Shelf, SubtitlePart } from '@shared/types'
+import type { BrowseHeader, CatalogItem, CatalogKind, MoodCategory, Shelf, SubtitlePart } from '@shared/types'
 
 /**
  * Tolerant InnerTube response parsing.
@@ -129,6 +129,39 @@ export function extractShelves(response: unknown): Shelf[] {
   const shelves: Shelf[] = []
   collectShelves(response, shelves, 0)
   return shelves.filter((s) => s.items.length > 0)
+}
+
+/**
+ * "Moods & moments" and genres are navigation tiles, not cards: the title is
+ * in `buttonText` and the page is only reachable with the tile's params.
+ */
+export function extractMoodCategories(response: unknown): MoodCategory[] {
+  const found: MoodCategory[] = []
+  const seen = new Set<string>()
+
+  const walk = (node: unknown, depth: number): void => {
+    if (node == null || depth > MAX_DEPTH) return
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child, depth + 1)
+      return
+    }
+    if (typeof node !== 'object') return
+    for (const [key, value] of Object.entries(node as AnyObj)) {
+      if (key === 'musicNavigationButtonRenderer') {
+        const renderer = value as AnyObj
+        const title = textOf(renderer.buttonText)
+        const params: unknown = renderer.clickCommand?.browseEndpoint?.params
+        if (title && typeof params === 'string' && params && !seen.has(title)) {
+          seen.add(title)
+          found.push({ title, params })
+        }
+      }
+      walk(value, depth + 1)
+    }
+  }
+
+  walk(response, 0)
+  return found
 }
 
 const HEADER_KEYS = [

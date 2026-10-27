@@ -1,6 +1,13 @@
-import type { BrowseHeader, BrowseResult, CatalogItem, Shelf } from '@shared/types'
+import type { BrowseHeader, BrowseResult, CatalogItem, MoodCategory, Shelf } from '@shared/types'
 import { INNERTUBE, SEARCH_FILTERS, type SearchFilter } from './constants'
-import { continuationToken, dedupeTracks, extractHeader, extractItems, extractShelves } from './parse'
+import {
+  continuationToken,
+  dedupeTracks,
+  extractHeader,
+  extractItems,
+  extractMoodCategories,
+  extractShelves
+} from './parse'
 
 /**
  * Catalog access (PLAN §3). Search and browse answer in under a second, so the
@@ -100,6 +107,19 @@ function normalizeTitle(title: string): string {
 
 const audioTrackCache = new Map<string, CatalogItem | null>()
 const artistImageCache = new Map<string, string | null>()
+let moodCategoryCache: MoodCategory[] | null = null
+
+/**
+ * The mood/genre tiles are stable for a session and every Home visit asks for
+ * them, so fetch them once. A failed request is not cached.
+ */
+export async function moodCategories(): Promise<MoodCategory[]> {
+  if (moodCategoryCache) return moodCategoryCache
+  const response = await call('browse', { browseId: 'FEmusic_moods_and_genres' })
+  const categories = extractMoodCategories(response)
+  if (categories.length > 0) moodCategoryCache = categories
+  return categories
+}
 
 /**
  * Artist search cards carry a square artist portrait; history only stores the
@@ -250,9 +270,9 @@ async function expandDiscography(shelves: Shelf[]): Promise<void> {
 }
 
 /** Open an album, artist, or playlist page: its own header plus its contents. */
-export async function browse(browseId: string): Promise<BrowseResult> {
+export async function browse(browseId: string, params?: string): Promise<BrowseResult> {
   if (!browseId) throw new Error('Nothing to open')
-  const first = await call('browse', { browseId })
+  const first = await call('browse', params ? { browseId, params } : { browseId })
   const header = extractHeader(first)
   const items = extractItems(first)
   const seen = new Set(items.map(itemKey))

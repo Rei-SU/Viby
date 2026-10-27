@@ -252,21 +252,35 @@ export async function run(app, check) {
 
     const mood = await app.evaluate(
       `(async () => {
-        document.querySelector('.mood')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 400))
-        return {
-          view: window.__viby.nav.view,
-          query: window.__viby.searchState.query,
-          filter: window.__viby.searchState.filter
+        const cards = [...document.querySelectorAll('.mood')]
+        const icons = cards.map((card) => Boolean(card.querySelector('.mood-icon svg')))
+        const images = cards.reduce((count, card) => count + card.querySelectorAll('img').length, 0)
+        cards[0]?.click()
+        let state = { title: null, shelves: 0, cards: 0 }
+        for (let i = 0; i < 90; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 150))
+          state = {
+            title: window.__viby.nav.mood?.title ?? null,
+            shelves: document.querySelectorAll('.mood-view .shelf').length,
+            cards: document.querySelectorAll('.mood-view .card').length
+          }
+          if (state.shelves > 0) break
         }
+        return { icons, images, ...state }
       })()`,
       { userGesture: true }
     )
     check(
-      'a mood starts a search',
-      mood.view === 'search' && mood.query === 'lofi instrumental focus' && mood.filter === 'all',
+      'mood cards use motion icons, not artwork',
+      mood.icons.length === 4 && mood.icons.every(Boolean) && mood.images === 0,
       JSON.stringify(mood)
     )
+    check(
+      'a mood opens a YouTube Music mood page',
+      mood.title === 'Focus' && mood.shelves > 0 && mood.cards > 0,
+      JSON.stringify(mood)
+    )
+    await app.evaluate(`window.__viby.nav.go('home'); true`)
   } finally {
     await app.evaluate(
       `(async () => {

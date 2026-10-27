@@ -210,6 +210,12 @@ export type Shelf = {
   }
 }
 
+/** A "Moods & moments" or genre tile: the params select its browse page. */
+export type MoodCategory = {
+  title: string
+  params: string
+}
+
 export type HistoryEntry = {
   trackId: string
   title: string
