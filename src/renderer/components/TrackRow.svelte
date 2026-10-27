@@ -4,6 +4,7 @@
   import { nav } from '../lib/nav.svelte'
   import { playlistPicker } from '../lib/playlist-picker.svelte'
   import { downloads } from '../lib/downloads.svelte'
+  import { favorites } from '../lib/favorites.svelte'
   import { network } from '../lib/network.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -19,6 +20,7 @@
     showIndex = false,
     showArt = true,
     showDownload = true,
+    showFavorite = false,
     unavailable = false,
     meta
   }: {
@@ -34,6 +36,8 @@
     showArt?: boolean
     /** Off on library rows where removal is the row action. */
     showDownload?: boolean
+    /** Home and history rows offer the heart; dense catalog rows do not. */
+    showFavorite?: boolean
     /** Offline and not downloaded: visible for context, but inert and faded. */
     unavailable?: boolean
     /** Small right-aligned annotation, e.g. "12 MB · Best". */
@@ -49,6 +53,7 @@
   const playing = $derived(active && player.playing)
   const playable = $derived(isPlayable(item))
   const downloaded = $derived(downloads.downloaded(item.id))
+  const favorited = $derived(favorites.has(item.id))
   /**
    * With no usable connection, only explicit downloads are real. The invisible
    * audio cache is not a download and must never make a row look playable.
@@ -104,6 +109,15 @@
     const m = Math.floor(seconds / 60)
     const s = Math.floor(seconds % 60)
     return `${m}:${s.toString().padStart(2, '0')}`
+  }
+
+  async function toggleFavorite(): Promise<void> {
+    if (!canPlay) return
+    try {
+      await favorites.toggle(toTrack(item))
+    } catch {
+      // The heart simply stays where it was; the error is not worth a banner.
+    }
   }
 
   async function toggleDownload(): Promise<void> {
@@ -178,6 +192,21 @@
 
   {#if meta}
     <span class="row-meta tabular">{meta}</span>
+  {/if}
+
+  {#if canPlay && showFavorite}
+    <button
+      class="row-action fav"
+      class:on={favorited}
+      title={favorited ? 'Remove from favourites' : 'Add to favourites'}
+      aria-label={favorited ? 'Remove from favourites' : 'Add to favourites'}
+      onclick={(event) => {
+        event.stopPropagation()
+        void toggleFavorite()
+      }}
+    >
+      <Icon name="heart" size={15} solid={favorited} />
+    </button>
   {/if}
 
   {#if canPlay && showDownload}
@@ -377,6 +406,11 @@
   }
 
   .row-action.dl.on {
+    opacity: 1;
+    color: var(--text);
+  }
+
+  .row-action.fav.on {
     opacity: 1;
     color: var(--text);
   }

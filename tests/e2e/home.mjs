@@ -1,6 +1,7 @@
 import { sleep } from './lib.mjs'
 
-export const description = 'Home: listening snapshot, grouped recents, weekly pulse, mood navigation'
+export const description =
+  'Home: recent history rows, the history panel, weekly pulse and mood entry points'
 
 const titles = [
   'Home test one',
@@ -39,6 +40,7 @@ export async function run(app, check) {
             thumbnail: ${JSON.stringify(thumb)}
           })
         }
+        window.__viby.sidePanel.close()
         window.__viby.nav.go('library')
         await new Promise((resolve) => setTimeout(resolve, 250))
         window.__viby.nav.go('home')
@@ -53,29 +55,40 @@ export async function run(app, check) {
       state = await app.evaluate(`
         (() => ({
           dashboard: Boolean(document.querySelector('.dashboard')),
-          groups: [...document.querySelectorAll('.recent-group')].map((group) => ({
-            title: group.querySelector('.group-copy strong')?.textContent?.trim() ?? null,
-            covers: group.querySelectorAll('img').length,
-            tracks: group.querySelectorAll('.track').length
+          rows: [...document.querySelectorAll('.recent-list li')].map((row) => ({
+            title: row.querySelector('.title')?.textContent?.trim() ?? null,
+            art: Boolean(row.querySelector('img')),
+            artist: row.querySelector('.entity-link[data-entity="artist"]')?.textContent?.trim() ?? null,
+            duration: row.querySelector('.dur')?.textContent?.trim() ?? null,
+            actions: row.querySelectorAll('.row-action').length
           })),
+          showMore: Boolean(document.querySelector('.recent-card .more')),
           pulse: document.querySelectorAll('.week-pulse > span').length,
           total: document.querySelector('.week-total')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
           moods: [...document.querySelectorAll('.mood-copy strong')].map((node) => node.textContent?.trim()),
           overflow: document.documentElement.scrollWidth > window.innerWidth
         }))()
       `)
-      if (state.dashboard && state.groups.length === 4) break
+      if (state.dashboard && state.rows.length === 5) break
     }
 
     console.log('  home:', JSON.stringify(state))
     check('Home shows the listening dashboard', state?.dashboard === true)
     check(
-      'recent plays are grouped into four releases',
-      state?.groups.length === 4 &&
-        state.groups.every((group) => group.tracks > 0 && group.covers <= 1) &&
-        state.groups.some((group) => group.title === 'Home test album one' && group.tracks === 2),
-      JSON.stringify(state?.groups)
+      'recent plays are five history rows, newest first',
+      state?.rows.length === 5 &&
+        state.rows.map((row) => row.title).join('|') ===
+          'Home test five|Home test four|Home test three|Home test two|Home test one',
+      JSON.stringify(state?.rows.map((row) => row.title))
     )
+    check(
+      'each row has art, artist, duration and actions',
+      state?.rows.every(
+        (row) => row.art && row.artist === 'Home Test Artist' && row.duration === '4:00' && row.actions >= 3
+      ),
+      JSON.stringify(state?.rows)
+    )
+    check('the card offers Show more', state?.showMore === true)
     check('the weekly card shows a seven-day pulse', state?.pulse === 7, `${state?.pulse}`)
     check('the listening total is rendered', /\d/.test(state?.total ?? ''), state?.total ?? '')
     check(
@@ -84,6 +97,68 @@ export async function run(app, check) {
       JSON.stringify(state?.moods)
     )
     check('Home does not overflow horizontally', state?.overflow === false)
+
+    const panel = await app.evaluate(
+      `(async () => {
+        document.querySelector('.recent-card .more')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 600))
+        const rows = [...document.querySelectorAll('.panel .history li')].map((row) =>
+          row.querySelector('.title')?.textContent?.trim()
+        )
+        return {
+          mode: window.__viby.sidePanel.mode,
+          open: document.querySelector('aside.panel')?.classList.contains('open') ?? false,
+          eyebrow: document.querySelector('.panel .eyebrow')?.textContent?.trim() ?? null,
+          count: document.querySelector('.panel .count')?.textContent?.trim() ?? null,
+          seeded: rows.filter((title) => /^Home test/.test(title ?? '')).length,
+          actions: document.querySelectorAll('.panel .history li .row-action').length
+        }
+      })()`,
+      { userGesture: true }
+    )
+    check(
+      'Show more opens the shared panel in history mode',
+      panel.mode === 'history' && panel.open === true && panel.eyebrow === 'History',
+      JSON.stringify(panel)
+    )
+    check('the panel lists the seeded plays', panel.seeded === 5, `${panel.seeded}`)
+    check('the panel header counts the history', Number(panel.count) >= 5, String(panel.count))
+    check('panel rows carry the row actions', panel.actions >= 15, `${panel.actions}`)
+
+    const fav = await app.evaluate(
+      `(async () => {
+        const row = document.querySelector('.recent-list li')
+        let button = row?.querySelector('[aria-label="Add to favourites"], [aria-label="Remove from favourites"]')
+        // A previous failed run must not decide this test.
+        if (button?.getAttribute('aria-label') === 'Remove from favourites') {
+          button.click()
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          button = row?.querySelector('[aria-label="Add to favourites"]')
+        }
+        const label = button?.getAttribute('aria-label') ?? null
+        button?.click()
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        const list = await window.__viby.api.favorites.list()
+        const on = list.some((track) => track.id === 'home-test-d1')
+        const nowLabel =
+          document
+            .querySelector('.recent-list li [aria-label="Add to favourites"], .recent-list li [aria-label="Remove from favourites"]')
+            ?.getAttribute('aria-label') ?? null
+        document.querySelector('.recent-list li [aria-label="Remove from favourites"]')?.click()
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        const after = await window.__viby.api.favorites.list()
+        return {
+          label,
+          on,
+          nowLabel,
+          removed: !after.some((track) => track.id === 'home-test-d1')
+        }
+      })()`,
+      { userGesture: true }
+    )
+    check('a recent row can be favourited', fav.label === 'Add to favourites' && fav.on === true, JSON.stringify(fav))
+    check('the heart reflects the saved state', fav.nowLabel === 'Remove from favourites', String(fav.nowLabel))
+    check('the heart can undo itself', fav.removed === true, JSON.stringify(fav))
 
     const album = await app.evaluate(
       `(async () => {
@@ -94,22 +169,22 @@ export async function run(app, check) {
           artist: 'Daft Punk',
           album: 'Random Access Memories',
           durationSec: 240,
-          playedAt: ${Date.now()},
+          playedAt: Date.now(),
           completion: 1,
           thumbnail: ${JSON.stringify(thumb)}
         })
         nav.go('library')
         await new Promise((resolve) => setTimeout(resolve, 250))
         nav.go('home')
-        let group = null
+        let row = null
         for (let i = 0; i < 50; i++) {
           await new Promise((resolve) => setTimeout(resolve, 100))
-          group = [...document.querySelectorAll('.recent-group')].find(
-            (node) => node.querySelector('.group-copy strong')?.textContent?.trim() === 'Random Access Memories'
+          row = [...document.querySelectorAll('.recent-list li')].find(
+            (node) => node.querySelector('.title')?.textContent?.trim() === 'Home direct album test'
           )
-          if (group) break
+          if (row) break
         }
-        group?.querySelector('.group-head')?.click()
+        row?.querySelector('.entity-link[data-entity="album"]')?.click()
         let label = null
         for (let i = 0; i < 80; i++) {
           await new Promise((resolve) => setTimeout(resolve, 100))
@@ -117,18 +192,17 @@ export async function run(app, check) {
           if (nav.detail?.kind === 'album' && label) break
         }
         return {
-          groupFound: Boolean(group),
+          rowFound: Boolean(row),
           kind: nav.detail?.kind ?? null,
           title: document.querySelector('.hero h1')?.textContent?.trim() ?? null,
-          label,
-          view: nav.view
+          label
         }
       })()`,
       { userGesture: true }
     )
     check(
-      'clicking a release opens its album page directly',
-      album.groupFound && album.kind === 'album' && album.title === 'Random Access Memories',
+      'clicking a release in a history row opens its album',
+      album.rowFound && album.kind === 'album' && album.title === 'Random Access Memories',
       JSON.stringify(album)
     )
     check(
@@ -137,6 +211,44 @@ export async function run(app, check) {
       `${album.label ?? 'none'}`
     )
     await app.evaluate(`window.__viby.nav.go('home'); true`)
+
+    // The same track can be played twice; the recent list must not key rows by
+    // track id or Svelte aborts the whole dashboard.
+    const duplicate = await app.evaluate(
+      `(async () => {
+        const { api, nav } = window.__viby
+        await api.history.add({
+          trackId: 'home-test-d1',
+          title: 'Home test five',
+          artist: 'Home Test Artist',
+          album: 'Home test album four',
+          albumId: 'home-album-four',
+          durationSec: 240,
+          playedAt: Date.now() + 1,
+          completion: 1,
+          thumbnail: ${JSON.stringify(thumb)}
+        })
+        nav.go('library')
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        nav.go('home')
+        await new Promise((resolve) => setTimeout(resolve, 900))
+        return {
+          dashboard: Boolean(document.querySelector('.dashboard')),
+          titles: [...document.querySelectorAll('.recent-list li .title')].map((node) =>
+            node.textContent?.trim()
+          )
+        }
+      })()`,
+      { userGesture: true }
+    )
+    check(
+      'a replayed track never breaks the recent list',
+      duplicate.dashboard === true &&
+        duplicate.titles.length === 5 &&
+        new Set(duplicate.titles).size === 5 &&
+        duplicate.titles.filter((title) => title === 'Home test five').length === 1,
+      JSON.stringify(duplicate)
+    )
 
     const mood = await app.evaluate(
       `(async () => {
@@ -158,7 +270,13 @@ export async function run(app, check) {
   } finally {
     await app.evaluate(
       `(async () => {
-        await window.__viby.api.debug?.forgetHistory(${JSON.stringify(titles)})
+        const { api } = window.__viby
+        await api.debug?.forgetHistory(${JSON.stringify(titles)})
+        const favorites = await api.favorites.list()
+        for (const track of favorites.filter((entry) => entry.id.startsWith('home-test-'))) {
+          await api.favorites.toggle(track)
+        }
+        window.__viby.sidePanel.close()
         window.__viby.nav.go('home')
         return true
       })()`

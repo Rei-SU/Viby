@@ -1,18 +1,19 @@
 <script lang="ts">
-  import type { ListeningArtist, ListeningSummary, RecentGroup } from '@shared/listening'
-  import { albumMatch, artistMatch } from '@shared/listening'
+  import type { ListeningArtist, ListeningSummary } from '@shared/listening'
   import type { CatalogItem } from '@shared/types'
   import { api } from '../lib/api'
   import { player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import { searchState } from '../lib/search.svelte'
+  import { sidePanel } from '../lib/side-panel.svelte'
   import { artwork } from '../lib/artwork.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import TrackRow from './TrackRow.svelte'
 
-  let { groups, summary }: { groups: RecentGroup[]; summary: ListeningSummary } = $props()
+  let { items, summary }: { items: CatalogItem[]; summary: ListeningSummary } = $props()
 
-  const latest = $derived(groups[0]?.tracks[0])
+  const latest = $derived(items[0])
   const totalLabel = $derived(
     summary.totalSeconds > 0 ? listeningTime(summary.totalSeconds) : `${summary.uniqueTracks} songs`
   )
@@ -22,7 +23,6 @@
   const artists = $derived(summary.artists.filter((artist) => artist.name !== 'Unknown artist'))
 
   let artistImages = $state<Record<string, string | null>>({})
-  let opening = $state<string | null>(null)
   const pendingImages = new Set<string>()
 
   $effect(() => {
@@ -53,104 +53,8 @@
     return remainder ? `${hours}h ${remainder}m` : `${hours}h`
   }
 
-  function trackTime(seconds: number | undefined): string {
-    if (!seconds || seconds <= 0) return ''
-    const total = Math.round(seconds)
-    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
-  }
-
-  function play(item: CatalogItem): void {
-    void player.playList([item], 0)
-  }
-
-  function openGroup(group: RecentGroup): void {
-    if (opening) return
-    if (group.albumId) {
-      openRelease(group, group.albumId)
-      return
-    }
-    if (!group.key.startsWith('album:') && group.artistId) {
-      nav.openArtist(group.artistId, group.artist, group.thumbnail)
-      return
-    }
-    opening = group.key
-    void resolveGroup(group)
-  }
-
-  function openRelease(group: RecentGroup, albumId: string): void {
-    nav.open({
-      id: albumId,
-      browseId: albumId,
-      kind: 'album',
-      title: group.title,
-      subtitle: group.artist,
-      thumbnail: group.thumbnail,
-      artists: [group.artist],
-      parts: group.artistId
-        ? [{ text: group.artist, artistId: group.artistId, entity: 'artist' }]
-        : undefined
-    })
-  }
-
-  /**
-   * Old history entries carry the release name but not its id. The id is in the
-   * song's own credits, so look the track up and read it from there: a name
-   * search cannot tell the twenty releases called "Sociopath" apart.
-   */
-  async function releaseIdFor(group: RecentGroup): Promise<string | null> {
-    for (const track of group.tracks.slice(0, 2)) {
-      const result = await api.catalog.search(`${track.title} ${group.artist}`, 'songs')
-      if (!result.ok) continue
-      const hit = result.data.find((item) => item.id === track.id)
-      const albumId = hit?.parts?.find((part) => part.albumId)?.albumId
-      if (albumId) return albumId
-    }
-    return null
-  }
-
-  async function resolveGroup(group: RecentGroup): Promise<void> {
-    const isAlbum = group.key.startsWith('album:')
-    try {
-      if (isAlbum) {
-        const albumId = await releaseIdFor(group)
-        if (albumId) {
-          openRelease(group, albumId)
-          return
-        }
-        const result = await api.catalog.search(group.title, 'albums')
-        if (result.ok) {
-          const match = albumMatch(result.data, group)
-          if (match) {
-            nav.open(match)
-            return
-          }
-        }
-      } else {
-        const result = await api.catalog.search(group.artist, 'artists')
-        if (result.ok) {
-          const match = artistMatch(result.data, group)
-          if (match) {
-            nav.open(match)
-            return
-          }
-        }
-      }
-    } catch {
-      // Fall through to the artist page or the prefilled search.
-    } finally {
-      opening = null
-    }
-
-    // A same-named release is not evidence that it is the right one. The artist
-    // is known, so land on their page instead of a stranger's album.
-    if (group.artistId) {
-      nav.openArtist(group.artistId, group.artist, group.thumbnail)
-      return
-    }
-    const query = isAlbum ? group.title : group.artist
-    searchState.setQuery(query)
-    searchState.submit(isAlbum ? 'albums' : 'artists')
-    nav.go('search')
+  function showHistory(): void {
+    sidePanel.toggle('history')
   }
 
   function monogram(name: string): string {
@@ -195,43 +99,26 @@
         <span class="eyebrow">Your listening</span>
         <h2>Recently played</h2>
       </div>
-      {#if latest}
-        <button class="resume" onclick={() => play(latest)}>
-          <Icon name="play" size={11} solid /> Resume
-        </button>
-      {/if}
+      <div class="head-actions">
+        {#if latest}
+          <button class="more" onclick={showHistory}>Show more</button>
+          <button class="resume" onclick={() => player.playList([latest], 0)}>
+            <Icon name="play" size={11} solid /> Resume
+          </button>
+        {/if}
+      </div>
     </header>
 
-    <div class="recent-grid">
-      {#each groups as group (group.key)}
-        <article class="recent-group">
-          <button
-            class="group-head"
-            class:opening={opening === group.key}
-            title={group.title}
-            disabled={opening === group.key}
-            onclick={() => openGroup(group)}
-          >
-            <Cover src={artwork.src(group.thumbnail)} size={42} radius={9} alt="" />
-            <span class="group-copy">
-              <strong>{group.title}</strong>
-              <span>{group.artist}</span>
-            </span>
-            <Icon name="forward" size={12} />
-          </button>
-
-          <div class="group-tracks">
-            {#each group.tracks as track (track.id)}
-              <button class="track" title={track.title} onclick={() => play(track)}>
-                <span class="track-title">{track.title}</span>
-                <span class="track-time">{trackTime(track.durationSec)}</span>
-                <span class="track-play" aria-hidden="true"><Icon name="play" size={10} solid /></span>
-              </button>
-            {/each}
-          </div>
-        </article>
-      {/each}
-    </div>
+    {#if items.length === 0}
+      <p class="empty">Nothing played yet. Start something and it lands here.</p>
+    {:else}
+      <ul class="recent-list">
+        <!-- Index keys: the same song can appear twice; history order is the identity. -->
+        {#each items.slice(0, 5) as item, i (i)}
+          <TrackRow {item} showFavorite />
+        {/each}
+      </ul>
+    {/if}
   </div>
 
   <aside class="week-card">
@@ -354,117 +241,37 @@
     transform: translateY(-1px);
   }
 
-  .recent-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .recent-group {
-    min-width: 0;
-    padding: 9px;
-    border: 1px solid rgba(255, 255, 255, 0.045);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.018);
-  }
-
-  .group-head {
+  .head-actions {
     display: flex;
     align-items: center;
-    gap: 9px;
-    width: 100%;
-    min-width: 0;
-    margin-bottom: 8px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .more {
+    padding: 5px 10px;
+    border-radius: 999px;
     color: var(--text-dim);
-    text-align: left;
-    transition: opacity var(--speed) var(--ease);
-  }
-
-  .group-head.opening {
-    opacity: 0.55;
-  }
-
-  .group-copy {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .group-copy strong,
-  .group-copy span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .group-copy strong {
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 550;
-  }
-
-  .group-copy span {
-    color: var(--text-faint);
     font-size: 10.5px;
-  }
-
-  .group-tracks {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .track {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    width: 100%;
-    min-width: 0;
-    padding: 6px 7px;
-    border-radius: 7px;
-    color: var(--text-dim);
-    font-size: 11.5px;
-    text-align: left;
+    font-weight: 550;
+    border: 1px solid var(--stroke);
     transition:
-      color var(--speed) var(--ease),
-      background var(--speed) var(--ease);
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
   }
 
-  .track:hover,
-  .track:focus-visible {
+  .more:hover {
     background: var(--glass-hover);
     color: var(--text);
   }
 
-  .track-title {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .track-time {
-    color: var(--text-faint);
-    font-size: 10px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .track-play {
-    display: none;
-    color: var(--text);
-  }
-
-  .track:hover .track-play,
-  .track:focus-visible .track-play {
-    display: inline-flex;
-  }
-
-  .track:hover .track-time,
-  .track:focus-visible .track-time {
-    display: none;
+  .recent-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
 
   .week-total {
@@ -649,12 +456,6 @@
 
   @media (max-width: 1100px) {
     .dashboard {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 680px) {
-    .recent-grid {
       grid-template-columns: 1fr;
     }
   }

@@ -1,5 +1,5 @@
-import { albumMatch, groupRecentHistory, summarizeHistory } from '../src/shared/listening'
-import type { CatalogItem, HistoryEntry } from '../src/shared/types'
+import { historyItem, summarizeHistory } from '../src/shared/listening'
+import type { HistoryEntry } from '../src/shared/types'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = ''): void {
@@ -101,22 +101,28 @@ check(
   JSON.stringify(collaboration.artists)
 )
 
-const recent = groupRecentHistory(history, 2, 3)
-check('recent releases are grouped by album', recent.length === 2 && recent[0]?.title === 'One' && recent[1]?.title === 'Two', JSON.stringify(recent.map((g) => g.title)))
-check('duplicate tracks do not repeat artwork or rows', recent[0]?.tracks.map((t) => t.id).join(',') === 'a,b', recent[0]?.tracks.map((t) => t.id).join(','))
-check('recent groups keep navigation metadata', recent[0]?.albumId === 'one-id' && recent[0]?.artistId === 'alpha-id', JSON.stringify(recent[0]))
-
-const fallback = groupRecentHistory(history, 4, 3)
-check('missing albums fall back to artist grouping', fallback[2]?.key === 'artist:beta' && fallback[2]?.title === 'Beta', JSON.stringify(fallback[2]))
-
+// ---- history rows ---------------------------------------------------------
+const row = historyItem(history[0])
+check('a history row keeps the artwork and duration', row.id === 'a' && row.thumbnail === 'one-a' && row.durationSec === 200, JSON.stringify(row))
+check('the row subtitle shows artist and release', row.subtitle === 'Alpha · One', String(row.subtitle))
 check(
-  'recent groups keep the release on replay',
-  recent[0]?.tracks[0]?.parts?.some((part) => part.albumId === 'one-id' && part.entity === 'album') === true,
-  JSON.stringify(recent[0]?.tracks[0]?.parts)
+  'the artist credit is linked',
+  row.parts?.filter((part) => part.entity === 'artist').map((part) => part.text).join('|') === 'Alpha',
+  JSON.stringify(row.parts)
+)
+check(
+  'the release stays a link',
+  row.parts?.some((part) => part.albumId === 'one-id' && part.entity === 'album') === true,
+  JSON.stringify(row.parts)
 )
 
-// A featured credit must survive the round trip through history, or replaying
-// the row collapses back to one artist in the player.
+const legacy = historyItem({ ...history[0], artist: 'Stormy, Manal', artistId: undefined, artistParts: undefined })
+check(
+  'legacy combined credits are split for linking',
+  legacy.parts?.filter((part) => part.entity === 'artist').map((part) => part.text).join('|') === 'Stormy|Manal',
+  JSON.stringify(legacy.parts)
+)
+
 const featuredHistory: HistoryEntry[] = [
   {
     trackId: 'f',
@@ -132,108 +138,49 @@ const featuredHistory: HistoryEntry[] = [
     completion: 0.8
   }
 ]
-const featuredItem = groupRecentHistory(featuredHistory)[0]?.tracks[0]
-const featuredArtists = featuredItem?.parts?.filter((part) => part.entity === 'artist') ?? []
+const featured = historyItem(featuredHistory[0])
 check(
-  'recent items keep every featured artist',
-  featuredArtists.length === 2 && featuredArtists[1]?.artistId === 'manal-id',
-  JSON.stringify(featuredItem?.parts)
+  'known featured artists keep their own ids',
+  featured.parts?.filter((part) => part.entity === 'artist').map((part) => part.artistId).join('|') ===
+    'stormy-id|manal-id',
+  JSON.stringify(featured.parts)
 )
-check('the credit separator survives', featuredItem?.parts?.[1]?.text === ', ')
 check(
   'top artists use the primary credit',
   summarizeHistory(featuredHistory, NOW - WEEK).artists[0]?.name === 'Stormy',
   JSON.stringify(summarizeHistory(featuredHistory, NOW - WEEK).artists)
 )
 
-const legacyItem = groupRecentHistory([
-  {
-    trackId: 'g',
-    title: 'Legacy',
-    artist: 'Stormy, Manal',
-    playedAt: NOW - 400,
-    completion: 0
-  }
-])[0]?.tracks[0]
-check(
-  'legacy combined credits are split for linking',
-  (legacyItem?.parts?.filter((part) => part.entity === 'artist').length ?? 0) === 2,
-  JSON.stringify(legacyItem?.parts)
-)
-
-// Two releases can share a name ("Sociopath" has twenty on YouTube Music). They
-// must not merge, and a click must not open the other artist's release.
-const sameTitle = groupRecentHistory(
-  [
-    {
-      trackId: 'x',
-      title: 'X',
-      artist: 'Alpha',
-      artistId: 'alpha-id',
-      album: 'Sociopath',
-      playedAt: NOW,
-      completion: 1
-    },
-    {
-      trackId: 'y',
-      title: 'Y',
-      artist: 'Beta',
-      artistId: 'beta-id',
-      album: 'Sociopath',
-      playedAt: NOW - 1000,
-      completion: 1
-    }
-  ],
-  4,
-  2
-)
-check(
-  'same-named releases by different artists stay separate',
-  sameTitle.length === 2 && sameTitle[0]?.tracks[0]?.id === 'x' && sameTitle[1]?.tracks[0]?.id === 'y',
-  JSON.stringify(sameTitle.map((group) => group.key))
-)
-
-const sociopathGroup = {
-  key: 'album:sociopath|pause-id',
-  title: 'Sociopath',
-  artist: 'Pause',
-  artistId: 'pause-id',
-  tracks: []
-}
-const release = (id: string, artists: string[]): CatalogItem => ({
-  id,
-  browseId: id,
-  kind: 'album',
-  title: 'Sociopath',
-  subtitle: '',
-  artists
+const namedRelease = historyItem({
+  trackId: 'x',
+  title: 'X',
+  artist: 'A',
+  album: 'Home',
+  playedAt: NOW,
+  completion: 0
 })
 check(
-  'release matching requires the credited artist',
-  albumMatch([release('stranger', ['razudaisu']), release('right', ['Pause'])], sociopathGroup)?.id === 'right',
-  'picked the release credited to Pause'
+  'an old entry with only a release name still offers the album link',
+  namedRelease.parts?.some((part) => part.entity === 'album' && !part.albumId) === true,
+  JSON.stringify(namedRelease.parts)
 )
-check(
-  'a same-named release by another artist is never opened',
-  albumMatch([release('stranger', ['razudaisu'])], sociopathGroup) === null,
-  'no title-only fallback'
-)
-check(
-  'a one-word artist does not match a longer name',
-  albumMatch([release('other', ['Pause flow'])], sociopathGroup) === null,
-  'Pause != Pause flow'
-)
-check(
-  'a multi-word artist matches a collaboration credit',
-  albumMatch([release('collab', ['Yung Vision', 'Young Lime'])], { ...sociopathGroup, artist: 'Yung Vision' })
-    ?.id === 'collab',
-  'Yung Vision on a joint release'
-)
+
+const unknown = historyItem({
+  trackId: 'u',
+  title: 'U',
+  artist: 'Unknown artist',
+  playedAt: NOW,
+  completion: 0
+})
+check('unknown artists render no credit links', unknown.parts === undefined, JSON.stringify(unknown.parts))
 
 const noDurations = history.map((entry) => ({ ...entry, durationSec: undefined }))
 const withoutTime = summarizeHistory(noDurations, NOW - WEEK)
 check('missing durations never fabricate listening time', withoutTime.totalSeconds === 0 && withoutTime.plays === 5, JSON.stringify(withoutTime))
 check('play counts still rank artists without durations', withoutTime.artists[0]?.name === 'Alpha' && withoutTime.artists[0]?.plays === 3, JSON.stringify(withoutTime.artists))
 
-console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)
-process.exit(failures === 0 ? 0 : 1)
+if (failures > 0) {
+  console.error(`\n${failures} assertion(s) failed`)
+  process.exit(1)
+}
+console.log('\nlistening: all checks passed')

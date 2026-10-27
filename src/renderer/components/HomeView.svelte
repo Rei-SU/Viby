@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { CatalogItem } from '@shared/types'
-  import type { ListeningSummary, RecentGroup } from '@shared/listening'
-  import { groupRecentHistory } from '@shared/listening'
+  import type { ListeningSummary } from '@shared/listening'
+  import { historyItem } from '@shared/listening'
   import { api } from '../lib/api'
   import { isPlayable, player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import { homeShelves } from '../lib/catalog-cache.svelte'
+  import { history } from '../lib/history.svelte'
   import { fitRail } from '../lib/rail-fit'
   import MediaCard from './MediaCard.svelte'
   import InlineAlert from './InlineAlert.svelte'
@@ -16,12 +17,25 @@
   // refetch and flash a loading state every time.
   const page = homeShelves
 
-  let recentGroups = $state<RecentGroup[]>([])
   let summary = $state<ListeningSummary | null>(null)
-  let recentRequest = 0
+  let summaryRequest = 0
+
+  // The card is a snapshot of what you have been playing, so repeats collapse;
+  // the panel is the full play log and keeps every entry.
+  const recentItems = $derived.by(() => {
+    const seen = new Set<string>()
+    const rows: CatalogItem[] = []
+    for (const entry of history.entries) {
+      if (seen.has(entry.trackId)) continue
+      seen.add(entry.trackId)
+      rows.push(historyItem(entry))
+      if (rows.length === 5) break
+    }
+    return rows
+  })
 
   const moodArt = $derived([
-    ...recentGroups.map((group) => group.thumbnail),
+    ...history.entries.map((entry) => entry.thumbnail),
     ...page.shelves.flatMap((shelf) => shelf.items.map((item) => item.thumbnail))
   ])
 
@@ -52,14 +66,13 @@
   }
 
   async function loadRecent(): Promise<void> {
-    const request = ++recentRequest
+    const request = ++summaryRequest
     try {
-      const [history, weekly] = await Promise.all([api.history.list(40), api.history.summary()])
+      const [, weekly] = await Promise.all([history.load(true), api.history.summary()])
       // The track changed again while this request was in flight.
-      if (request !== recentRequest) return
-      recentGroups = groupRecentHistory(history, 4, 2)
+      if (request !== summaryRequest) return
       summary = weekly
-      player.prefetchList(recentGroups.flatMap((group) => group.tracks), 2)
+      player.prefetchList(recentItems, 2)
     } catch {
       // Listening context is a convenience; a failed read leaves the old list.
     }
@@ -102,8 +115,8 @@
     <p class="placeholder">Loading…</p>
   {/if}
 
-  {#if summary && recentGroups.length > 0}
-    <ListeningDashboard groups={recentGroups} {summary} />
+  {#if summary}
+    <ListeningDashboard items={recentItems} {summary} />
   {/if}
 
   <MoodGrid art={moodArt} />

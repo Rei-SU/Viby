@@ -2,8 +2,10 @@
   import { sidePanel } from '../lib/side-panel.svelte'
   import { lyrics } from '../lib/lyrics.svelte'
   import { player } from '../lib/player.svelte'
+  import { history } from '../lib/history.svelte'
   import LyricsPanel from './LyricsPanel.svelte'
   import QueuePanel from './QueuePanel.svelte'
+  import HistoryPanel from './HistoryPanel.svelte'
   import Icon from './Icon.svelte'
 
   /** The skeleton is part of opening the panel, even when the lyrics are cached. */
@@ -25,20 +27,24 @@
 
   const showingLoading = $derived(lyrics.loading || loadingHold)
   const isQueue = $derived(sidePanel.mode === 'queue')
+  const isHistory = $derived(sidePanel.mode === 'history')
+  const isLyrics = $derived(sidePanel.mode === 'lyrics')
+  const modeLabel = $derived(isQueue ? 'Queue' : isHistory ? 'History' : 'Lyrics')
+  const count = $derived(isQueue ? player.queue.length : isHistory ? history.entries.length : 0)
 </script>
 
 <aside
   class="panel"
   class:open={sidePanel.open}
   aria-hidden={!sidePanel.open}
-  aria-label={isQueue ? 'Queue' : 'Lyrics'}
+  aria-label={modeLabel}
 >
   <div class="panel-inner">
     <header>
-      <span class="eyebrow">{isQueue ? 'Queue' : 'Lyrics'}</span>
+      <span class="eyebrow">{modeLabel}</span>
 
-      {#if isQueue}
-        <span class="count">{player.queue.length}</span>
+      {#if isQueue || isHistory}
+        <span class="count">{count}</span>
       {:else if !showingLoading && lyrics.data?.kind === 'synced'}
         <span class="sync-badge synced" title="Lyrics follow the track">
           <span class="sync-dot" aria-hidden="true"></span>Synced
@@ -49,7 +55,7 @@
         </span>
       {/if}
 
-      {#if !isQueue && !showingLoading && lyrics.data?.source}
+      {#if isLyrics && !showingLoading && lyrics.data?.source}
         <span class="source">{lyrics.data.source === 'lyrics.ovh' ? 'OVH' : lyrics.data.source}</span>
       {/if}
 
@@ -62,17 +68,19 @@
       <button
         class="close"
         onclick={() => sidePanel.close()}
-        aria-label={isQueue ? 'Close queue' : 'Close lyrics'}
+        aria-label={`Close ${modeLabel.toLowerCase()}`}
       >
         <Icon name="close" size={15} />
       </button>
     </header>
 
     <div class="body">
-      {#if sidePanel.mode === 'lyrics'}
+      {#if isLyrics}
         <LyricsPanel {showingLoading} />
-      {:else if sidePanel.mode === 'queue'}
+      {:else if isQueue}
         <QueuePanel />
+      {:else if isHistory}
+        <HistoryPanel />
       {/if}
     </div>
   </div>

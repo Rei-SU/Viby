@@ -1,20 +1,18 @@
 <script lang="ts">
   import { player } from '../lib/player.svelte'
-  import { api } from '../lib/api'
   import { nav } from '../lib/nav.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
-  import { plainTrack } from '../lib/track'
+  import { favorites } from '../lib/favorites.svelte'
   import { sidePanel } from '../lib/side-panel.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
 
   let dragging = $state(false)
   let dragValue = $state(0)
-  let fav = $state(false)
-  let favRequest = 0
 
   const shownPosition = $derived(dragging ? dragValue : player.position)
   const track = $derived(player.current)
+  const fav = $derived(track ? favorites.has(track.id) : false)
   // Resolving a new stream and recovering a dead one are the same wait to the user.
   const loading = $derived(player.busy || player.reconnecting)
 
@@ -110,22 +108,7 @@
   })
 
   $effect(() => {
-    const id = player.current?.id
-    if (!id) {
-      fav = false
-      return
-    }
-    const request = ++favRequest
-    void api.favorites
-      .list()
-      .then((list) => {
-        // A slower response for the previous track must not overwrite the
-        // heart for the one now in the player.
-        if (request === favRequest && player.current?.id === id) {
-          fav = list.some((t) => t.id === id)
-        }
-      })
-      .catch(() => undefined)
+    void favorites.load()
   })
 
   function onSeekInput(event: Event): void {
@@ -178,12 +161,8 @@
 
   async function toggleFav(): Promise<void> {
     if (!track) return
-    const snapshot = plainTrack(track)
-    const id = snapshot.id
-    const request = ++favRequest
     try {
-      const res = await api.favorites.toggle(snapshot)
-      if (request === favRequest && player.current?.id === id) fav = res.favorited
+      await favorites.toggle(track)
     } catch (err) {
       console.error('[favorites] toggle failed', err)
     }

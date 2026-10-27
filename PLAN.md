@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 8)
+Last updated: 2026-10-27 (rev 9)
 
 ---
 
@@ -639,6 +639,14 @@ Queue rows reorder from a Spotify-style grip that appears on hover or keyboard f
 
 Two alternatives were deliberately not taken: `svelte-dnd-action` is well maintained and accessible, but the project keeps exactly one runtime dependency and a single-list reorder is small enough to own; live reordering under the pointer needs stable queue ids or every row after the moved one remounts on each crossing. Both remain revisitable.
 
+### Recent history rows (2026-10-27)
+
+The Home card grouped plays by release and capped each group at two songs, which hid the listening log and wasted the card. It now shows five recent rows — art, title, credited artists, release link, duration, favourite, download and add-to-playlist — with **Show more** opening the shared side panel in a new `history` mode (the panel is now `lyrics` | `queue` | `history`, last 100 plays). The card collapses repeated tracks; the panel is the full play log and keeps every entry. Clicking a row plays that track alone (B24 still holds).
+
+`historyItem()` in `shared/listening.ts` turns an entry into a row item: per-artist ids survive, separators are kept, and the release is a link even when the entry predates release ids (it resolves by name on click). A shared `history` store feeds Home and the panel, and a `favorites` store became the one source for every heart, replacing the player bar's per-track `favorites.list()` read. The old group helpers (`groupRecentHistory`, `albumMatch`, `artistMatch`) left with the grouped UI; release identity remains in the parser and page headers.
+
+Two pitfalls shaped the code. `history.load()` reads its cache guard through `untrack`, because Home calls it from an effect: a tracked read made every response re-trigger the effect, invalidating each request so the summary never stuck. Rows are not keyed by track id: the history can hold the same song several times, and Svelte aborts a keyed each with `each_key_duplicate` — the card keys by position, the panel by entry plus position.
+
 ## 14. Library (shipped)
 
 **Data.** `library.json` now holds `favorites`, `history` and **`playlists`**. A playlist is `{ id, name, createdAt, updatedAt, tracks[] }`; tracks are the same `Track` objects used by the player, so a playlist entry can open its artist, show its cover and play without another lookup. Malformed entries are dropped on read and healed on write, same policy as favourites.
@@ -707,7 +715,7 @@ A track credited to several artists only linked the first one. A search row knew
 - `Track.artistParts` (`SubtitlePart[]`) is the source's credited run, separators included (`Stormy`, `, `, `Manal`). `artist` remains the display string. `HistoryEntry.artistParts` and `ImportTrack.artistParts` carry the same shape into history and YouTube imports.
 - `src/shared/artist-credits.ts` is the single parser. `creditParts()` takes the leading run from a row's parts and stops at the album, a play counter or a duration; `artistPartsFor()` prefers stored parts and otherwise splits the display string; `isArtistName()` keeps connector words (`feat.`, `with`, `x`) out of the links.
 - The fallback split is deliberately conservative: comma, spaced `&`/`+`, `feat.`/`ft.`/`featuring`/`with`, and spaced `x`. `R&B`, `AC/DC` and a trailing `X` stay whole. A split part carries no id, so clicking it searches that exact name — `openArtist()` now requires an exact normalized match before accepting the first result.
-- Structured credits win everywhere: `toTrack`, the audio-swap path, the import matcher, YouTube playlist imports, downloads (`patchTrack`/`repairCredits`) and the history backfill keep or restore them. Old history and yt-dlp-resolved tracks are split at render time, and `recordHistory` stores the split so a replay from Recently played keeps every link.
+- Structured credits win everywhere: `toTrack`, the audio-swap path, the import matcher, YouTube playlist imports, downloads (`patchTrack`/`repairCredits`) and the history backfill keep or restore them. Old history and yt-dlp-resolved tracks are split at render time, and `recordHistory` stores the split so a replay from Recently played rows keeps every link.
 - The dock, song page and queue render `ArtistLinks`, which links each name inline with the original separators and truncates the line. Track rows already rendered `CatalogItem.parts`; `trackToItem` now rebuilds them from `artistParts`, so playlists, downloads and Liked songs behave the same.
 
 **B42 — "An object could not be cloned."** Adding `artistParts` made `Track` nested for the first time. Svelte 5 state is a deep proxy, and every IPC call structured-clones its arguments; the shallow `{ ...track }` snapshot from B14 now carried a proxied array, so favouriting, adding to a playlist, downloading, creating an imported playlist and the 3-second session save all threw. The session save failed silently as an unhandled rejection and repeated on every save during playback. `plainTrack()`/`plainParts()` (`src/renderer/lib/track.ts`) copy the credit array at every boundary — session, history, favourites, playlists, downloads, import — and `creditParts()` returns copies so catalog-derived tracks are plain to begin with. The `links` e2e toggles a favourite on a collaboration, and the `import` e2e creates a playlist, which both fail without this.

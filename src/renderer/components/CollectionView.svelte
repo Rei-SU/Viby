@@ -8,7 +8,8 @@
   import { network } from '../lib/network.svelte'
   import { artwork } from '../lib/artwork.svelte'
   import { markFor } from '../lib/library-items'
-  import { trackToItem, plainTrack } from '../lib/track'
+  import { trackToItem } from '../lib/track'
+  import { favorites } from '../lib/favorites.svelte'
   import Cover from './Cover.svelte'
   import DownloadBadge from './DownloadBadge.svelte'
   import TrackRow from './TrackRow.svelte'
@@ -101,7 +102,7 @@
     if (isLiked) {
       const track = liked.find((entry) => entry.id === item.id)
       if (track) {
-        await api.favorites.toggle(plainTrack(track))
+        await favorites.toggle(track)
         await loadLiked()
       }
       return

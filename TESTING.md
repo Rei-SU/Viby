@@ -55,7 +55,7 @@ ones that touch main-process modules.
 | `downloads-manager` | yt-dlp progress parsing (known/unknown totals) and transient-vs-permanent failure classification |
 | `download-groups` | Library download split: collection-owned vs loose songs, album order, offline artwork fallbacks |
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
-| `listening` | seven-day listening summaries, duration weighting, duplicate history, recent release grouping, artist-checked release matching |
+| `listening` | seven-day summaries, duration weighting, duplicate history, history rows and their artist/release links |
 | `artist-credits` | credit parsing: the leading artist run, separator trimming, conservative splitting of combined names, structured credits winning over the fallback |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
@@ -114,7 +114,7 @@ the app while they run — they own the queue.
 | Scenario | Covers |
 |---|---|
 | `images` | Home artwork actually renders, home carousels stay inside the docked page, no broken images |
-| `home` | listening snapshot, grouped recents, release labels, seven-day pulse, mood navigation |
+| `home` | recent history rows, the history panel, weekly pulse, mood entry points |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |
@@ -167,10 +167,11 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |
 | `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change` · behaviour (reorder) |
+| `src/renderer/lib/history.svelte.ts`, `HistoryPanel`, `favorites.svelte.ts` | unit `listening` · e2e `home`, `queue` · behaviour |
 | `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker` | e2e `library` · behaviour |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts` | unit `artist-credits`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
-| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics` · visual check |
+| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home` · visual check |
 | `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue` |
 | `src/renderer/components/DetailView.svelte`, `MediaCard`, `HomeView`, `ListeningDashboard`, `MoodGrid` | e2e `home`, `navigation`, `images` · unit `listening` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |

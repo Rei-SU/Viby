@@ -1,4 +1,4 @@
-export type SidePanelMode = 'lyrics' | 'queue'
+export type SidePanelMode = 'lyrics' | 'queue' | 'history'
 
 /**
  * One docked panel, two contents. The player-bar buttons switch it, and
