@@ -10,6 +10,7 @@
   import { api } from '../lib/api'
   import { nav } from '../lib/nav.svelte'
   import { playlists } from '../lib/playlists.svelte'
+  import { plainTrack } from '../lib/track'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
   import InlineAlert from './InlineAlert.svelte'
@@ -131,7 +132,9 @@
   async function create(): Promise<void> {
     if (!source || selected.length === 0 || phase === 'creating') return
 
-    const tracks = selected.map((track) => ({ ...track }))
+    // Matched tracks live in Svelte state; IPC rejects the proxies that
+    // artistParts now nests inside them.
+    const tracks = selected.map(plainTrack)
     phase = 'creating'
     error = null
 
