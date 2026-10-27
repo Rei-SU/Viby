@@ -6,7 +6,7 @@
   import { network } from '../lib/network.svelte'
   import { nav } from '../lib/nav.svelte'
   import { openArtist } from '../lib/artist'
-  import { lyrics } from '../lib/lyrics.svelte'
+  import { sidePanel } from '../lib/side-panel.svelte'
   import { fitRail } from '../lib/rail-fit'
   import TrackRow from './TrackRow.svelte'
   import MediaCard from './MediaCard.svelte'
@@ -25,7 +25,7 @@
 
   let recents = $state<string[]>([])
 
-  // Freeze the card grid's column count while the lyrics panel animates so the
+  // Freeze the card grid's column count while the side panel animates so the
   // auto-fill breakpoints do not reflow mid-transition (which reads as jitter).
   // Cards have fixed widths, so changing the track count never resizes a card.
   // Opening freezes to the final (narrower) count; closing keeps the current
@@ -33,16 +33,16 @@
   // Applied directly to the DOM (not via reactive state) so it lands in the
   // same frame as the panel toggle, avoiding a one-frame flash.
   let freezeTimer: ReturnType<typeof setTimeout> | null = null
-  let prevLyricsOpen = lyrics.open
+  let prevPanelOpen = sidePanel.open
 
   $effect.pre(() => {
-    const open = lyrics.open
-    if (open === prevLyricsOpen) return
-    prevLyricsOpen = open
+    const open = sidePanel.open
+    if (open === prevPanelOpen) return
+    prevPanelOpen = open
     if (freezeTimer) clearTimeout(freezeTimer)
     const grid = document.querySelector<HTMLElement>('.card-grid')
     if (!grid) return
-    // `--lyrics-w` is clamp(320px, 30vw, 380px). Resolve it here instead of
+    // `--panel-w` is clamp(320px, 30vw, 380px). Resolve it here instead of
     // parsing the custom property, which can keep the clamp() token stream.
     const panelW = Math.min(380, Math.max(320, window.innerWidth * 0.3))
     const gridW = grid.getBoundingClientRect().width
@@ -595,7 +595,7 @@
 
   .card-grid {
     display: grid;
-    /* Fixed tracks keep card sizes constant while the lyrics sidebar animates.
+    /* Fixed tracks keep card sizes constant while the side panel animates.
        Fluid 1fr tracks resize every card on every frame, which reads as jitter. */
     grid-template-columns: repeat(auto-fill, 152px);
     gap: 20px 16px;

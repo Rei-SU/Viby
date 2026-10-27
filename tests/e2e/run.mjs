@@ -10,6 +10,7 @@ import * as lyricsChange from './lyrics-change.mjs'
 import * as navigation from './navigation.mjs'
 import * as offline from './offline.mjs'
 import * as playback from './playback.mjs'
+import * as queue from './queue.mjs'
 import * as quickSearch from './quick-search.mjs'
 import * as reconnect from './reconnect.mjs'
 import * as resume from './resume.mjs'
@@ -22,7 +23,7 @@ import * as settings from './settings.mjs'
  *   node tests/e2e/run.mjs lyrics library     # only what you changed
  *   node tests/e2e/run.mjs                    # everything
  */
-const scenarios = { images, home, playback, reconnect, autoplay, links, lyrics, 'lyrics-change': lyricsChange, library, resume, navigation, offline, 'quick-search': quickSearch, settings, import: importScenario }
+const scenarios = { images, home, playback, reconnect, autoplay, links, queue, lyrics, 'lyrics-change': lyricsChange, library, resume, navigation, offline, 'quick-search': quickSearch, settings, import: importScenario }
 
 const requested = process.argv.slice(2)
 const unknown = requested.filter((name) => !scenarios[name])

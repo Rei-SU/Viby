@@ -7,7 +7,6 @@ import { api } from './api'
  * so reopening the panel or replaying a song is instant.
  */
 class LyricsState {
-  open = $state(false)
   loading = $state(false)
   error = $state<string | null>(null)
   data = $state<Lyrics | null>(null)
@@ -15,19 +14,6 @@ class LyricsState {
   private trackId: string | null = null
   private request = 0
   private cache = new Map<string, Lyrics>()
-
-  async toggle(track: Track | null): Promise<void> {
-    if (this.open) {
-      this.open = false
-      return
-    }
-    this.open = true
-    if (track) await this.load(track)
-  }
-
-  close(): void {
-    this.open = false
-  }
 
   async load(track: Track): Promise<void> {
     if (!track?.id) return

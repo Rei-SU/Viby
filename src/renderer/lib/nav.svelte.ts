@@ -4,7 +4,6 @@ export type View =
   | 'home'
   | 'search'
   | 'library'
-  | 'queue'
   | 'import'
   | 'settings'
 

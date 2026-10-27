@@ -529,6 +529,29 @@ class Player {
     }
   }
 
+  /**
+   * Reorder a row without touching playback. `to` is the item's final index;
+   * the current track follows its own row so the highlight and "next" stay
+   * truthful, and the new order is what a restart restores.
+   */
+  move(from: number, to: number): void {
+    const length = this.queue.length
+    if (length < 2 || from < 0 || from >= length) return
+    const target = Math.min(length - 1, Math.max(0, Math.trunc(to)))
+    if (target === from) return
+
+    const next = [...this.queue]
+    const [item] = next.splice(from, 1)
+    next.splice(target, 0, item)
+
+    if (from === this.index) this.index = target
+    else if (from < this.index && target >= this.index) this.index -= 1
+    else if (from > this.index && target <= this.index) this.index += 1
+
+    this.queue = next
+    this.persistSession(true)
+  }
+
   // ---- internals ---------------------------------------------------------
 
   private startTimer(): void {

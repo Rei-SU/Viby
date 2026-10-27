@@ -4,7 +4,7 @@
   import { nav } from '../lib/nav.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
   import { plainTrack } from '../lib/track'
-  import { lyrics } from '../lib/lyrics.svelte'
+  import { sidePanel } from '../lib/side-panel.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
 
@@ -259,11 +259,20 @@
     {/if}
     <button
       class="icon"
-      class:on={lyrics.open}
+      class:on={sidePanel.mode === 'queue'}
+      title="Queue"
+      aria-label="Queue"
+      onclick={() => sidePanel.toggle('queue')}
+    >
+      <Icon name="list" size={16} />
+    </button>
+    <button
+      class="icon"
+      class:on={sidePanel.mode === 'lyrics'}
       title="Lyrics"
       aria-label="Lyrics"
       disabled={!track}
-      onclick={() => void lyrics.toggle(track)}
+      onclick={() => sidePanel.toggle('lyrics')}
     >
       <Icon name="lyrics" size={16} />
     </button>

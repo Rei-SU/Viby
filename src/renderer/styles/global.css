@@ -33,7 +33,7 @@
   --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.5);
 
   --sidebar-w: 68px;
-  --lyrics-w: clamp(320px, 30vw, 380px);
+  --panel-w: clamp(320px, 30vw, 380px);
   --player-h: 84px;
   --titlebar-h: 46px;
 

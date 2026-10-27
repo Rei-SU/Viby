@@ -27,6 +27,7 @@ export async function openApp() {
         const { player, nav, api } = window.__viby
         player.clearQueue()
         nav.go('home')
+        window.__viby.sidePanel?.close()
         // Synthetic titles used by the harness must never look like listening.
         await api.debug?.forgetHistory(['Track A', 'Track B', 'Seed', 'Resume test', 'Q1', 'Q2', 'Q3'])
         return true
@@ -37,6 +38,7 @@ export async function openApp() {
       evaluate(`(() => {
         const p = window.__viby.player
         p.clearQueue()
+        window.__viby.sidePanel?.close()
         if (${JSON.stringify(settings.muted)} === false && p.muted) p.toggleMute()
         p.setVolume(${JSON.stringify(settings.volume)})
         window.__viby.nav.go('home')

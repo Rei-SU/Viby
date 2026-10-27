@@ -120,6 +120,7 @@ the app while they run — they own the queue.
 | `autoplay` | radio extension when the queue ends |
 | `links` | player-bar title → song page, artist link, related list, every credited artist linked in the dock |
 | `lyrics` | panel opens docked beside the page, page width shrinks and restores, synced active line, click-to-seek, closes |
+| `queue` | queue docks beside the page, count and Clear, grip reorder by pointer and keyboard, remove, empty state, lyrics sharing the panel |
 | `lyrics-change` | a new track's lyrics reset to the top (no inherited scroll) |
 | `library` | playlist create/list/open/delete |
 | `resume` | session save → reload → restored paused at the timestamp |
@@ -135,7 +136,7 @@ the app while they run — they own the queue.
 node tests/behaviour.mjs
 ```
 
-Queue editing, repeat modes, shuffle, favourites, history, media session. It owns
+Queue editing and reordering, repeat modes, shuffle, favourites, history, media session. It owns
 the queue for its duration and restores settings afterwards.
 
 ## Impact map
@@ -161,15 +162,16 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts` | unit `images` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
-| `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links` · behaviour · unit `artist-credits`, `listening` |
+| `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
 | `src/renderer/lib/nav.svelte.ts` | e2e `navigation`, `links` |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |
+| `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change` · behaviour (reorder) |
 | `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker` | e2e `library` · behaviour |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts` | unit `artist-credits`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
 | `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics` · visual check |
-| `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics` |
+| `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue` |
 | `src/renderer/components/DetailView.svelte`, `MediaCard`, `HomeView`, `ListeningDashboard`, `MoodGrid` | e2e `home`, `navigation`, `images` · unit `listening` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |

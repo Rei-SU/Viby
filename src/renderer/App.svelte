@@ -14,11 +14,11 @@
   import CollectionView from './components/CollectionView.svelte'
   import DownloadCollectionView from './components/DownloadCollectionView.svelte'
   import PlaylistPicker from './components/PlaylistPicker.svelte'
-  import LyricsPanel from './components/LyricsPanel.svelte'
+  import SidePanel from './components/SidePanel.svelte'
+  import { sidePanel } from './lib/side-panel.svelte'
   import { lyrics } from './lib/lyrics.svelte'
   import ImportView from './components/ImportView.svelte'
   import SettingsView from './components/SettingsView.svelte'
-  import Queue from './components/Queue.svelte'
   import Icon from './components/Icon.svelte'
   import { network } from './lib/network.svelte'
   import { updates } from './lib/updates.svelte'
@@ -34,7 +34,6 @@
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'search', label: 'Search', icon: 'search' },
     { id: 'library', label: 'Library', icon: 'disc' },
-    { id: 'queue', label: 'Queue', icon: 'list' },
     { id: 'import', label: 'Import', icon: 'plus' },
     { id: 'settings', label: 'Settings', icon: 'gear' }
   ]
@@ -163,10 +162,10 @@
     if (main && scrollKey) scrollMemory.set(scrollKey, main.scrollTop)
   }
 
-  // Keep the panel in sync when the track changes while it is open.
+  // Keep the panel in sync when the track changes while lyrics are open.
   $effect(() => {
     const track = player.current
-    if (lyrics.open && track) void lyrics.load(track)
+    if (sidePanel.mode === 'lyrics' && track) void lyrics.load(track)
   })
 
   onMount(() => {
@@ -180,7 +179,7 @@
 
 <svelte:window onclick={() => (netMenu = false)} onresize={onResize} />
 
-<div class="layout" class:lyrics-open={lyrics.open} class:resizing>
+<div class="layout" class:panel-open={sidePanel.open} class:resizing>
   <!-- The window has no native title bar on macOS, so this strip is the only
        draggable area. Everything interactive inside it must opt out. -->
   <header class="titlebar" class:mac={isMac} class:win={isWin}>
@@ -316,8 +315,6 @@
       <SearchView />
     {:else if nav.view === 'library'}
       <LibraryView />
-    {:else if nav.view === 'queue'}
-      <Queue />
     {:else if nav.view === 'settings'}
       <SettingsView />
     {:else if network.localFirst}
@@ -334,7 +331,7 @@
     {/if}
   </main>
 
-  <LyricsPanel />
+  <SidePanel />
   <PlayerBar />
   <PlaylistPicker />
 
@@ -387,10 +384,10 @@
     transition: grid-template-columns 300ms var(--ease);
   }
 
-  /* The lyrics panel lives in the third column. The titlebar and player stay
+  /* The side panel lives in the third column. The titlebar and player stay
      full width; only the content row gives up space. */
-  .layout.lyrics-open {
-    grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--lyrics-w);
+  .layout.panel-open {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--panel-w);
   }
 
   /* Window resizes should reflow immediately, not animate behind the pointer. */

@@ -44,6 +44,7 @@ async function state() {
         title: p.current?.title ?? null,
         index: p.index,
         length: p.queue.length,
+        order: p.queue.map((track) => track.title).join(','),
         playing: p.playing,
         position: Math.round(p.position),
         duration: Math.round(p.duration),
@@ -90,6 +91,32 @@ check('removing the current track advances', s.title === 'Q3' && s.length === 1 
 await evaluate(`(() => { window.__viby.player.clearQueue(); return true })()`)
 s = await state()
 check('clear empties the queue and stops', s.title === null && s.length === 0 && !s.playing, JSON.stringify(s))
+
+// ---- reorder ---------------------------------------------------------------
+console.log('\nreorder:')
+await playQueue(TRACKS, 0)
+
+await evaluate(`(() => { window.__viby.player.move(2, 0); return true })()`)
+s = await state()
+check(
+  'moving a later track to the front keeps the current one',
+  s.title === 'Q1' && s.order === 'Q3,Q1,Q2' && s.index === 1 && s.playing,
+  JSON.stringify(s)
+)
+
+await evaluate(`(() => { window.__viby.player.move(1, 2); return true })()`)
+s = await state()
+check(
+  'moving the current track follows it',
+  s.title === 'Q1' && s.order === 'Q3,Q2,Q1' && s.index === 2 && s.playing,
+  JSON.stringify(s)
+)
+
+await evaluate(`(() => { window.__viby.player.move(99, 0); return true })()`)
+s = await state()
+check('an out-of-range move is ignored', s.order === 'Q3,Q2,Q1', JSON.stringify(s))
+
+await evaluate(`(() => { window.__viby.player.clearQueue(); return true })()`)
 
 // ---- repeat one ------------------------------------------------------------
 console.log('\nrepeat one:')

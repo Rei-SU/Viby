@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 7)
+Last updated: 2026-10-27 (rev 8)
 
 ---
 
@@ -457,7 +457,7 @@ Verified in the running app: type "daft punk" → 20 rows → click an artist �
 | B22 | "Autoplay" continued with a random/unrelated track (including AI-generated uploads) | The queue *was* the list you clicked from. From search, that means "the next search result", which has no relation to what you played | Search queues only the clicked song; when a queue is exhausted, autoplay appends **YouTube Music's own radio queue** (`/next` with `playlistId=RDAMVM<videoId>`) |
 | B23 | Autoplay had a ~2.5s silent gap at the seam | The radio queue was fetched only after the track ended | Radio is fetched while the last track is still playing, its first track's URL is prefetched, and the result is cached by seed |
 
-Measured: radio returns **49 related tracks**, all playable, with artists and durations (80s pop for a Rick Astley seed). End-to-end: queue 1 → 26 and playback moved to "Take Me to Your Heart" — a related track, not a search sibling. The toggle ("Autoplay similar songs when the queue ends") lives in the Queue view and persists in settings.
+Measured: radio returns **49 related tracks**, all playable, with artists and durations (80s pop for a Rick Astley seed). End-to-end: queue 1 → 26 and playback moved to "Take Me to Your Heart" — a related track, not a search sibling. The toggle ("Autoplay similar songs when the queue ends") lives in Settings and persists.
 
 ### Round seven — what counts as a queue
 
@@ -630,6 +630,14 @@ A small tag sits between the cached badge and the volume controls: `AAC 130k` / 
 - tooltip adds the full detail: `OPUS · 131 kbps · cached on disk` vs `· streaming`
 
 Verified both paths: cached file → `OPUS 131k`, remote stream → `OPUS 132k`; drive suite asserts the tag format.
+
+### Queue panel and drag reorder (2026-10-27)
+
+The Queue was a destination (a rail item and a full page) while Lyrics was a dock. They now share one right-hand panel. `sidePanel.mode` is `'lyrics' | 'queue' | null`; the player dock carries Queue and Lyrics buttons, and `SidePanel.svelte` owns the grid column, width, hairline, header and close button. `LyricsPanel` and `QueuePanel` are bodies; the `lyrics` store keeps only fetch state. The `'queue'` view and rail item are gone, so Back/Forward no longer records queue pages. `--lyrics-w` became `--panel-w`, and SearchView's card-grid freeze follows the panel rather than lyrics specifically.
+
+Queue rows reorder from a Spotify-style grip that appears on hover or keyboard focus. Pointer Events (not HTML5 drag-and-drop) drive a 4px threshold, row rects cached in list coordinates, a drop line between rows, and rAF autoscroll near the panel edges; the queue changes once on release. The grip also reorders from the keyboard (ArrowUp/Down, Home/End) and refocuses the moved row, because rows stay index-keyed — the queue can hold the same track twice, and keying by id would either duplicate keys or remount covers. `player.move(from, to)` splices the array, keeps `index` on the current track so the highlight and "next" stay truthful, leaves audio untouched and persists the session. No new dependency. Autoplay stays a Settings option; the panel carries only the count and Clear.
+
+Two alternatives were deliberately not taken: `svelte-dnd-action` is well maintained and accessible, but the project keeps exactly one runtime dependency and a single-list reorder is small enough to own; live reordering under the pointer needs stable queue ids or every row after the moved one remounts on each crossing. Both remain revisitable.
 
 ## 14. Library (shipped)
 

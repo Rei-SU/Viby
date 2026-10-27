@@ -18,6 +18,7 @@
     | 'forward'
     | 'close'
     | 'check'
+    | 'grip'
     | 'alert'
     | 'note'
     | 'disc'
@@ -56,6 +57,7 @@
     forward: { d: 'M9 18l6-6-6-6' },
     close: { d: 'M18 6L6 18M6 6l12 12' },
     check: { d: 'M5 12.5l4.5 4.5L19 7.5' },
+    grip: { d: 'M9 6h1.5M14 6h1.5M9 12h1.5M14 12h1.5M9 18h1.5M14 18h1.5' },
     alert: { d: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7.5v5.5M12 16.5h.01' },
     note: {
       d: 'M9 18V5l12-2v13M9 18a3 3 0 11-6 0 3 3 0 016 0zM21 16a3 3 0 11-6 0 3 3 0 016 0z'
