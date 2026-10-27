@@ -216,7 +216,7 @@ export class DownloadsStore {
    * queued (an album opened outside the artist page stored no artist). Only the
    * credits are patched; the file, quality and source list stay untouched.
    */
-  patchTrack(trackId: string, patch: Partial<Pick<Track, 'artist' | 'artistId' | 'album' | 'albumId' | 'thumbnail'>>): boolean {
+  patchTrack(trackId: string, patch: Partial<Pick<Track, 'artist' | 'artistId' | 'artistParts' | 'album' | 'albumId' | 'thumbnail'>>): boolean {
     let changed = false
     this.store.update((data) => {
       const entry = data.entries[trackId]

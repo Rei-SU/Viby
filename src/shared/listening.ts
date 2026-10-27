@@ -1,4 +1,5 @@
 import type { CatalogItem, HistoryEntry, SubtitlePart } from './types'
+import { artistNames, splitArtistParts } from './artist-credits'
 
 export type ListeningArtist = {
   key: string
@@ -46,7 +47,10 @@ export function summarizeHistory(history: HistoryEntry[], since: number): Listen
 
   for (const entry of history) {
     if (entry.playedAt < since || entry.playedAt >= since + DAY_MS * 7) continue
-    const name = entry.artist.split(',')[0]?.trim() || 'Unknown artist'
+    const name =
+      artistNames(entry.artistParts ?? [])[0] ||
+      entry.artist.split(',')[0]?.trim() ||
+      'Unknown artist'
     const key = `name:${name.toLowerCase()}`
     const duration = Number.isFinite(entry.durationSec) ? Math.max(0, entry.durationSec ?? 0) : 0
     const completion = Number.isFinite(entry.completion) ? Math.min(1, Math.max(0, entry.completion)) : 0
@@ -119,9 +123,15 @@ export function groupRecentHistory(
     // Replaying a row from Recently played goes through `toTrack`, which reads
     // the release from these parts. Dropping the album here made every replay
     // lose its release and fall back to artist grouping.
-    const parts: SubtitlePart[] = []
-    if (entry.artistId) parts.push({ text: artist, artistId: entry.artistId, entity: 'artist' })
-    if (album) parts.push({ text: album, albumId: entry.albumId, entity: 'album' })
+    const credit = entry.artistParts?.length
+      ? entry.artistParts
+      : splitArtistParts(artist, entry.artistId)
+    const parts: SubtitlePart[] = [...credit]
+    if (album) {
+      if (parts.length > 0) parts.push({ text: ' · ' })
+      parts.push({ text: album, albumId: entry.albumId, entity: 'album' })
+    }
+    const names = artistNames(credit)
     const item: CatalogItem = {
       id: entry.trackId,
       kind: 'song',
@@ -129,7 +139,7 @@ export function groupRecentHistory(
       subtitle: artist,
       thumbnail: entry.thumbnail,
       durationSec: entry.durationSec,
-      artists: artist === 'Unknown artist' ? undefined : [artist],
+      artists: names.length ? names : artist === 'Unknown artist' ? undefined : [artist],
       parts: parts.length ? parts : undefined
     }
 

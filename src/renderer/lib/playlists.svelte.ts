@@ -1,5 +1,6 @@
 import type { Playlist, Track } from '@shared/types'
 import { api } from './api'
+import { plainTrack } from './track'
 
 /**
  * User playlists, mirrored in the renderer so every surface stays in sync after
@@ -50,7 +51,7 @@ class Playlists {
 
   async addTrack(id: string, track: Track): Promise<Playlist | null> {
     const generation = ++this.generation
-    const playlist = await api.library.addToPlaylist(id, track)
+    const playlist = await api.library.addToPlaylist(id, plainTrack(track))
     if (playlist && generation === this.generation) this.replace(playlist)
     return playlist
   }

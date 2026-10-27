@@ -523,6 +523,7 @@ let importResolveController: AbortController | null = null
           title: entry.title || track?.title || 'Unknown title',
           artist: entry.artist || track?.artist || '',
           artistId: entry.artistId ?? track?.artistId,
+          artistParts: entry.artistParts ?? track?.artistParts,
           album: entry.album ?? track?.album,
           albumId: entry.albumId ?? track?.albumId,
           durationSec: entry.durationSec ?? track?.durationSec,

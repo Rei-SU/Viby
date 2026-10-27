@@ -15,6 +15,7 @@ const suites = {
   thumbs: { file: 'thumbs.test.ts' },
   'artist-shelves': { file: 'artist-shelves.test.ts' },
   library: { file: 'library.test.ts', electron: true },
+  'artist-credits': { file: 'artist-credits.test.ts' },
   lyrics: { file: 'lyrics.test.ts', electron: true },
   spotify: { file: 'spotify-import.test.ts' },
   import: { file: 'import-adapters.test.ts' },

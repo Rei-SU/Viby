@@ -2,8 +2,14 @@ export type Track = {
   id: string
   title: string
   artist: string
-  /** Browse id of the primary artist, so the player bar can link to them. */
+  /** Browse id of the primary artist, so single-link callers still work. */
   artistId?: string
+  /**
+   * Every artist credit as YouTube lists it, separators included. `artist` is
+   * still the display string, but this is what lets the player, queue and saved
+   * rows link each featured artist to their own page.
+   */
+  artistParts?: SubtitlePart[]
   album?: string
   albumId?: string
   durationSec: number
@@ -210,6 +216,8 @@ export type HistoryEntry = {
   artist: string
   /** Browse id of the artist, so history rows can link to them. */
   artistId?: string
+  /** Per-artist credits, so a replay from Recently played keeps every link. */
+  artistParts?: SubtitlePart[]
   album?: string
   albumId?: string
   durationSec?: number
@@ -362,6 +370,8 @@ export type ImportTrack = {
   thumbnail?: string
   videoType?: 'audio' | 'video' | 'ugc'
   artistId?: string
+  /** Exact YouTube credits, so an import keeps every featured artist linked. */
+  artistParts?: SubtitlePart[]
   albumId?: string
 }
 

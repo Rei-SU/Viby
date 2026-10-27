@@ -10,6 +10,8 @@ import { api } from './api'
 import { network } from './network.svelte'
 import { cacheRadio, cachedRadio } from './catalog-cache.svelte'
 import { sourceAction } from './player-source'
+import { artistPartsFor, creditParts } from '@shared/artist-credits'
+import { plainParts, plainTrack } from './track'
 
 /**
  * The player owns exactly one <audio> element for the whole app (PLAN §6: one
@@ -33,8 +35,8 @@ export function isPlayable(item: CatalogItem): boolean {
 
 export function toTrack(item: CatalogItem): Track {
   const parts = item.parts ?? []
+  const credit = creditParts(parts)
   const artistPart = parts.find((part) => part.artistId || part.entity === 'artist')
-  const albumPart = parts.find((part) => part.albumId || part.entity === 'album')
   // A subtitle is not an artist name when it only holds a duration or a play
   // count; album rows with no credited artist use an empty subtitle, and the
   // detail page fills in the real name before playback.
@@ -46,13 +48,17 @@ export function toTrack(item: CatalogItem): Track {
     id: item.id,
     title: item.title,
     artist:
+      (credit ? credit.map((part) => part.text).join('').trim() : '') ||
       item.artists?.join(', ') ||
       artistPart?.text.trim() ||
       (subtitleIsCounter ? '' : subtitle) ||
       'Unknown artist',
     artistId: artistPart?.artistId,
-    album: albumPart?.text.trim(),
-    albumId: albumPart?.albumId,
+    // Keeping every credit is what lets the player bar and saved rows link a
+    // featured artist, not just the primary one.
+    artistParts: credit,
+    album: parts.find((part) => part.albumId || part.entity === 'album')?.text.trim(),
+    albumId: parts.find((part) => part.albumId)?.albumId,
     durationSec: item.durationSec ?? 0,
     thumbnail: item.thumbnail,
     views: item.views,
@@ -178,8 +184,9 @@ class Player {
     this.lastSaveAt = now
 
     const snapshot: PlaybackSession = {
-      track: this.current ? { ...this.current } : null,
-      queue: this.queue.slice(0, 100).map((track) => ({ ...track })),
+      // State proxies cannot cross IPC; send plain copies (see plainTrack).
+      track: this.current ? plainTrack(this.current) : null,
+      queue: this.queue.slice(0, 100).map(plainTrack),
       index: this.index,
       position: this.position,
       updatedAt: now
@@ -308,8 +315,13 @@ class Player {
         id: res.data.track.id,
         title: res.data.track.title,
         artist: res.data.track.artist,
+        artistId: res.data.track.artistId,
+        artistParts: res.data.track.artistParts,
+        album: res.data.track.album,
+        albumId: res.data.track.albumId,
         durationSec: res.data.track.durationSec,
-        thumbnail: res.data.track.thumbnail
+        thumbnail: res.data.track.thumbnail,
+        videoType: res.data.track.videoType
       }
       this.queue = [...this.queue, track]
       this.index = this.queue.length - 1
@@ -661,13 +673,19 @@ class Player {
         if (token !== this.playToken) return
         if (alt.ok && alt.data) {
           const better = alt.data
+          const betterCredit = creditParts(better.parts ?? [])
           // Keep the id we were launched from: the row that started this stays
           // highlighted even though playback moved to the official audio.
           track.sourceId = track.id
           track.id = better.id
           track.title = better.title
-          track.artist = better.artists?.join(', ') || better.subtitle || track.artist
+          track.artist =
+            (betterCredit ? betterCredit.map((part) => part.text).join('').trim() : '') ||
+            better.artists?.join(', ') ||
+            better.subtitle ||
+            track.artist
           track.artistId = better.parts?.find((part) => part.artistId)?.artistId ?? track.artistId
+          if (betterCredit) track.artistParts = betterCredit
           track.durationSec = better.durationSec || track.durationSec
           track.thumbnail = better.thumbnail ?? track.thumbnail
           track.videoType = 'audio'
@@ -879,11 +897,15 @@ class Player {
     const track = this.current
     if (!track) return
     const completion = this.duration > 0 ? Math.min(1, this.position / this.duration) : 0
+    // A resolver-only track has no structured credits; store the conservative
+    // split so a replay from Recently played keeps every artist clickable.
+    const artistParts = plainParts(artistPartsFor(track))
     void api.history.add({
       trackId: track.id,
       title: track.title,
       artist: track.artist,
       artistId: track.artistId,
+      artistParts: artistParts?.length ? artistParts : undefined,
       album: track.album,
       albumId: track.albumId,
       durationSec: track.durationSec,

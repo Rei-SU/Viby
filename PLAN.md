@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-24 (rev 6)
+Last updated: 2026-10-27 (rev 7)
 
 ---
 
@@ -691,6 +691,20 @@ Verified one active row + equalizer on album pages (current `_vOcbrUsmjM`, sourc
 | # | Symptom | Cause | Fix |
 |---|---|---|---|
 | B41 | After the app had been paused for a while, pressing Play looked like it did nothing: the dock stayed on Play at `0:00` while the cached stream URL had expired (HTTP 403). Repeated clicks made it worse. | `toggle()` resumed with `audio.play()` and swallowed the rejection. `recover()` did re-resolve with `force`, but had no UI state of its own, so the several-second wait was invisible; the retry budget could also stay exhausted, leaving the track unplayable until it was re-queued. | A dedicated `resume()` catches the rejection, resets the retry budget for an explicit play and calls `recover()`. `reconnecting` drives the same dock spinner as a first resolve (and blocks duplicate clicks), so the wait is visible. The first successful recovery clears it and resumes at the saved timestamp. Regression: `tests/e2e/reconnect.mjs` — it rejects one `play()` call, then asserts the spinner/`Loading` state appears and playback resumes with no error notice. |
+
+### Multi-artist credits (2026-10-27)
+
+A track credited to several artists only linked the first one. A search row knew every artist, but `toTrack` collapsed its parts into `artist` + one `artistId`, and the dock, song page and queue rendered that single id. The fix is a data shape that survives everywhere a Track is stored, not a renderer special case.
+
+- `Track.artistParts` (`SubtitlePart[]`) is the source's credited run, separators included (`Stormy`, `, `, `Manal`). `artist` remains the display string. `HistoryEntry.artistParts` and `ImportTrack.artistParts` carry the same shape into history and YouTube imports.
+- `src/shared/artist-credits.ts` is the single parser. `creditParts()` takes the leading run from a row's parts and stops at the album, a play counter or a duration; `artistPartsFor()` prefers stored parts and otherwise splits the display string; `isArtistName()` keeps connector words (`feat.`, `with`, `x`) out of the links.
+- The fallback split is deliberately conservative: comma, spaced `&`/`+`, `feat.`/`ft.`/`featuring`/`with`, and spaced `x`. `R&B`, `AC/DC` and a trailing `X` stay whole. A split part carries no id, so clicking it searches that exact name — `openArtist()` now requires an exact normalized match before accepting the first result.
+- Structured credits win everywhere: `toTrack`, the audio-swap path, the import matcher, YouTube playlist imports, downloads (`patchTrack`/`repairCredits`) and the history backfill keep or restore them. Old history and yt-dlp-resolved tracks are split at render time, and `recordHistory` stores the split so a replay from Recently played keeps every link.
+- The dock, song page and queue render `ArtistLinks`, which links each name inline with the original separators and truncates the line. Track rows already rendered `CatalogItem.parts`; `trackToItem` now rebuilds them from `artistParts`, so playlists, downloads and Liked songs behave the same.
+
+**B42 — "An object could not be cloned."** Adding `artistParts` made `Track` nested for the first time. Svelte 5 state is a deep proxy, and every IPC call structured-clones its arguments; the shallow `{ ...track }` snapshot from B14 now carried a proxied array, so favouriting, adding to a playlist, downloading and the 3-second session save all threw. The session save failed silently as an unhandled rejection and repeated on every save during playback. `plainTrack()`/`plainParts()` (`src/renderer/lib/track.ts`) copy the credit array at every boundary — session, history, favourites, playlists, downloads — and `creditParts()` returns copies so catalog-derived tracks are plain to begin with. The `links` e2e now toggles a favourite on a collaboration, which fails without this.
+
+Regression: unit `artist-credits` and the featured-artist half of e2e `links`.
 
 ## 15. Lyrics (shipped)
 

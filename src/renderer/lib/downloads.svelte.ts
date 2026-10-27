@@ -8,6 +8,7 @@ import type {
 } from '@shared/types'
 import { api } from './api'
 import { player } from './player.svelte'
+import { plainTrack } from './track'
 
 export type DownloadUiState = 'idle' | DownloadJobState | 'done'
 
@@ -109,11 +110,11 @@ class DownloadsStore {
   }
 
   async addTrack(track: Track): Promise<void> {
-    await this.mutate(() => api.downloads.addTrack(track))
+    await this.mutate(() => api.downloads.addTrack(plainTrack(track)))
   }
 
   async addCollection(input: DownloadCollectionInput, tracks: Track[]): Promise<void> {
-    await this.mutate(() => api.downloads.addCollection(input, tracks))
+    await this.mutate(() => api.downloads.addCollection(input, tracks.map(plainTrack)))
   }
 
   async removeTrack(trackId: string): Promise<void> {

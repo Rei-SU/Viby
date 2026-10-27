@@ -115,6 +115,52 @@ check(
   JSON.stringify(recent[0]?.tracks[0]?.parts)
 )
 
+// A featured credit must survive the round trip through history, or replaying
+// the row collapses back to one artist in the player.
+const featuredHistory: HistoryEntry[] = [
+  {
+    trackId: 'f',
+    title: 'Sata 9ttala',
+    artist: 'Stormy, Manal',
+    artistId: 'stormy-id',
+    artistParts: [
+      { text: 'Stormy', artistId: 'stormy-id', entity: 'artist' },
+      { text: ', ' },
+      { text: 'Manal', artistId: 'manal-id', entity: 'artist' }
+    ],
+    playedAt: NOW - 500,
+    completion: 0.8
+  }
+]
+const featuredItem = groupRecentHistory(featuredHistory)[0]?.tracks[0]
+const featuredArtists = featuredItem?.parts?.filter((part) => part.entity === 'artist') ?? []
+check(
+  'recent items keep every featured artist',
+  featuredArtists.length === 2 && featuredArtists[1]?.artistId === 'manal-id',
+  JSON.stringify(featuredItem?.parts)
+)
+check('the credit separator survives', featuredItem?.parts?.[1]?.text === ', ')
+check(
+  'top artists use the primary credit',
+  summarizeHistory(featuredHistory, NOW - WEEK).artists[0]?.name === 'Stormy',
+  JSON.stringify(summarizeHistory(featuredHistory, NOW - WEEK).artists)
+)
+
+const legacyItem = groupRecentHistory([
+  {
+    trackId: 'g',
+    title: 'Legacy',
+    artist: 'Stormy, Manal',
+    playedAt: NOW - 400,
+    completion: 0
+  }
+])[0]?.tracks[0]
+check(
+  'legacy combined credits are split for linking',
+  (legacyItem?.parts?.filter((part) => part.entity === 'artist').length ?? 0) === 2,
+  JSON.stringify(legacyItem?.parts)
+)
+
 // Two releases can share a name ("Sociopath" has twenty on YouTube Music). They
 // must not merge, and a click must not open the other artist's release.
 const sameTitle = groupRecentHistory(

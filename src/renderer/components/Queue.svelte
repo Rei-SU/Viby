@@ -1,7 +1,7 @@
 <script lang="ts">
   import { player } from '../lib/player.svelte'
   import { downloads } from '../lib/downloads.svelte'
-  import { openArtist } from '../lib/artist'
+  import ArtistLinks from './ArtistLinks.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
 
@@ -52,14 +52,7 @@
             <span class="text">
               <span class="t truncate">{track.title}</span>
               <span class="a truncate">
-                <button
-                  class="artist-link"
-                  title="Open artist"
-                  onclick={(event) => {
-                    event.stopPropagation()
-                    openArtist(track.artistId, track.artist)
-                  }}>{track.artist}</button
-                >
+                <ArtistLinks parts={track.artistParts} name={track.artist} id={track.artistId} />
               </span>
             </span>
             {#if downloads.stateFor(track.id) === 'done'}
@@ -200,18 +193,6 @@
   .a {
     font-size: 12px;
     color: var(--text-faint);
-  }
-
-  .artist-link {
-    color: inherit;
-    padding: 0;
-    font: inherit;
-  }
-
-  .artist-link:hover {
-    color: var(--text);
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
 
   .len {

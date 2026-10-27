@@ -56,6 +56,7 @@ ones that touch main-process modules.
 | `download-groups` | Library download split: collection-owned vs loose songs, album order, offline artwork fallbacks |
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
 | `listening` | seven-day listening summaries, duration weighting, duplicate history, recent release grouping, artist-checked release matching |
+| `artist-credits` | credit parsing: the leading artist run, separator trimming, conservative splitting of combined names, structured credits winning over the fallback |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
@@ -117,7 +118,7 @@ the app while they run — they own the queue.
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |
-| `links` | player-bar title → song page, artist link, related list |
+| `links` | player-bar title → song page, artist link, related list, every credited artist linked in the dock |
 | `lyrics` | panel opens docked beside the page, page width shrinks and restores, synced active line, click-to-seek, closes |
 | `lyrics-change` | a new track's lyrics reset to the top (no inherited scroll) |
 | `library` | playlist create/list/open/delete |
@@ -160,12 +161,13 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts` | unit `images` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
-| `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links` · behaviour |
+| `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links` · behaviour · unit `artist-credits`, `listening` |
 | `src/renderer/lib/nav.svelte.ts` | e2e `navigation`, `links` |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |
 | `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker` | e2e `library` · behaviour |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
+| `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts` | unit `artist-credits`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
 | `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics` · visual check |
 | `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics` |
 | `src/renderer/components/DetailView.svelte`, `MediaCard`, `HomeView`, `ListeningDashboard`, `MoodGrid` | e2e `home`, `navigation`, `images` · unit `listening` |

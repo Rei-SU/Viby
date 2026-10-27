@@ -2,7 +2,8 @@
   import { player } from '../lib/player.svelte'
   import { api } from '../lib/api'
   import { nav } from '../lib/nav.svelte'
-  import { openArtist } from '../lib/artist'
+  import ArtistLinks from './ArtistLinks.svelte'
+  import { plainTrack } from '../lib/track'
   import { lyrics } from '../lib/lyrics.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -128,7 +129,7 @@
 
   async function toggleFav(): Promise<void> {
     if (!track) return
-    const snapshot = { ...track }
+    const snapshot = plainTrack(track)
     const id = snapshot.id
     const request = ++favRequest
     try {
@@ -148,9 +149,9 @@
         {track?.title ?? 'Nothing playing'}
       </button>
       {#if track}
-        <button class="artist truncate" title="Open artist" onclick={() => openArtist(track.artistId, track.artist)}>
-          {track.artist}
-        </button>
+        <span class="artist truncate">
+          <ArtistLinks parts={track.artistParts} name={track.artist} id={track.artistId} />
+        </span>
       {:else}
         <span class="artist">—</span>
       {/if}
@@ -331,17 +332,12 @@
   }
 
   .artist {
+    display: block;
+    min-width: 0;
     font-size: 12px;
     color: var(--text-dim);
     text-align: left;
-    padding: 0;
     max-width: 100%;
-  }
-
-  .artist:hover {
-    color: var(--text);
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
 
   .icon {

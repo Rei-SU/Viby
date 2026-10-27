@@ -1,4 +1,5 @@
 import type { ImportSource, ImportTrack } from '@shared/types'
+import { creditParts } from '@shared/artist-credits'
 import { ImportError } from './errors'
 import { playlistItems } from '../innertube/client'
 
@@ -32,6 +33,7 @@ export async function resolveYoutube(listId: string, signal?: AbortSignal): Prom
       thumbnail: item.thumbnail,
       videoType: item.videoType,
       artistId: parts.find((part) => part.artistId)?.artistId,
+      artistParts: creditParts(parts),
       albumId: parts.find((part) => part.albumId)?.albumId,
       sourceId: item.id,
       sourceUrl: `https://music.youtube.com/watch?v=${item.id}`

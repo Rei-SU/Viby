@@ -5,7 +5,7 @@
   import { network } from '../lib/network.svelte'
   import { cacheRadio, cachedRadio } from '../lib/catalog-cache.svelte'
   import { openAlbum } from '../lib/album'
-  import { openArtist } from '../lib/artist'
+  import ArtistLinks from './ArtistLinks.svelte'
   import { trackToItem } from '../lib/track'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
@@ -77,7 +77,9 @@
       <h1>{track.title}</h1>
 
       <div class="byline">
-        <button class="link" onclick={() => openArtist(track.artistId, track.artist)}>{track.artist}</button>
+        <span class="byline-artists">
+          <ArtistLinks parts={track.artistParts} name={track.artist} id={track.artistId} />
+        </span>
         {#if track.album}
           <span class="sep">·</span>
           <button class="link dim" onclick={openAlbumPage}>{track.album}</button>
@@ -174,6 +176,10 @@
     color: var(--text);
     padding: 0;
     font: inherit;
+  }
+
+  .byline-artists {
+    color: var(--text);
   }
 
   .link:hover {

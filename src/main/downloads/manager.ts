@@ -10,6 +10,7 @@ import type {
   Quality,
   Track
 } from '@shared/types'
+import { creditParts } from '@shared/artist-credits'
 import { ensureRunner, pluginArgs } from '../ytdlp/binary'
 import { runStreamed } from '../ytdlp/exec'
 import { isSafeYtDlpInput } from '../ytdlp/resolver'
@@ -590,7 +591,10 @@ export class DownloadManager {
           if (!artist) continue
           const artistId =
             item?.parts?.find((part) => part.artistId)?.artistId ?? headerArtist?.id
-          if (this.store.patchTrack(id, { artist, artistId, album: collection.title })) {
+          const artistParts =
+            creditParts(item?.parts) ??
+            (artist ? [{ text: artist, artistId, entity: 'artist' as const }] : undefined)
+          if (this.store.patchTrack(id, { artist, artistId, artistParts, album: collection.title })) {
             // The old lookup ran without a usable artist, so a stored result may
             // be a different song ("Dust" → "Another One Bites the Dust"). Drop
             // both copies and let the backfill fetch them again.

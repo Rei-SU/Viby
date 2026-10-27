@@ -1,4 +1,5 @@
 import type { CatalogItem, ImportMatch, ImportSource, ImportTrack, Track } from '@shared/types'
+import { creditParts } from '@shared/artist-credits'
 import { search } from '../innertube/client'
 
 export type MatchSearch = (query: string) => Promise<CatalogItem[]>
@@ -163,7 +164,9 @@ function scoreCandidate(source: ImportTrack, item: CatalogItem): Scored {
 
 function toTrack(item: CatalogItem): Track {
   const parts = item.parts ?? []
+  const credit = creditParts(parts)
   const artist =
+    (credit ? credit.map((part) => part.text).join('').trim() : '') ||
     item.artists?.join(', ') ||
     parts.filter((part) => part.artistId).map((part) => part.text).join(', ') ||
     item.subtitle ||
@@ -174,6 +177,7 @@ function toTrack(item: CatalogItem): Track {
     title: item.title,
     artist,
     artistId: parts.find((part) => part.artistId)?.artistId,
+    artistParts: credit,
     album: parts.find((part) => part.albumId)?.text,
     albumId: parts.find((part) => part.albumId)?.albumId,
     durationSec: item.durationSec ?? 0,
@@ -190,6 +194,7 @@ function sourceTrack(source: ImportTrack): Track {
     title: source.title,
     artist: source.artists.join(', ') || 'Unknown artist',
     artistId: source.artistId,
+    artistParts: source.artistParts,
     album: source.album,
     albumId: source.albumId,
     durationSec: source.durationSec ?? 0,
