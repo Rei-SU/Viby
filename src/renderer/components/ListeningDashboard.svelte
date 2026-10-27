@@ -174,7 +174,9 @@
 <style>
   .dashboard {
     display: grid;
-    grid-template-columns: minmax(0, 1.65fr) minmax(250px, 0.85fr);
+    /* The two cards carry equal weight: the history list and the weekly
+       snapshot are peers, not a main panel with a sidebar. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
     align-items: stretch;
     animation: dashboard-in 320ms var(--ease);
