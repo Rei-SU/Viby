@@ -6,6 +6,7 @@
     | 'next'
     | 'shuffle'
     | 'repeat'
+    | 'repeatOne'
     | 'volume'
     | 'mute'
     | 'heart'
@@ -40,6 +41,12 @@
     next: { d: 'M18 5v14M6 5l9 7-9 7V5z', solid: true },
     shuffle: { d: 'M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5' },
     repeat: { d: 'M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3' },
+    // Same loop with a numeral in the gap, the way Spotify, Apple and Material
+    // mark track-repeat. 6.6 units is the tallest 1 that clears the loop at
+    // the larger sizes.
+    repeatOne: {
+      d: 'M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3M10.6 10.2 12.6 8.7V15.3'
+    },
     volume: {
       d: 'M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13'
     },

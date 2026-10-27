@@ -22,6 +22,16 @@
   )
   const volumeLevel = $derived(player.muted ? 0 : Math.round(player.volume * 100))
 
+  // The repeat button cycles, so its label names the click rather than the
+  // state; the icon carries the state (dim / loop / loop with a 1).
+  const repeatLabel = $derived(
+    player.repeat === 'off'
+      ? 'Enable repeat'
+      : player.repeat === 'all'
+        ? 'Enable repeat one'
+        : 'Disable repeat'
+  )
+
   // Wheel over the volume control. A mouse notch is 100px on Windows while a
   // trackpad sends a stream of 1–20px deltas, so pixels are accumulated and
   // spent in whole percent: 20px per point, i.e. 5% per notch either way.
@@ -246,11 +256,11 @@
       <button
         class="icon"
         class:on={player.repeat !== 'off'}
-        title={`Repeat: ${player.repeat}`}
-        aria-label="Repeat"
+        title={repeatLabel}
+        aria-label={repeatLabel}
         onclick={() => player.cycleRepeat()}
       >
-        <Icon name="repeat" size={16} />
+        <Icon name={player.repeat === 'one' ? 'repeatOne' : 'repeat'} size={16} />
       </button>
     </div>
 
