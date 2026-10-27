@@ -378,3 +378,24 @@ continuation pages, so the cap is gone as well as the ten-card preview.
 expands to 11 albums and 26 singles & EPs, Gucci Mane reaches 136 albums and
 137 singles & EPs, and the full unit suite passes.
 
+## 14. Releases listed a song twice, as audio and as music video (0.2.2)
+
+Some release pages list the same recording twice: the official audio track and
+its music video. The Weeknd's *São Paulo* EP showed "São Paulo" at 2:29 (audio)
+and again at 5:02 (video), plus a live video. The player already prefers the
+official audio when a video row is played, so the second row always became the
+same song.
+
+**Fix:** `dedupeTracks()` in `src/main/innertube/parse.ts` drops a video/upload
+row only when an audio row with the same normalized title exists in the same
+list. Version words survive (`(Live)`, `(Remix)`, `(Acoustic)`,
+`(Single Version)`), video-only tracks stay, and repeated video ids are kept
+once. It runs on release track lists (`header.releaseType` present) and on an
+artist's Top songs. Release cards are never deduped by title — Daft Punk really
+does have five "Human After All" singles — and playlists keep their exact
+contents.
+
+**Verified live on Windows 11:** *São Paulo* now shows 3 tracks (audio, live
+video, acapella) instead of 4; *After Hours* still shows all 14 album tracks;
+the `navigation` and `home` e2e suites pass.
+

@@ -4,7 +4,7 @@
  *   npx esbuild tests/innertube.test.ts --bundle --platform=node --format=esm \
  *     --alias:@shared=./src/shared --outfile=/tmp/it.mjs && node /tmp/it.mjs
  */
-import { extractHeader, extractItems, extractShelves } from '../src/main/innertube/parse'
+import { dedupeTracks, extractHeader, extractItems, extractShelves } from '../src/main/innertube/parse'
 import { browse, home, search } from '../src/main/innertube/client'
 import type { CatalogItem } from '../src/shared/types'
 
@@ -259,6 +259,46 @@ check(
   singleCardItem?.kind === 'album' && singleCardItem?.releaseType === 'Single',
   `${singleCardItem?.kind ?? 'none'} / ${singleCardItem?.releaseType ?? 'none'}`
 )
+
+// A release page can list the same song twice: the audio track and its music
+// video. Viby plays the audio, so the duplicate video row is dropped.
+function trackRow(id: string, title: string, videoType: CatalogItem['videoType']): CatalogItem {
+  return { id, kind: 'song', title, subtitle: '', videoType }
+}
+
+const releaseRows: CatalogItem[] = [
+  trackRow('audio-sao', 'São Paulo', 'audio'),
+  trackRow('video-sao', 'São Paulo', 'video'),
+  trackRow('video-official', 'São Paulo (Official Video)', 'video'),
+  trackRow('video-live', 'São Paulo (Live From São Paulo)', 'video'),
+  trackRow('audio-acapella', 'São Paulo (Single Version / Acapella)', 'audio'),
+  trackRow('video-only', 'Only a Video', 'video'),
+  trackRow('same-video-id', 'Same ID', 'video'),
+  trackRow('same-video-id', 'Same ID (Edit)', 'video')
+]
+const dedupedRows = dedupeTracks(releaseRows)
+
+check(
+  'audio wins over its music video',
+  dedupedRows.some((i) => i.id === 'audio-sao') && !dedupedRows.some((i) => i.id === 'video-sao')
+)
+check('an "(Official Video)" title is the same song', !dedupedRows.some((i) => i.id === 'video-official'))
+check('a live version keeps its own row', dedupedRows.some((i) => i.id === 'video-live'))
+check('a different audio version keeps its own row', dedupedRows.some((i) => i.id === 'audio-acapella'))
+check('a video with no audio twin is kept', dedupedRows.some((i) => i.id === 'video-only'))
+check(
+  'a repeated video id is kept once',
+  dedupedRows.filter((i) => i.id === 'same-video-id').length === 1
+)
+const releaseCardA: CatalogItem = {
+  id: 'MPREb_ep_a',
+  browseId: 'MPREb_ep_a',
+  kind: 'album',
+  title: 'São Paulo',
+  subtitle: 'EP'
+}
+const releaseCardB: CatalogItem = { ...releaseCardA, id: 'MPREb_ep_b', browseId: 'MPREb_ep_b' }
+check('release cards are never deduped by title', dedupeTracks([releaseCardA, releaseCardB]).length === 2)
 
 // A playlist strapline is the owner, so it must never become the track artist.
 const playlistHeader = {

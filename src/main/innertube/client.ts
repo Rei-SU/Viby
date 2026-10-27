@@ -1,6 +1,6 @@
 import type { BrowseHeader, BrowseResult, CatalogItem, Shelf } from '@shared/types'
 import { INNERTUBE, SEARCH_FILTERS, type SearchFilter } from './constants'
-import { continuationToken, extractHeader, extractItems, extractShelves } from './parse'
+import { continuationToken, dedupeTracks, extractHeader, extractItems, extractShelves } from './parse'
 
 /**
  * Catalog access (PLAN §3). Search and browse answer in under a second, so the
@@ -259,6 +259,12 @@ export async function browse(browseId: string): Promise<BrowseResult> {
   const shelves = extractShelves(first).filter((shelf) => shelf.items.length > 0)
   const shelfIndex = new Map(shelves.map((shelf) => [shelf.title, shelf]))
 
+  // Top songs can carry the same song as audio and as a video. The audio row is
+  // the one Viby plays, so show it once.
+  for (const shelf of shelves) {
+    if (/top songs/i.test(shelf.title)) shelf.items = dedupeTracks(shelf.items)
+  }
+
   // Artist pages need this before the renderer sees them, so counts and the
   // release rails are complete on the first paint.
   await expandDiscography(shelves)
@@ -299,7 +305,10 @@ export async function browse(browseId: string): Promise<BrowseResult> {
   }
 
   return {
-    items,
+    // A release page is one track list: drop the music-video twin of a song
+    // that is already present as official audio. Playlists keep their order
+    // and contents untouched.
+    items: header?.releaseType ? dedupeTracks(items) : items,
     header,
     shelves: shelves.length > 0 ? shelves : undefined
   }

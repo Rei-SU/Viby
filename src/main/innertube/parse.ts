@@ -47,6 +47,51 @@ export function extractItems(response: unknown): CatalogItem[] {
   })
 }
 
+/** "Song (Official Video)" and "Song [4K]" are the same recording as "Song". */
+function trackTitleKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(
+      /[\[(]\s*(?:official\s+)?(?:music\s+)?(?:video|audio|visuali[sz]er|lyric\s+video|hd|4k)\s*[\])]/g,
+      ''
+    )
+    .replace(/\s*(?:official|lyric)\s+video\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Release pages sometimes list the same song twice: the official audio track
+ * and its music video. Viby always plays the audio version (the player swaps a
+ * video to its audio release), so keeping both rows shows the same song twice.
+ *
+ * A video/upload is dropped only when an audio row with the same title exists
+ * in the same list. Version words survive: "(Live)", "(Remix)", "(Acoustic)"
+ * and "(Single Version)" are different recordings and keep their own rows. A
+ * video with no audio twin stays, as does every non-song item.
+ */
+export function dedupeTracks(items: CatalogItem[]): CatalogItem[] {
+  const audioTitles = new Set(
+    items
+      .filter((item) => item.kind === 'song' && item.videoType === 'audio')
+      .map((item) => trackTitleKey(item.title))
+  )
+
+  const seenIds = new Set<string>()
+  return items.filter((item) => {
+    if (item.kind !== 'song') return true
+
+    // YouTube occasionally repeats a row with the same video id.
+    if (item.id) {
+      if (seenIds.has(item.id)) return false
+      seenIds.add(item.id)
+    }
+
+    if (item.videoType !== 'video' && item.videoType !== 'ugc') return true
+    return !audioTitles.has(trackTitleKey(item.title))
+  })
+}
+
 /**
  * The first continuation token in a browse response. Playlist pages return one
  * per 100 rows; the import resolver follows them until the list is complete.
