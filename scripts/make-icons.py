@@ -9,6 +9,7 @@ Run after changing the logo:
     npm run icons
 """
 from pathlib import Path
+import shutil
 import subprocess
 
 from PIL import Image, ImageDraw
@@ -54,9 +55,14 @@ for size in (16, 32, 128, 256, 512):
         iconset / f"icon_{size}x{size}@2x.png"
     )
 
-subprocess.run(
-    ["iconutil", "-c", "icns", str(iconset), "-o", str(OUT / "icon.icns")], check=True
-)
+# `iconutil` ships with macOS only. On Windows the PNG/ICO outputs are all that
+# is needed; keep the existing .icns rather than failing the whole script.
+if shutil.which("iconutil"):
+    subprocess.run(
+        ["iconutil", "-c", "icns", str(iconset), "-o", str(OUT / "icon.icns")], check=True
+    )
+else:
+    print("iconutil not found - keeping the existing resources/icon.icns")
 for file in iconset.iterdir():
     file.unlink()
 iconset.rmdir()
@@ -91,4 +97,53 @@ canvas.save(
 )
 
 for path in sorted(TRAY.iterdir()):
+    print(f"{path.relative_to(ROOT)}  {path.stat().st_size / 1024:.1f} KB")
+
+# Windows taskbar thumbnail-toolbar icons. The shell draws these bitmaps as
+# supplied, so each theme gets its own set: `dark` is for a dark taskbar (white
+# glyphs), `light` for a light one (near-black glyphs). 32px keeps them sharp
+# at 200% scaling and still downsamples cleanly to 16px.
+THUMBAR = OUT / "thumbar"
+GLYPH_GRID = 16
+GLYPH_SUPERSAMPLE = 4
+GLYPH_SIZE = 32
+
+
+def thumbar_glyph(name: str, color: tuple[int, int, int, int]) -> Image.Image:
+    unit = GLYPH_SIZE / GLYPH_GRID * GLYPH_SUPERSAMPLE
+    canvas = Image.new("RGBA", (GLYPH_SIZE * GLYPH_SUPERSAMPLE,) * 2, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+
+    def point(x: float, y: float) -> tuple[float, float]:
+        return (x * unit, y * unit)
+
+    if name == "play":
+        draw.polygon([point(5.2, 3.4), point(12.6, 8.0), point(5.2, 12.6)], fill=color)
+    elif name == "pause":
+        draw.rounded_rectangle(
+            [*point(4.5, 3.4), *point(7.0, 12.6)], radius=0.7 * unit, fill=color
+        )
+        draw.rounded_rectangle(
+            [*point(9.0, 3.4), *point(11.5, 12.6)], radius=0.7 * unit, fill=color
+        )
+    elif name == "previous":
+        draw.rounded_rectangle(
+            [*point(3.7, 3.6), *point(5.2, 12.4)], radius=0.35 * unit, fill=color
+        )
+        draw.polygon([point(12.4, 3.6), point(5.2, 8.0), point(12.4, 12.4)], fill=color)
+    elif name == "next":
+        draw.rounded_rectangle(
+            [*point(10.8, 3.6), *point(12.3, 12.4)], radius=0.35 * unit, fill=color
+        )
+        draw.polygon([point(3.6, 3.6), point(10.8, 8.0), point(3.6, 12.4)], fill=color)
+    return canvas.resize((GLYPH_SIZE, GLYPH_SIZE), Image.Resampling.LANCZOS)
+
+
+for theme, color in (("dark", (242, 242, 245, 255)), ("light", (23, 23, 28, 255))):
+    folder = THUMBAR / theme
+    folder.mkdir(parents=True, exist_ok=True)
+    for glyph in ("previous", "play", "pause", "next"):
+        thumbar_glyph(glyph, color).save(folder / f"{glyph}.png")
+
+for path in sorted(THUMBAR.rglob("*.png")):
     print(f"{path.relative_to(ROOT)}  {path.stat().st_size / 1024:.1f} KB")

@@ -32,11 +32,14 @@ export const CH = {
   settingsSet: 'settings:set',
   appOpenSettings: 'app:open-settings',
   appCopyText: 'app:copy-text',
+  appNavigate: 'app:navigate',
 
   playerResolve: 'player:resolve',
   playerPrefetch: 'player:prefetch',
   playerCancel: 'player:cancel',
   playerState: 'player:state',
+  playerTaskbar: 'player:taskbar',
+  playerCommand: 'player:command',
 
   sessionGet: 'session:get',
   sessionSet: 'session:set',
@@ -112,6 +115,31 @@ export type LyricsRequest = {
   album?: string
 }
 
+/**
+ * What the Windows taskbar thumbnail toolbar needs to draw the right controls.
+ * Sent on every player state change; main keeps only the latest one, so the
+ * hover preview is always drawn from current state.
+ */
+export type TaskbarState = {
+  hasTrack: boolean
+  playing: boolean
+  canPrevious: boolean
+  canNext: boolean
+}
+
+/** A media command from the taskbar thumbnail toolbar. */
+export type PlayerCommand = 'toggle' | 'previous' | 'next'
+
+/**
+ * A history step requested by the OS rather than by a click in the app.
+ *
+ * Only the paths the renderer cannot see arrive here: on Windows/Linux a mouse
+ * side button reported as an `app-command`, and on macOS a swipe, which is what
+ * vendor drivers turn those buttons into. Plain XBUTTON presses reach the
+ * renderer as ordinary `mouseup` events and are handled there.
+ */
+export type NavCommand = 'back' | 'forward'
+
 export type ResolveRequest = {
   /** A YouTube Music / YouTube URL, or a bare 11-character video id. */
   input: string
@@ -128,6 +156,8 @@ export interface VibyApi {
   app: {
     /** The tray or menu bar asked the window to open Settings. */
     onOpenSettings(callback: () => void): () => void
+    /** A mouse side button or macOS swipe, relayed by the main process. */
+    onNavigate(callback: (command: NavCommand) => void): () => void
     /** Copy diagnostic text (for example a playback error) to the OS clipboard. */
     copyText(text: string): Promise<boolean>
   }
@@ -150,6 +180,10 @@ export interface VibyApi {
     cancel(): void
     /** Tells main whether audio is currently playing, for the power blocker. */
     setPlaying(playing: boolean): void
+    /** Windows: mirror playback into the taskbar thumbnail toolbar. */
+    setTaskbarControls(state: TaskbarState): void
+    /** Windows: play/pause, previous and next from the taskbar thumbnail toolbar. */
+    onCommand(callback: (command: PlayerCommand) => void): () => void
   }
   catalog: {
     search(query: string, filter?: SearchFilterName): Promise<Result<CatalogItem[]>>

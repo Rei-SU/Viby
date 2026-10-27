@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, shell } from 'electron'
+import { CH, type NavCommand } from '@shared/ipc'
 import { shouldHideOnClose } from './lifecycle'
 
 let mainWindow: BrowserWindow | null = null
@@ -70,6 +71,26 @@ export function createWindow(): BrowserWindow {
     if (!shouldHideOnClose()) return
     event.preventDefault()
     win.hide()
+  })
+
+  // Mouse side buttons that the renderer never sees. A plain XBUTTON arrives
+  // there as `mouseup` with button 3 or 4; these two paths are the leftovers:
+  // a driver that reports through WM_APPCOMMAND (Windows/Linux), and macOS
+  // mice whose vendor software turns the buttons into an AppKit swipe.
+  const sendNavigate = (command: NavCommand): void => {
+    if (!win.isDestroyed()) win.webContents.send(CH.appNavigate, command)
+  }
+
+  win.on('app-command', (_event, command) => {
+    if (command === 'browser-backward') sendNavigate('back')
+    else if (command === 'browser-forward') sendNavigate('forward')
+  })
+
+  // Electron names a swipe after the gesture's deltaX, so `left` is the gesture
+  // Chrome reads as Back — the same mapping macOS browsers use.
+  win.on('swipe', (_event, direction) => {
+    if (direction === 'left') sendNavigate('back')
+    else if (direction === 'right') sendNavigate('forward')
   })
 
   // Surface renderer errors in the dev log. Without this, a renderer-side failure

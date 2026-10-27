@@ -5,6 +5,7 @@ import { handleMediaProtocol, registerIpc } from './ipc'
 import { installMenu } from './menu'
 import { createWindow, showMainWindow } from './windows'
 import { applyBackgroundPlayback } from './background'
+import { initTaskbar } from './taskbar'
 import { isQuitting, keepsAppAlive, markQuitting } from './lifecycle'
 import { settings } from './settings'
 
@@ -23,6 +24,14 @@ if (!app.isPackaged) {
   app.setName('Viby')
   app.setPath('userData', userData)
 }
+
+// Windows binds an SMTC media session to a taskbar button by Application User
+// Model ID, and the id it looks for is the one the installer puts on its
+// shortcuts (`appId` in electron-builder.yml). A process started directly — the
+// installer's "run Viby", a bare exe, or a dev run — inherits no id, so the
+// shell can drive Viby from the media flyout but has nothing to match its
+// Now Playing controls against in the taskbar.
+if (process.platform === 'win32') app.setAppUserModelId('com.viby.app')
 
 // Music must keep playing when the window is behind another app or minimised.
 // Chromium otherwise throttles the renderer and suspends "background media" to
@@ -80,6 +89,7 @@ if (!gotLock) {
 
       handleMediaProtocol()
       registerIpc()
+      initTaskbar()
       createWindow()
       applyBackgroundPlayback(settings().get().backgroundPlayback)
 
