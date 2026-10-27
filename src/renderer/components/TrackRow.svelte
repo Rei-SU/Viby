@@ -242,7 +242,7 @@
         playlistPicker.show(toTrack(item), event.currentTarget as HTMLElement)
       }}
     >
-      <Icon name="list" size={15} />
+      <Icon name="plus" size={15} />
     </button>
     {#if onQueue}
       <button
@@ -254,7 +254,7 @@
           onQueue(item)
         }}
       >
-        <Icon name="plus" size={15} />
+        <Icon name="queueAdd" size={15} />
       </button>
     {/if}
   {/if}
