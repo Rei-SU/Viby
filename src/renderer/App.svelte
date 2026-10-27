@@ -25,6 +25,7 @@
   import { updates } from './lib/updates.svelte'
   import { downloads } from './lib/downloads.svelte'
   import { favorites } from './lib/favorites.svelte'
+  import { savedAlbums } from './lib/saved-albums.svelte'
   import { artwork } from './lib/artwork.svelte'
   import { searchState } from './lib/search.svelte'
 
@@ -203,6 +204,7 @@
     void network.init()
     void downloads.init()
     void favorites.load()
+    void savedAlbums.load()
     void player.init()
     updates.init()
     const offSettings = api.app.onOpenSettings(() => nav.go('settings'))

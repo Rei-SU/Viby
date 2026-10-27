@@ -47,7 +47,7 @@ ones that touch main-process modules.
 | `catalog` | live catalog: filters, ranking, artist shelves, radio, audio-first |
 | `thumbs` | thumbnail URLs across surfaces + CDN status |
 | `artist-shelves` | prints an artist page's real shelf structure (diagnostic) |
-| `library` | favourites/playlists CRUD, persistence, self-healing |
+| `library` | favourites, saved releases and playlists CRUD, persistence, self-healing |
 | `lyrics` | LRCLIB synced/plain, lyrics.ovh backup, cache, miss |
 | `spotify` | Anonymous Spotify pathfinder: 200-track pagination, fields, non-playlist rejection |
 | `import` | Link detection, all four non-Spotify adapters, matcher scoring, YouTube exact path |
@@ -123,7 +123,7 @@ the app while they run — they own the queue.
 | `lyrics` | panel opens docked beside the page, page width shrinks and restores, synced active line, click-to-seek, closes |
 | `queue` | queue docks beside the page, count and Clear, grip reorder by pointer and keyboard, remove, empty state, lyrics sharing the panel |
 | `lyrics-change` | a new track's lyrics reset to the top (no inherited scroll) |
-| `library` | playlist create/list/open/delete |
+| `library` | playlists and saved releases appear, open, and delete cleanly |
 | `resume` | session save → reload → restored paused at the timestamp |
 | `navigation` | drag strip, full-bleed artist banner, titlebar back/forward, artist page from search, history restore |
 | `quick-search` | centered titlebar field, recents, grouped songs/artists/playlists, show-more filters, Enter routing, song click, arrow navigation |
@@ -160,7 +160,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/json-store.ts` | unit `library` · e2e `library`, `resume` |
 | `src/main/downloads/**`, `src/main/network.ts` | unit `downloads-store`, `downloads-manager`, `network` · e2e `offline`, `playback` |
 | `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `OfflineHome` | e2e `offline`, `playback`, `navigation` · unit `download-groups` |
-| `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge` | unit `library-items` · e2e `offline`, `library` |
+| `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts` | unit `images` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
@@ -177,7 +177,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue` |
 | `src/renderer/lib/rail-fit.ts` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
 | `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel` |
-| `src/renderer/components/DetailView.svelte`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel` · unit `listening` |
+| `src/renderer/components/DetailView.svelte`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library` · unit `listening` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |
 | `src/renderer/App.svelte` | all e2e (layout, routes, panels) |

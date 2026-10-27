@@ -3,9 +3,11 @@
   import { api } from '../lib/api'
   import { playlists } from '../lib/playlists.svelte'
   import { downloads } from '../lib/downloads.svelte'
+  import { savedAlbums } from '../lib/saved-albums.svelte'
+  import { network } from '../lib/network.svelte'
   import { nav } from '../lib/nav.svelte'
   import { artwork } from '../lib/artwork.svelte'
-  import { buildLibraryItems } from '../lib/library-items'
+  import { buildLibraryItems, type LibraryItem } from '../lib/library-items'
   import {
     entryToItem,
     formatSize,
@@ -31,7 +33,13 @@
   let filter = $state<Filter>('all')
 
   const items = $derived(
-    buildLibraryItems(favorites, playlists.items, downloads.collections, downloads.entries)
+    buildLibraryItems(
+      favorites,
+      playlists.items,
+      savedAlbums.items,
+      downloads.collections,
+      downloads.entries
+    )
   )
   const visible = $derived(
     items.filter((item) => {
@@ -54,6 +62,7 @@
 
   $effect(() => {
     void playlists.load(true)
+    void savedAlbums.load(true)
     void loadFavorites()
   })
 
@@ -87,6 +96,28 @@
     if (!window.confirm(`Remove the download for “${item.title}”?`)) return
     await downloads.removeTrack(item.id)
   }
+
+  function openItem(entry: LibraryItem): void {
+    if (!entry.album) {
+      nav.openCollection(entry.ref)
+      return
+    }
+    // A downloaded saved album can open its local-first page offline; otherwise
+    // the normal release page (which needs the catalogue) is the destination.
+    if (network.localFirst && entry.mark !== 'none') {
+      nav.openCollection(entry.ref)
+      return
+    }
+    nav.open({
+      id: entry.album.id,
+      browseId: entry.album.id,
+      kind: 'album',
+      title: entry.album.title,
+      subtitle: entry.album.artist ?? 'Album',
+      thumbnail: entry.album.thumbnail,
+      releaseType: entry.album.releaseType
+    })
+  }
 </script>
 
 <div class="view">
@@ -112,7 +143,7 @@
   {#if visible.length > 0 || showNew}
     <div class="grid">
       {#each visible as item (item.id)}
-        <button class="tile" onclick={() => nav.openCollection(item.ref)}>
+        <button class="tile" onclick={() => openItem(item)}>
           <span class="art-wrap">
             {#if item.kind === 'liked'}
               <span class="art liked">
@@ -163,11 +194,12 @@
     <div class="empty">
       <Icon name="download" size={26} />
       <p class="empty-title">
-        {filter === 'albums' ? 'No downloaded albums yet' : 'Nothing downloaded yet'}
+        {filter === 'albums' ? 'No albums yet' : 'Nothing downloaded yet'}
       </p>
       <p>
         {#if filter === 'albums'}
-          Download an album to keep it here for offline listening.
+          Save an album, EP or single from its page, or download one to keep it here for offline
+          listening.
         {:else}
           Use the download button on any song, album or playlist to keep it available offline.
         {/if}

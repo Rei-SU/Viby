@@ -79,14 +79,39 @@ const entries = [
   entry('o1', ['playlist:gone'])
 ]
 
-const items = buildLibraryItems(favorites, [playlistA, playlistB], collections, entries)
+const savedAlbums = [
+  {
+    id: 'z1',
+    title: 'Album Z saved',
+    artist: 'Artist',
+    releaseType: 'Album',
+    trackCount: 2,
+    savedAt: 2
+  },
+  {
+    id: 'q1',
+    title: 'Saved EP',
+    artist: 'Artist',
+    releaseType: 'EP',
+    trackCount: 4,
+    savedAt: 1
+  }
+]
+
+const items = buildLibraryItems(
+  favorites,
+  [playlistA, playlistB],
+  savedAlbums,
+  collections,
+  entries
+)
 const byId = new Map(items.map((item) => [item.id, item]))
 
 console.log('\nlibrary grid:')
 check(
-  'liked + playlists + album + orphan, no download duplicates',
+  'liked + playlists + saved releases + orphan, no download duplicates',
   items.map((item) => item.id).join(',') ===
-    'liked,playlist:p1,playlist:p2,collection:album:z1,collection:playlist:gone',
+    'liked,playlist:p1,playlist:p2,saved-album:z1,saved-album:q1,collection:playlist:gone',
   items.map((item) => item.id).join(',')
 )
 check('liked is partially downloaded', byId.get('liked')?.mark === 'partial')
@@ -106,10 +131,17 @@ check(
 )
 check('untouched playlist has no badge', byId.get('playlist:p2')?.mark === 'none')
 check(
-  'album uses local cover and full mark',
-  byId.get('collection:album:z1')?.mark === 'full' &&
-    byId.get('collection:album:z1')?.art === 'viby-media://album-cover' &&
-    byId.get('collection:album:z1')?.kind === 'album'
+  'a saved, downloaded album keeps one tile with the local cover and full mark',
+  byId.get('saved-album:z1')?.mark === 'full' &&
+    byId.get('saved-album:z1')?.art === 'viby-media://album-cover' &&
+    byId.get('saved-album:z1')?.kind === 'album' &&
+    byId.get('saved-album:z1')?.album?.id === 'z1'
+)
+check(
+  'a saved release without a download is still a tile',
+  byId.get('saved-album:q1')?.mark === 'none' &&
+    byId.get('saved-album:q1')?.subtitle === 'EP · 4 songs',
+  byId.get('saved-album:q1')?.subtitle
 )
 check(
   'downloaded playlist without a library entry still appears',

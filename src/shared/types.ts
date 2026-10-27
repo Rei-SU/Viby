@@ -31,6 +31,24 @@ export type Playlist = {
 }
 
 /**
+ * A release saved to the library: album, EP, single or compilation. This is a
+ * metadata snapshot only; audio is never implied and stays in Downloads.
+ */
+export type SavedAlbum = {
+  /** Browse id of the release page. */
+  id: string
+  title: string
+  artist?: string
+  artistId?: string
+  thumbnail?: string
+  /** YouTube's own label: Album, EP, Single, Compilation, Audiobook. */
+  releaseType?: string
+  year?: string
+  trackCount?: number
+  savedAt: number
+}
+
+/**
  * A playable stream. `kind: 'file'` means it is served from our bounded local
  * cache and will keep working offline; `kind: 'remote'` is a direct CDN URL that
  * is IP-bound and expires (PLAN §3, step 6).

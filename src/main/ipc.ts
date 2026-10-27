@@ -22,6 +22,7 @@ import type {
   Playlist,
   ResolveResult,
   Result,
+  SavedAlbum,
   SearchFilterName,
   Settings,
   Shelf,
@@ -603,6 +604,12 @@ let importResolveController: AbortController | null = null
     }
     return playlist
   })
+
+  ipcMain.handle(CH.libraryAlbums, (): SavedAlbum[] => lib().albums())
+  ipcMain.handle(
+    CH.libraryAlbumToggle,
+    (_e, album: SavedAlbum): { saved: boolean; albums: SavedAlbum[] } => lib().toggleAlbum(album)
+  )
 
   ipcMain.handle(CH.importResolve, async (_e, url: string): Promise<Result<ImportSource>> => {
     const controller = new AbortController()

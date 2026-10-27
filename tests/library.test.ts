@@ -55,6 +55,27 @@ check('persists across instances', reloaded.playlists().length === 1)
 check('persisted name', reloaded.playlists()[0]?.name === 'Renamed')
 check('persisted tracks', reloaded.playlists()[0]?.tracks.length === 1)
 
+console.log('\nsaved releases:')
+const savedAlbum = {
+  id: 'MPREb_one',
+  title: 'One',
+  artist: 'Artist',
+  releaseType: 'Album',
+  trackCount: 10,
+  savedAt: 0
+}
+check('save adds a release', lib.toggleAlbum(savedAlbum).saved === true && lib.albums().length === 1)
+check('the save is timestamped', (lib.albums()[0]?.savedAt ?? 0) > 0)
+check('the release label is kept', lib.albums()[0]?.releaseType === 'Album')
+check(
+  'saving again removes it',
+  lib.toggleAlbum(savedAlbum).saved === false && lib.albums().length === 0
+)
+lib.toggleAlbum(savedAlbum)
+lib.toggleAlbum({ ...savedAlbum, id: 'MPREb_ep', title: 'EP', releaseType: 'EP' })
+check('newest saved first', lib.albums()[0]?.id === 'MPREb_ep')
+check('saved releases persist', new Library(file).albums().length === 2)
+
 console.log('\nfavourites:')
 lib.toggleFavorite(track('x', 'X'))
 check('favourite is stored', lib.isFavorite('x'))
@@ -68,6 +89,7 @@ raw.playlists = [
   { id: 'ok', name: 'Ok', createdAt: 0, updatedAt: 0, tracks: [null, track('y', 'Y')] }
 ]
 raw.favorites = [null, track('z', 'Z')]
+raw.albums = [null, { id: '', title: 'No id' }, { id: 'ok-album', title: 'Ok', savedAt: 1 }]
 writeFileSync(file, JSON.stringify(raw))
 
 const healed = new Library(file)
@@ -77,6 +99,11 @@ check(
   healed.playlists().find((p) => p.id === 'ok')?.tracks.length === 1
 )
 check('drops malformed favourites', healed.favorites().length === 1)
+check(
+  'drops malformed saved releases',
+  healed.albums().length === 1 && healed.albums()[0]?.id === 'ok-album',
+  JSON.stringify(healed.albums())
+)
 
 console.log('\ndelete:')
 healed.deletePlaylist('ok')

@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { JsonStore, userDataFile } from './json-store'
-import type { HistoryEntry, Playlist, Track } from '@shared/types'
+import type { HistoryEntry, Playlist, SavedAlbum, Track } from '@shared/types'
 
 type LibraryData = {
   favorites: Track[]
   history: HistoryEntry[]
   playlists: Playlist[]
+  albums: SavedAlbum[]
 }
 
 const MAX_HISTORY = 5000
@@ -43,6 +44,17 @@ function isValidPlaylist(value: unknown): value is Playlist {
   )
 }
 
+function isValidSavedAlbum(value: unknown): value is SavedAlbum {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as SavedAlbum).id === 'string' &&
+    (value as SavedAlbum).id.length > 0 &&
+    typeof (value as SavedAlbum).title === 'string' &&
+    (value as SavedAlbum).title.length > 0
+  )
+}
+
 /**
  * Favorites, history and playlists are local-first by design (PLAN §5.4): with no
  * account behind them they cannot be taken away by an upstream change.
@@ -54,18 +66,21 @@ export class Library {
     this.store = new JsonStore<LibraryData>(file, {
       favorites: [],
       history: [],
-      playlists: []
+      playlists: [],
+      albums: []
     })
     const data = this.store.get()
     if (
       !Array.isArray(data.favorites) ||
       !Array.isArray(data.history) ||
-      !Array.isArray(data.playlists)
+      !Array.isArray(data.playlists) ||
+      !Array.isArray(data.albums)
     ) {
       this.store.update((next) => {
         if (!Array.isArray(next.favorites)) next.favorites = []
         if (!Array.isArray(next.history)) next.history = []
         if (!Array.isArray(next.playlists)) next.playlists = []
+        if (!Array.isArray(next.albums)) next.albums = []
       })
     }
   }
@@ -142,6 +157,40 @@ export class Library {
       if (h.trackId === trackId && h.completion > best) best = h.completion
     }
     return best
+  }
+
+  // ---- saved releases ----------------------------------------------------
+
+  albums(): SavedAlbum[] {
+    const value = this.store.get().albums
+    const stored = Array.isArray(value) ? value : []
+    const valid = stored.filter(isValidSavedAlbum)
+    if (valid.length !== stored.length) {
+      this.store.update((data) => {
+        data.albums = valid
+      })
+    }
+    return [...valid].sort((a, b) => b.savedAt - a.savedAt)
+  }
+
+  isAlbumSaved(id: string): boolean {
+    return this.albums().some((album) => album.id === id)
+  }
+
+  /** Save or unsave one release; a repeat save is a no-op replacement. */
+  toggleAlbum(album: SavedAlbum): { saved: boolean; albums: SavedAlbum[] } {
+    const current = this.albums()
+    if (!isValidSavedAlbum(album)) return { saved: false, albums: current }
+
+    const existing = current.some((entry) => entry.id === album.id)
+    const next = existing
+      ? current.filter((entry) => entry.id !== album.id)
+      : [{ ...album, savedAt: Date.now() }, ...current]
+
+    this.store.update((data) => {
+      data.albums = next
+    })
+    return { saved: !existing, albums: next }
   }
 
   // ---- playlists ---------------------------------------------------------

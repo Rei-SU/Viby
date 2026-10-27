@@ -1,4 +1,4 @@
-import type { DownloadCollection, DownloadEntry, Playlist, Track } from '@shared/types'
+import type { DownloadCollection, DownloadEntry, Playlist, SavedAlbum, Track } from '@shared/types'
 import type { CollectionRef } from './nav.svelte'
 import { collectionEntries } from './download-groups'
 
@@ -18,6 +18,8 @@ export type LibraryItem = {
   progress: number
   downloaded: number
   total: number
+  /** Present on saved releases; the tile opens the release page, not a download. */
+  album?: SavedAlbum
 }
 
 export function markFor(downloaded: number, total: number): DownloadMark {
@@ -53,6 +55,7 @@ function collectionArt(
 export function buildLibraryItems(
   favorites: Track[],
   playlists: Playlist[],
+  savedAlbums: SavedAlbum[],
   collections: DownloadCollection[],
   entries: DownloadEntry[]
 ): LibraryItem[] {
@@ -94,6 +97,34 @@ export function buildLibraryItems(
     })
   }
 
+  // Saved releases. A downloaded one keeps this single tile and simply gains
+  // the badge; the downloads loop below skips the duplicate.
+  const savedIds = new Set(savedAlbums.map((album) => album.id))
+  for (const album of savedAlbums) {
+    const key = `album:${album.id}`
+    const collection = collections.find((entry) => entry.key === key)
+    const owned = collection ? collectionEntries(collection, entries) : []
+    const total = collection?.trackIds.length ?? album.trackCount ?? 0
+    const mark = markFor(owned.length, total)
+    const label = album.releaseType ?? 'Album'
+    items.push({
+      id: `saved-album:${album.id}`,
+      kind: 'album',
+      title: album.title,
+      subtitle:
+        mark === 'partial'
+          ? `${label} · ${owned.length} of ${total} downloaded`
+          : `${label}${total > 0 ? ` · ${total} ${total === 1 ? 'song' : 'songs'}` : ''}`,
+      art: album.thumbnail ?? (collection ? collectionArt(collection, entries) : undefined),
+      ref: { kind: 'download', key },
+      mark,
+      progress: total > 0 ? (owned.length / total) * 100 : 0,
+      downloaded: owned.length,
+      total,
+      album
+    })
+  }
+
   // Downloaded albums (and orphaned playlist snapshots) have no saved-library
   // record, so they become their own tiles. Liked and live playlists already
   // have one above.
@@ -102,6 +133,10 @@ export function buildLibraryItems(
     if (collection.key.startsWith('playlist:')) {
       const id = collection.key.slice('playlist:'.length)
       if (playlistIds.has(id)) continue
+    }
+    if (collection.key.startsWith('album:')) {
+      const id = collection.key.slice('album:'.length)
+      if (savedIds.has(id)) continue
     }
 
     const owned = collectionEntries(collection, entries)

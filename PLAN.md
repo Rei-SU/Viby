@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 11)
+Last updated: 2026-10-27 (rev 12)
 
 ---
 
@@ -658,6 +658,12 @@ The **Start something** cards borrowed random artwork from Home shelves and sent
 Every rail hid its overflow behind a thin scrollbar, so shelves read as desktop scroll areas and Windows users had to grab the bar to see more. Rails now render through a shared `Rail` component: the shelf header keeps its title (and **Show all** / **See all** where one exists), adds two Spotify-style chevrons on hover or focus, and the scrollbar is hidden. The unavailable direction is dimmed; a shelf that fits shows no controls. Paging scrolls by ~85% of the visible width (instant under `prefers-reduced-motion`). The `fitRail` action now only fits the cards and (on Windows) routes the wheel; the controls live in `Rail.svelte`. One component covers Home, Search's All rails, artist discography, mood pages and offline Home, with no new dependency.
 
 On Windows only, a vertical wheel over a rail scrolls it horizontally and prevents the page from moving; at either end the wheel falls through so the page keeps scrolling (nested-scroll behaviour). macOS keeps its native trackpad gesture. The rollover is deliberately scoped: hijacking the wheel on every platform would fight the trackpad.
+
+### Saved releases (2026-10-27)
+
+The library only held liked songs, playlists and downloads, so keeping an album or EP without downloading its audio was impossible. Release pages now carry a **Save** action (Play all · Save · Download) that stores a metadata snapshot — browse id, title, artist, release type, year, track count, artwork — in `library.json` next to playlists and favourites. Saved releases appear as Library tiles under **Albums** (and All), take the download badge when their audio is also downloaded, and are not duplicated by the downloads grid. Clicking one opens the release page; offline, a downloaded one opens its local-first download page and an undownloaded one explains that it is unavailable. Saving is metadata-only; audio is never implied.
+
+Save appears only once the page's track list has loaded, so the tile can say `Album · 13 songs` instead of a bare label. `SavedAlbum` follows the same validate-on-write / self-heal-on-read policy as the rest of the library.
 
 ## 14. Library (shipped)
 

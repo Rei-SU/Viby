@@ -22,6 +22,7 @@ import type {
   SearchFilterName,
   Settings,
   Shelf,
+  SavedAlbum,
   Track,
   UpdateState,
   YtDlpInfo
@@ -61,6 +62,8 @@ export const CH = {
   libraryPlaylistDelete: 'library:playlist-delete',
   libraryPlaylistAdd: 'library:playlist-add',
   libraryPlaylistRemove: 'library:playlist-remove',
+  libraryAlbums: 'library:albums',
+  libraryAlbumToggle: 'library:album-toggle',
 
   catalogSearch: 'catalog:search',
   catalogBrowse: 'catalog:browse',
@@ -221,6 +224,9 @@ export interface VibyApi {
     deletePlaylist(id: string): Promise<void>
     addToPlaylist(id: string, track: Track): Promise<Playlist | null>
     removeFromPlaylist(id: string, trackId: string): Promise<Playlist | null>
+    /** Saved releases, newest first. Metadata only; audio lives in Downloads. */
+    albums(): Promise<SavedAlbum[]>
+    toggleAlbum(album: SavedAlbum): Promise<{ saved: boolean; albums: SavedAlbum[] }>
   }
   cache: {
     stats(): Promise<CacheStats>

@@ -19,6 +19,7 @@ import type {
   NetworkState,
   OfflineMode,
   PlaybackSession,
+  SavedAlbum,
   SearchFilterName,
   Settings,
   Track,
@@ -98,7 +99,9 @@ const api: VibyApi = {
     addToPlaylist: (id: string, track: Track) =>
       ipcRenderer.invoke(CH.libraryPlaylistAdd, id, track),
     removeFromPlaylist: (id: string, trackId: string) =>
-      ipcRenderer.invoke(CH.libraryPlaylistRemove, id, trackId)
+      ipcRenderer.invoke(CH.libraryPlaylistRemove, id, trackId),
+    albums: () => ipcRenderer.invoke(CH.libraryAlbums),
+    toggleAlbum: (album: SavedAlbum) => ipcRenderer.invoke(CH.libraryAlbumToggle, album)
   },
   cache: {
     stats: () => ipcRenderer.invoke(CH.cacheStats),

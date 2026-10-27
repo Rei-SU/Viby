@@ -1,10 +1,11 @@
 <script lang="ts">
-  import type { BrowseResult, CatalogItem } from '@shared/types'
+  import type { BrowseResult, CatalogItem, SavedAlbum } from '@shared/types'
   import { api } from '../lib/api'
   import { artwork } from '../lib/artwork.svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import { downloads } from '../lib/downloads.svelte'
+  import { savedAlbums } from '../lib/saved-albums.svelte'
   import { cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
   import Rail from './Rail.svelte'
   import Cover from './Cover.svelte'
@@ -188,6 +189,39 @@
     )
   }
 
+  // ---- saved releases ------------------------------------------------------
+
+  const savedAlbumId = $derived(
+    item.kind === 'album' ? (item.browseId ?? item.id ?? null) : null
+  )
+  const albumSaved = $derived(savedAlbumId ? savedAlbums.has(savedAlbumId) : false)
+
+  /** The release page's header is the richest snapshot; keep it local. */
+  function albumSnapshot(): SavedAlbum | null {
+    if (!savedAlbumId) return null
+    return {
+      id: savedAlbumId,
+      title: result?.header?.title ?? item.title,
+      artist: albumArtist?.name ?? result?.header?.artist?.name,
+      artistId: albumArtist?.id ?? result?.header?.artist?.id,
+      thumbnail: art,
+      releaseType: releaseLabel ?? undefined,
+      year: albumYear ?? undefined,
+      trackCount: displaySongs.length || undefined,
+      savedAt: Date.now()
+    }
+  }
+
+  async function toggleAlbumSave(): Promise<void> {
+    const snapshot = albumSnapshot()
+    if (!snapshot) return
+    try {
+      await savedAlbums.toggle(snapshot)
+    } catch {
+      // Leave the button as it was; a failed local write is not worth a banner.
+    }
+  }
+
   $effect(() => {
     const browseId = item.browseId ?? item.id
     shown = PAGE
@@ -366,6 +400,19 @@
           <button class="play-all" onclick={playAll}>
             <Icon name="play" size={14} solid />
             <span>Play all</span>
+          </button>
+        {/if}
+        {#if savedAlbumId && displaySongs.length > 0}
+          <button
+            class="save-album"
+            class:on={albumSaved}
+            title={albumSaved
+              ? 'In your library — click to remove'
+              : 'Add this release to your library'}
+            onclick={() => void toggleAlbumSave()}
+          >
+            <Icon name={albumSaved ? 'check' : 'plus'} size={14} />
+            <span>{albumSaved ? 'Saved' : 'Save'}</span>
           </button>
         {/if}
         {#if collectionKey && downloadTracks.length > 0}
@@ -675,6 +722,35 @@
   .download-all.on {
     color: var(--text);
     border-color: var(--stroke-strong);
+  }
+
+  .save-album {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 0 8px;
+    padding: 8px 16px;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-size: 12.5px;
+    font-weight: 500;
+    transition:
+      border-color var(--speed) var(--ease),
+      color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .save-album:hover {
+    border-color: var(--stroke-strong);
+    color: var(--text);
+    background: var(--glass-hover);
+  }
+
+  .save-album.on {
+    color: var(--text);
+    border-color: var(--stroke-strong);
+    background: var(--glass-active);
   }
 
   .spin {
