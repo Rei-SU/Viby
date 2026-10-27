@@ -10,14 +10,30 @@ import { continuationToken, extractHeader, extractItems, extractShelves } from '
 
 const REQUEST_TIMEOUT_MS = 10_000
 
+/**
+ * YouTube's anonymous visitor id. Most requests work without it, but a
+ * discography continuation answers "Something went wrong" unless the visitor
+ * that received the first page sends the next one.
+ */
+let visitorData: string | undefined
+
 function context(): Record<string, unknown> {
   return {
     client: {
       clientName: INNERTUBE.clientName,
       clientVersion: INNERTUBE.clientVersion,
       hl: INNERTUBE.hl,
-      gl: INNERTUBE.gl
+      gl: INNERTUBE.gl,
+      ...(visitorData ? { visitorData } : {})
     }
+  }
+}
+
+function rememberVisitor(response: unknown): void {
+  const context = (response as { responseContext?: { visitorData?: unknown } } | null)
+    ?.responseContext
+  if (typeof context?.visitorData === 'string' && context.visitorData) {
+    visitorData = context.visitorData
   }
 }
 
@@ -44,7 +60,9 @@ async function call(
   if (!res.ok) {
     throw new Error(`YouTube Music returned HTTP ${res.status}`)
   }
-  return res.json()
+  const data: unknown = await res.json()
+  rememberVisitor(data)
+  return data
 }
 
 export async function search(query: string, filter: SearchFilter = 'all'): Promise<CatalogItem[]> {
@@ -156,15 +174,95 @@ export async function audioTrackFor(
   return candidate
 }
 
+/** Identity of a catalog row, used to merge pages without duplicating items. */
+function itemKey(item: CatalogItem): string {
+  return `${item.kind}:${item.id ?? item.browseId ?? item.title}`
+}
+
+/**
+ * Every item on a discography page, following YouTube's 100-release pages. A
+ * prolific artist (Gucci Mane has 137 singles) is otherwise cut off at the
+ * first page, which is the same class of bug as the ten-card preview.
+ */
+async function discographyItems(response: unknown): Promise<CatalogItem[]> {
+  const items = extractItems(response)
+  const seen = new Set(items.map(itemKey))
+  let token = continuationToken(response)
+  let pages = 0
+
+  while (token && items.length < 10_000 && pages < 100) {
+    const page = await call('browse', { continuation: token })
+    for (const item of extractItems(page)) {
+      const key = itemKey(item)
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push(item)
+    }
+    token = continuationToken(page)
+    pages++
+    if (token) await new Promise((resolve) => setTimeout(resolve, 120))
+  }
+
+  return items
+}
+
+/**
+ * Artist pages preview a discography: Albums and Singles & EPs stop at ten
+ * cards, and YouTube hides the complete list behind each shelf's "More"
+ * endpoint. Without following it, an artist with 44 releases appeared to have
+ * ten — "Sociopath" was simply never requested. Only discography endpoints are
+ * followed: Videos and Live performances use the same button for pages that
+ * belong on YouTube, not in the discography.
+ */
+async function expandDiscography(shelves: Shelf[]): Promise<void> {
+  const targets = shelves.filter(
+    (shelf) => shelf.more?.pageType === 'MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY'
+  )
+
+  await Promise.all(
+    targets.map(async (shelf) => {
+      const more = shelf.more
+      if (!more) return
+      try {
+        const response = await call('browse', {
+          browseId: more.browseId,
+          ...(more.params ? { params: more.params } : {})
+        })
+        const complete = await discographyItems(response)
+        if (complete.length === 0) return
+
+        // The full list is newest-first and normally repeats the preview. Keep
+        // any preview card it did not repeat so a quirk cannot lose a release.
+        const seen = new Set(complete.map(itemKey))
+        for (const item of shelf.items) {
+          const key = itemKey(item)
+          if (seen.has(key)) continue
+          seen.add(key)
+          complete.push(item)
+        }
+        shelf.items = complete
+      } catch {
+        // A failed "More" must not take down the artist page: the ten-card
+        // preview YouTube already returned is still better than nothing.
+      }
+    })
+  )
+}
+
 /** Open an album, artist, or playlist page: its own header plus its contents. */
 export async function browse(browseId: string): Promise<BrowseResult> {
   if (!browseId) throw new Error('Nothing to open')
   const first = await call('browse', { browseId })
   const header = extractHeader(first)
   const items = extractItems(first)
-  const seen = new Set(items.map((item) => `${item.kind}:${item.id ?? item.browseId ?? item.title}`))
+  const seen = new Set(items.map(itemKey))
   const shelves = extractShelves(first).filter((shelf) => shelf.items.length > 0)
   const shelfIndex = new Map(shelves.map((shelf) => [shelf.title, shelf]))
+
+  // Artist pages need this before the renderer sees them, so counts and the
+  // release rails are complete on the first paint.
+  await expandDiscography(shelves)
+
   let token = continuationToken(first)
   let pages = 0
 
@@ -173,7 +271,7 @@ export async function browse(browseId: string): Promise<BrowseResult> {
   while (token && items.length < 10_000 && pages < 100) {
     const page = await call('browse', { continuation: token })
     for (const item of extractItems(page)) {
-      const key = `${item.kind}:${item.id ?? item.browseId ?? item.title}`
+      const key = itemKey(item)
       if (seen.has(key)) continue
       seen.add(key)
       items.push(item)
@@ -186,11 +284,9 @@ export async function browse(browseId: string): Promise<BrowseResult> {
         shelves.push(shelf)
         continue
       }
-      const known = new Set(
-        existing.items.map((item) => `${item.kind}:${item.id ?? item.browseId ?? item.title}`)
-      )
+      const known = new Set(existing.items.map(itemKey))
       for (const item of shelf.items) {
-        const key = `${item.kind}:${item.id ?? item.browseId ?? item.title}`
+        const key = itemKey(item)
         if (!known.has(key)) {
           known.add(key)
           existing.items.push(item)

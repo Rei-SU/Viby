@@ -184,16 +184,22 @@ function collectShelves(node: unknown, out: Shelf[], depth: number): void {
 
   const carousel = obj.musicCarouselShelfRenderer
   if (carousel) {
+    const header = carousel.header?.musicCarouselShelfBasicHeaderRenderer
     out.push({
-      title: textOf(carousel.header?.musicCarouselShelfBasicHeaderRenderer?.title),
-      items: extractItems(carousel.contents)
+      title: textOf(header?.title),
+      items: extractItems(carousel.contents),
+      more: shelfMore(header)
     })
     return
   }
 
   const shelf = obj.musicShelfRenderer
   if (shelf) {
-    out.push({ title: textOf(shelf.title) || textOf(shelf.header), items: extractItems(shelf.contents) })
+    out.push({
+      title: textOf(shelf.title) || textOf(shelf.header),
+      items: extractItems(shelf.contents),
+      more: shelfMore(shelf.header?.musicShelfBasicHeaderRenderer ?? shelf.header)
+    })
     return
   }
 
@@ -209,6 +215,23 @@ function collectShelves(node: unknown, out: Shelf[], depth: number): void {
   for (const key of Object.keys(obj)) {
     if (SKIP_KEYS.has(key)) continue
     collectShelves(obj[key], out, depth + 1)
+  }
+}
+
+/**
+ * A shelf header's "More" button, when YouTube offers one. The page type tells
+ * us where it leads: artist discographies are worth following, while the same
+ * shape also targets videos and live performances, which are not.
+ */
+function shelfMore(header: AnyObj | undefined): Shelf['more'] {
+  const browse = header?.moreContentButton?.buttonRenderer?.navigationEndpoint?.browseEndpoint
+  if (!browse?.browseId) return undefined
+
+  return {
+    browseId: browse.browseId,
+    params: browse.params,
+    pageType:
+      browse.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType
   }
 }
 

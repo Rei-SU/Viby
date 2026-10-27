@@ -191,6 +191,17 @@ export type BrowseResult = {
 export type Shelf = {
   title: string
   items: CatalogItem[]
+  /**
+   * YouTube's "More" target for this shelf, when it offers one. Artist pages
+   * preview Albums and Singles & EPs with ten cards and hide the complete list
+   * behind this endpoint, so it is the only way to show a full discography.
+   */
+  more?: {
+    browseId: string
+    params?: string
+    /** `MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY` for Albums and Singles & EPs. */
+    pageType?: string
+  }
 }
 
 export type HistoryEntry = {

@@ -345,3 +345,36 @@ Also fixed while testing (ace9512): downloaded covers are on the `viby-media:`
 scheme, which the media session rejects, so Now Playing/SMTC lost the artwork
 for offline songs. Main now returns the cover as a data URL
 (`images:data-url`), and streaming artwork still uses the original https URL.
+
+## 13. Artist pages showed only ten releases (0.2.2)
+
+Found on Windows while checking Pause's artist page: his single *Sociopath*
+(2022) was playable from search and history but absent from his discography,
+which stopped at ten singles.
+
+**Cause:** YouTube Music previews an artist's Albums and Singles & EPs with ten
+cards and puts the complete list behind each shelf's `moreContentButton`
+(`browseId=MPAD…`, page type `MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY`). Viby only
+followed global continuation tokens, and the artist response has none, so the
+preview was treated as the whole discography. Pause's preview contained ten of
+his 44 releases; the rest were never requested. This was platform-neutral, not
+a Windows rendering issue.
+
+**Fix:** `extractShelves` now keeps each shelf's `more` endpoint. `browse()`
+follows only endpoints whose page type is `MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY`
+(Videos and Live performances use the same button but lead elsewhere), fetches
+Albums and Singles & EPs in parallel, and merges the complete list by item id.
+A failed "More" request keeps the ten-card preview instead of failing the page.
+
+Discography pages themselves stop at 100 releases (Gucci Mane has 136 albums
+and 137 singles & EPs). Those continuations also need the `visitorData` from
+the page that produced them; without it YouTube answers "Something went wrong".
+`call()` now remembers the visitor id and `discographyItems()` follows the
+continuation pages, so the cap is gone as well as the ten-card preview.
+
+**Verified live on Windows 11:** Pause's page now reports "1 albums · 44 singles
+& EPs"; the Singles & EPs rail shows all 44 cards, including
+`Sociopath — Single • 2022`. Albums still opens its one release (112), Daft Punk
+expands to 11 albums and 26 singles & EPs, Gucci Mane reaches 136 albums and
+137 singles & EPs, and the full unit suite passes.
+

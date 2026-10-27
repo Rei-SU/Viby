@@ -96,6 +96,85 @@ check(
 )
 check('captured artists keep a browse id', parsed.some((i) => i.kind === 'artist' && i.browseId))
 
+// Artist pages advertise the complete discography with a "More" browse
+// endpoint. The parser must keep it, or the client can never fetch the rest.
+const artistShelfResponse = {
+  contents: {
+    singleColumnBrowseResultsRenderer: {
+      tabs: [
+        {
+          tabRenderer: {
+            content: {
+              sectionListRenderer: {
+                contents: [
+                  {
+                    musicCarouselShelfRenderer: {
+                      header: {
+                        musicCarouselShelfBasicHeaderRenderer: {
+                          title: { runs: [{ text: 'Singles & EPs' }] },
+                          moreContentButton: {
+                            buttonRenderer: {
+                              navigationEndpoint: {
+                                browseEndpoint: {
+                                  browseId: 'MPADUC123',
+                                  params: 'ggMIegYIAhoCAQI=',
+                                  browseEndpointContextSupportedConfigs: {
+                                    browseEndpointContextMusicConfig: {
+                                      pageType: 'MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY'
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      contents: [
+                        {
+                          musicTwoRowItemRenderer: {
+                            title: { runs: [{ text: 'Sociopath' }] },
+                            subtitle: {
+                              runs: [{ text: 'Single' }, { text: ' • ' }, { text: '2022' }]
+                            },
+                            navigationEndpoint: {
+                              browseEndpoint: {
+                                browseId: 'MPREb_sociopath',
+                                browseEndpointContextSupportedConfigs: {
+                                  browseEndpointContextMusicConfig: {
+                                    pageType: 'MUSIC_PAGE_TYPE_ALBUM'
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+const artistShelf = extractShelves(artistShelfResponse)[0]
+check(
+  'artist shelf keeps its "More" endpoint',
+  artistShelf?.more?.browseId === 'MPADUC123' &&
+    artistShelf?.more?.params === 'ggMIegYIAhoCAQI=' &&
+    artistShelf?.more?.pageType === 'MUSIC_PAGE_TYPE_ARTIST_DISCOGRAPHY',
+  JSON.stringify(artistShelf?.more ?? null)
+)
+check(
+  'artist shelf keeps YouTube release labels',
+  artistShelf?.items[0]?.releaseType === 'Single',
+  artistShelf?.items[0]?.releaseType ?? 'none'
+)
+
 // Album pages credit the artist in `straplineTextOne`, not the subtitle.
 const albumHeader = {
   header: {
@@ -247,6 +326,35 @@ if (album) {
 } else {
   check('found an album to browse', false, 'none in search')
 }
+
+// Artist pages preview only ten releases per shelf; the complete discography
+// lives behind the shelf's "More" endpoint. Pause's "Sociopath" was missing from
+// Viby because only the preview was ever requested.
+const pause = await browse('UCD8h4yy9-LIpLqAiWE3iR2g')
+const pauseSingles = pause.shelves?.find((shelf) => /singles/i.test(shelf.title))
+check(
+  'artist page expands to the full discography',
+  (pauseSingles?.items.length ?? 0) > 10,
+  `${pauseSingles?.items.length ?? 0} releases`
+)
+check(
+  'expanded discography includes Sociopath',
+  pauseSingles?.items.some((item) => /^sociopath$/i.test(item.title.trim())) ?? false,
+  pauseSingles?.items
+    .slice(0, 3)
+    .map((item) => item.title)
+    .join(' | ') ?? 'no singles shelf'
+)
+
+// Discographies longer than 100 releases paginate, and YouTube only accepts
+// those continuations from the visitor that received the first page.
+const gucci = await browse('UCGJdT8Qip4XObbQZ98Z1CAA')
+const gucciAlbums = gucci.shelves?.find((shelf) => /^albums$/i.test(shelf.title))
+check(
+  'discography follows continuations past 100 releases',
+  (gucciAlbums?.items.length ?? 0) > 100,
+  `${gucciAlbums?.items.length ?? 0} albums`
+)
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)
