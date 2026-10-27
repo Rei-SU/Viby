@@ -156,9 +156,10 @@
     onclick={activate}
     onkeydown={(event) => {
       // The row contains real artist/album buttons; let them handle their own
-      // Enter/Space instead of playing the row underneath.
+      // Enter instead of playing the row underneath. Space is the global
+      // play/pause key, so it is deliberately not handled here.
       if (event.target !== event.currentTarget) return
-      if (event.key === 'Enter' || event.key === ' ') {
+      if (event.key === 'Enter') {
         event.preventDefault()
         activate()
       }

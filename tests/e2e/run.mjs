@@ -16,6 +16,7 @@ import * as quickSearch from './quick-search.mjs'
 import * as reconnect from './reconnect.mjs'
 import * as resume from './resume.mjs'
 import * as settings from './settings.mjs'
+import * as shortcuts from './shortcuts.mjs'
 
 /**
  * Runs e2e scenarios against the running app.
@@ -24,7 +25,7 @@ import * as settings from './settings.mjs'
  *   node tests/e2e/run.mjs lyrics library     # only what you changed
  *   node tests/e2e/run.mjs                    # everything
  */
-const scenarios = { images, home, carousel, playback, reconnect, autoplay, links, queue, lyrics, 'lyrics-change': lyricsChange, library, resume, navigation, offline, 'quick-search': quickSearch, settings, import: importScenario }
+const scenarios = { images, home, carousel, playback, reconnect, autoplay, links, queue, lyrics, 'lyrics-change': lyricsChange, library, resume, navigation, offline, 'quick-search': quickSearch, settings, shortcuts, import: importScenario }
 
 const requested = process.argv.slice(2)
 const unknown = requested.filter((name) => !scenarios[name])

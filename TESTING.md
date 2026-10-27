@@ -116,6 +116,7 @@ the app while they run — they own the queue.
 | `images` | Home artwork actually renders, home carousels stay inside the docked page, no broken images |
 | `home` | recent history rows, the history panel, weekly pulse, mood icons and mood pages |
 | `carousel` | rails hide their scrollbar, header chevrons page the row, the wheel scrolls sideways on Windows |
+| `shortcuts` | Space, transport/seek/volume keys, mute/shuffle/repeat/like, Escape, `/`, and text-field guards |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |
@@ -165,7 +166,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
 | `src/renderer/lib/nav.svelte.ts` | e2e `navigation`, `links` |
-| `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links` |
+| `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |
 | `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change` · behaviour (reorder) |
 | `src/renderer/lib/history.svelte.ts`, `HistoryPanel`, `favorites.svelte.ts` | unit `listening` · e2e `home`, `queue` · behaviour |
@@ -173,9 +174,10 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker` | e2e `library` · behaviour |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts` | unit `artist-credits`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
-| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home` · visual check |
+| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts` · visual check |
 | `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue` |
 | `src/renderer/lib/rail-fit.ts` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
+| `src/renderer/lib/keyboard.ts` | e2e `shortcuts` · behaviour |
 | `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel` |
 | `src/renderer/components/DetailView.svelte`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library` · unit `listening` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |

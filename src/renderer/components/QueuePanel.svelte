@@ -215,7 +215,8 @@
             onclick={() => player.playAt(i)}
             onkeydown={(event) => {
               if (event.target !== event.currentTarget) return
-              if (event.key === 'Enter' || event.key === ' ') {
+              // Enter plays the row; Space belongs to the global player toggle.
+              if (event.key === 'Enter') {
                 event.preventDefault()
                 player.playAt(i)
               }

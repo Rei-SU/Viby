@@ -347,10 +347,7 @@
     if (!target || (!wrapper?.contains(target) && !panel?.contains(target))) close()
   }
 
-  function onWindowKeydown(event: KeyboardEvent): void {
-    if (network.localFirst) return
-    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return
-    event.preventDefault()
+  function focusSearch(): void {
     input?.focus()
     input?.select()
     if (isSearchPage()) {
@@ -362,6 +359,30 @@
     active = -1
     const query = searchState.query.trim()
     if (query && quickFor !== query) scheduleQuick(query, true)
+  }
+
+  function onWindowKeydown(event: KeyboardEvent): void {
+    if (network.localFirst) return
+
+    const target = event.target as HTMLElement | null
+    const typing = Boolean(
+      target &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT')
+    )
+
+    // `/` is the browser-style quick focus, as long as the user is not typing.
+    if (event.key === '/' && !typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      focusSearch()
+      return
+    }
+
+    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return
+    event.preventDefault()
+    focusSearch()
   }
 
   function move(delta: number): void {

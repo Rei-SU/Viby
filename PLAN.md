@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 12)
+Last updated: 2026-10-27 (rev 13)
 
 ---
 
@@ -664,6 +664,20 @@ On Windows only, a vertical wheel over a rail scrolls it horizontally and preven
 The library only held liked songs, playlists and downloads, so keeping an album or EP without downloading its audio was impossible. Release pages now carry a **Save** action (Play all · Save · Download) that stores a metadata snapshot — browse id, title, artist, release type, year, track count, artwork — in `library.json` next to playlists and favourites. Saved releases appear as Library tiles under **Albums** (and All), take the download badge when their audio is also downloaded, and are not duplicated by the downloads grid. Clicking one opens the release page; offline, a downloaded one opens its local-first download page and an undownloaded one explains that it is unavailable. Saving is metadata-only; audio is never implied.
 
 Save appears only once the page's track list has loaded, so the tile can say `Album · 13 songs` instead of a bare label. `SavedAlbum` follows the same validate-on-write / self-heal-on-read policy as the rest of the library.
+
+### Keyboard shortcuts (2026-10-27)
+
+The renderer only handled Ctrl/Cmd+K and the search dropdown keys, so Space did nothing after clicking a song. A small player layer (`src/renderer/lib/keyboard.ts`, installed by the app root) now handles:
+
+- **Space** — play/pause
+- **Ctrl/Cmd + ←/→** — previous / next track
+- **←/→** — seek −/+ 5 s
+- **Ctrl/Cmd + ↑/↓** — volume −/+ 5%
+- **M** — mute · **S** — shuffle · **R** — repeat · **L** — like/unlike the current track
+- **Escape** — close the side panel (the playlist picker owns Escape while open)
+- **/** — focus search, alongside Ctrl/Cmd+K
+
+Text fields, selects, ranges and checkboxes keep their own keys; rows use Enter to play, because Space is the global toggle (the common click-a-row-then-pause flow depends on it). Native buttons and links are deliberately not exempt from Space for the same reason. Media keys and Now Playing still come from `navigator.mediaSession`.
 
 ## 14. Library (shipped)
 

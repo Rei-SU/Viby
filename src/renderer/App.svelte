@@ -26,6 +26,7 @@
   import { downloads } from './lib/downloads.svelte'
   import { favorites } from './lib/favorites.svelte'
   import { savedAlbums } from './lib/saved-albums.svelte'
+  import { installShortcuts } from './lib/keyboard'
   import { artwork } from './lib/artwork.svelte'
   import { searchState } from './lib/search.svelte'
 
@@ -209,9 +210,11 @@
     updates.init()
     const offSettings = api.app.onOpenSettings(() => nav.go('settings'))
     const offNavigate = api.app.onNavigate(navigate)
+    const offShortcuts = installShortcuts()
     return () => {
       offSettings()
       offNavigate()
+      offShortcuts()
     }
   })
 </script>
