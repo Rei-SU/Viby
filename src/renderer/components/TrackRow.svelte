@@ -6,6 +6,7 @@
   import { downloads } from '../lib/downloads.svelte'
   import { favorites } from '../lib/favorites.svelte'
   import { network } from '../lib/network.svelte'
+  import { openTrackFromItem } from '../lib/release'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
   import SubtitleParts from './SubtitleParts.svelte'
@@ -22,6 +23,7 @@
     showDownload = true,
     showFavorite = false,
     unavailable = false,
+    focused = false,
     meta
   }: {
     item: CatalogItem
@@ -40,6 +42,8 @@
     showFavorite?: boolean
     /** Offline and not downloaded: visible for context, but inert and faded. */
     unavailable?: boolean
+    /** Briefly flash the row after a song title opened its release here. */
+    focused?: boolean
     /** Small right-aligned annotation, e.g. "12 MB · Best". */
     meta?: string
   } = $props()
@@ -144,6 +148,8 @@
   class="row"
   class:active
   class:unavailable={blocked}
+  class:focused
+  data-track-id={item.id}
   onpointerenter={hoverStart}
   onpointerleave={hoverEnd}
 >
@@ -178,7 +184,21 @@
     {/if}
 
     <span class="text">
-      <span class="title truncate">{item.title}</span>
+      {#if playable}
+        <button
+          type="button"
+          class="title truncate"
+          title={item.album ? `Open ${item.album}` : `Open ${item.title}`}
+          onclick={(event) => {
+            event.stopPropagation()
+            openTrackFromItem(item)
+          }}
+        >
+          {item.title}
+        </button>
+      {:else}
+        <span class="title truncate">{item.title}</span>
+      {/if}
       <span class="sub truncate">
         {#if item.kind !== 'song'}<span class="tag">{item.releaseType ?? item.kind}</span>{/if}
         <SubtitleParts parts={item.parts} fallback={item.subtitle} />
@@ -292,6 +312,29 @@
     background: var(--glass-active);
   }
 
+  /* The destination row after a song title opened its album: a short flash,
+     not a second selection state. */
+  .row.focused {
+    animation: row-focus 2.8s var(--ease);
+  }
+
+  @keyframes row-focus {
+    0%,
+    24% {
+      background: rgba(255, 255, 255, 0.16);
+    }
+    100% {
+      background: transparent;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .row.focused {
+      animation: none;
+      background: var(--glass-active);
+    }
+  }
+
   .row.unavailable {
     opacity: 0.38;
   }
@@ -337,6 +380,23 @@
   .title {
     font-size: 13.5px;
     font-weight: 480;
+  }
+
+  button.title {
+    display: block;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    transition: color var(--speed) var(--ease);
+  }
+
+  button.title:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .active .title {

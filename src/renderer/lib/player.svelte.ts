@@ -57,8 +57,11 @@ export function toTrack(item: CatalogItem): Track {
     // Keeping every credit is what lets the player bar and saved rows link a
     // featured artist, not just the primary one.
     artistParts: credit,
-    album: parts.find((part) => part.albumId || part.entity === 'album')?.text.trim(),
-    albumId: parts.find((part) => part.albumId)?.albumId,
+    album:
+      item.album?.trim() ||
+      parts.find((part) => part.albumId || part.entity === 'album')?.text.trim(),
+    albumId: item.albumId ?? parts.find((part) => part.albumId)?.albumId,
+    releaseType: item.releaseType,
     durationSec: item.durationSec ?? 0,
     thumbnail: item.thumbnail,
     views: item.views,
@@ -933,6 +936,7 @@ class Player {
       artistParts: artistParts?.length ? artistParts : undefined,
       album: track.album,
       albumId: track.albumId,
+      releaseType: track.releaseType,
       durationSec: track.durationSec,
       playedAt: Date.now(),
       completion,

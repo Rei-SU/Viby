@@ -21,6 +21,13 @@ export type MoodRef = {
   thumbnail?: string
 }
 
+/**
+ * A row the release page should reveal after it opens. The title is a fallback
+ * for search results that point at the video while the release holds the audio.
+ * The nonce makes a repeated click re-run the scroll and highlight.
+ */
+export type TrackFocus = { trackId: string; title: string; nonce: number }
+
 type Snapshot = {
   view: View
   detail: CatalogItem | null
@@ -46,9 +53,14 @@ class Navigator {
   collection = $state<CollectionRef | null>(null)
   /** A YouTube Music mood or genre page. */
   mood = $state<MoodRef | null>(null)
+  /** A song the release page should scroll to and highlight. */
+  focus = $state<TrackFocus | null>(null)
 
   private backStack = $state<Snapshot[]>([])
   private forwardStack = $state<Snapshot[]>([])
+  private focusNonce = 0
+  /** Bumped on every real navigation; async resolvers drop stale clicks. */
+  private rev = 0
 
   get canGoBack(): boolean {
     return this.backStack.length > 0
@@ -56,6 +68,10 @@ class Navigator {
 
   get canGoForward(): boolean {
     return this.forwardStack.length > 0
+  }
+
+  get revision(): number {
+    return this.rev
   }
 
   go(view: View): void {
@@ -77,6 +93,20 @@ class Navigator {
     this.track = null
     this.collection = null
     this.mood = null
+  }
+
+  /**
+   * Open a release and reveal one of its songs. Clicking a title while already
+   * on that release still scrolls, so the focus is set even without navigating.
+   */
+  openReleaseAt(item: CatalogItem, trackId: string, title: string): void {
+    this.open(item)
+    this.focus = { trackId, title, nonce: ++this.focusNonce }
+  }
+
+  /** Called by the page once it has scrolled; a stale page must not clear it. */
+  clearFocus(nonce: number): void {
+    if (this.focus?.nonce === nonce) this.focus = null
   }
 
   /** A mood page from the Home "Start something" cards. */
@@ -150,6 +180,8 @@ class Navigator {
   private record(): void {
     this.pushBack(this.snapshot())
     this.forwardStack = []
+    this.focus = null
+    this.rev++
   }
 
   private pushBack(snapshot: Snapshot): void {
@@ -178,6 +210,8 @@ class Navigator {
     this.track = snapshot.track
     this.collection = snapshot.collection
     this.mood = snapshot.mood
+    this.focus = null
+    this.rev++
   }
 }
 

@@ -12,6 +12,8 @@ export type Track = {
   artistParts?: SubtitlePart[]
   album?: string
   albumId?: string
+  /** YouTube's label for the release this track belongs to, when known. */
+  releaseType?: string
   durationSec: number
   thumbnail?: string
   sourceUrl?: string
@@ -176,11 +178,15 @@ export type CatalogItem = {
    * YouTube's own label for a release: "Album", "Single", "EP", "Audiobook" or
    * "Compilation". Copied verbatim from the card or page header; never
    * synthesised, because a release YouTube calls a single must not be shown as
-   * an album. Absent when YouTube did not say.
+   * an album. Song rows carry their release's label when the source knew it.
+   * Absent when YouTube did not say.
    */
   releaseType?: string
   title: string
   subtitle: string
+  /** Songs only: the release this track belongs to, when the source names it. */
+  album?: string
+  albumId?: string
   /** Subtitle split into plain text and linked parts. */
   parts?: SubtitlePart[]
   thumbnail?: string
@@ -248,6 +254,8 @@ export type HistoryEntry = {
   artistParts?: SubtitlePart[]
   album?: string
   albumId?: string
+  /** Kept so a replay from history can still tell an album from a single. */
+  releaseType?: string
   durationSec?: number
   playedAt: number
   completion: number

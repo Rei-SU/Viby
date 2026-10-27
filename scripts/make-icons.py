@@ -2,15 +2,23 @@
 """
 Build the app icons from assets/Logo.png.
 
-The source is a 1024px square; macOS icons are a rounded tile with a transparent
-margin, so the logo is placed on the standard 824px body inside a 1024px canvas.
+Platform rules this follows:
+- macOS (Big Sur and later): a 1024 canvas with an 824px rounded body and
+  transparent margin; the artwork inside should fill most of the body. The
+  .icns is written with Pillow, so this runs on Windows too.
+- Windows: the ICO carries 16/20/24/32/40/48/64/128/256 and the art fills the
+  canvas (no macOS margin), otherwise the taskbar button looks smaller than
+  every other app.
+- Menu bar / notification area: platform-native sizes (16 and 32 for the macOS
+  template, multi-size ICO for the Windows tray).
+
 Run after changing the logo:
 
     npm run icons
 """
 from pathlib import Path
-import shutil
-import subprocess
+import io
+import struct
 
 from PIL import Image, ImageDraw
 
@@ -22,52 +30,116 @@ BODY = 824
 RADIUS = 185
 SUPERSAMPLE = 4
 
+# The source is a white V on black with generous breathing room. Scaling the
+# mark to ~74% of the macOS body keeps the platform's padding while making the
+# logo read at Dock size; Windows has no such padding, so it gets more.
+MAC_MARK = 0.74
+WIN_INSET = 24
+WIN_MARK = 0.72
+
 OUT.mkdir(exist_ok=True)
-
 source = Image.open(SOURCE).convert("RGB")
-body = source.resize((BODY, BODY), Image.Resampling.LANCZOS).convert("RGBA")
+background = source.getpixel((0, 0))
 
-# Draw the rounded mask at 4x and downsample, otherwise the corners alias badly.
-mask = Image.new("L", (BODY * SUPERSAMPLE, BODY * SUPERSAMPLE), 0)
-ImageDraw.Draw(mask).rounded_rectangle(
-    (0, 0, BODY * SUPERSAMPLE - 1, BODY * SUPERSAMPLE - 1),
-    radius=RADIUS * SUPERSAMPLE,
-    fill=255,
-)
-body.putalpha(mask.resize((BODY, BODY), Image.Resampling.LANCZOS))
+# Pull the white mark out of the black background once.
+mask = source.convert("L").point(lambda value: 255 if value > 24 else 0)
+bbox = mask.getbbox()
+if bbox is None:
+    raise SystemExit("assets/Logo.png has no visible mark")
+mark = mask.crop(bbox)
 
-canvas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-canvas.alpha_composite(body, ((SIZE - BODY) // 2, (SIZE - BODY) // 2))
 
-canvas.save(OUT / "icon.png")
+def mark_image(width: int) -> Image.Image:
+    height = round(mark.height * width / mark.width)
+    alpha = mark.resize((width, height), Image.Resampling.LANCZOS)
+    image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+    image.putalpha(alpha)
+    return image
 
-canvas.save(
+
+def rounded_tile(body: int, radius: int, mark_ratio: float) -> Image.Image:
+    """A rounded, filled tile centred on a 1024 canvas, mark scaled inside."""
+    canvas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    tile = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    mask_big = Image.new("L", (SIZE * SUPERSAMPLE, SIZE * SUPERSAMPLE), 0)
+    ImageDraw.Draw(mask_big).rounded_rectangle(
+        ((SIZE - body) // 2 * SUPERSAMPLE, (SIZE - body) // 2 * SUPERSAMPLE,
+         (SIZE + body) // 2 * SUPERSAMPLE, (SIZE + body) // 2 * SUPERSAMPLE),
+        radius=radius * SUPERSAMPLE,
+        fill=255,
+    )
+    tile.paste(Image.new("RGBA", (SIZE, SIZE), (*background, 255)), (0, 0),
+               mask_big.resize((SIZE, SIZE), Image.Resampling.LANCZOS))
+
+    glyph = mark_image(round(body * mark_ratio))
+    tile.alpha_composite(
+        glyph,
+        ((SIZE - glyph.width) // 2, (SIZE - glyph.height) // 2),
+    )
+    canvas.alpha_composite(tile)
+    return canvas
+
+
+def write_icns(path: Path, image: Image.Image) -> None:
+    """Write a complete ICNS (base and @2x sizes) without macOS-only tools."""
+    # Pixmap types macOS expects; Pillow's writer omits the 16/32 base sizes.
+    chunks = [
+        ("icp4", 16),
+        ("icp5", 32),
+        ("icp6", 64),
+        ("ic07", 128),
+        ("ic08", 256),
+        ("ic09", 512),
+        ("ic10", 1024),
+        ("ic11", 32),
+        ("ic12", 64),
+        ("ic13", 256),
+        ("ic14", 512),
+    ]
+
+    payloads = []
+    for key, size in chunks:
+        buffer = io.BytesIO()
+        image.resize((size, size), Image.Resampling.LANCZOS).save(buffer, format="PNG")
+        payloads.append((key, buffer.getvalue()))
+
+    toc = b"TOC " + struct.pack(">I", 8 + 8 * len(payloads))
+    for key, payload in payloads:
+        toc += key.encode("ascii") + struct.pack(">I", 8 + len(payload))
+
+    body = toc + b"".join(
+        key.encode("ascii") + struct.pack(">I", 8 + len(payload)) + payload
+        for key, payload in payloads
+    )
+    path.write_bytes(b"icns" + struct.pack(">I", 8 + len(body)) + body)
+
+
+# macOS: the standard 824px body on a 1024px canvas.
+mac = rounded_tile(BODY, RADIUS, MAC_MARK)
+mac.save(OUT / "icon.png")
+write_icns(OUT / "icon.icns", mac)
+
+# Windows: art fills the canvas; the taskbar and jump lists use this.
+win_body = SIZE - WIN_INSET * 2
+win = rounded_tile(win_body, round(RADIUS * win_body / BODY), WIN_MARK)
+win.save(OUT / "icon-win.png")
+win.save(
     OUT / "icon.ico",
     format="ICO",
-    sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+    sizes=[
+        (16, 16),
+        (20, 20),
+        (24, 24),
+        (32, 32),
+        (40, 40),
+        (48, 48),
+        (64, 64),
+        (128, 128),
+        (256, 256),
+    ],
 )
 
-iconset = OUT / "icon.iconset"
-iconset.mkdir(exist_ok=True)
-for size in (16, 32, 128, 256, 512):
-    canvas.resize((size, size), Image.Resampling.LANCZOS).save(iconset / f"icon_{size}x{size}.png")
-    canvas.resize((size * 2, size * 2), Image.Resampling.LANCZOS).save(
-        iconset / f"icon_{size}x{size}@2x.png"
-    )
-
-# `iconutil` ships with macOS only. On Windows the PNG/ICO outputs are all that
-# is needed; keep the existing .icns rather than failing the whole script.
-if shutil.which("iconutil"):
-    subprocess.run(
-        ["iconutil", "-c", "icns", str(iconset), "-o", str(OUT / "icon.icns")], check=True
-    )
-else:
-    print("iconutil not found - keeping the existing resources/icon.icns")
-for file in iconset.iterdir():
-    file.unlink()
-iconset.rmdir()
-
-for name in ("icon.png", "icon.icns", "icon.ico"):
+for name in ("icon.png", "icon-win.png", "icon.icns", "icon.ico"):
     path = OUT / name
     print(f"{path.relative_to(ROOT)}  {path.stat().st_size / 1024:.0f} KB")
 
@@ -76,13 +148,11 @@ for name in ("icon.png", "icon.icns", "icon.ico"):
 TRAY = OUT / "tray"
 TRAY.mkdir(exist_ok=True)
 
-alpha = source.convert("L").point(lambda value: 255 if value > 24 else 0)
-alpha = alpha.crop(alpha.getbbox())
 for scale in (1, 2):
     size = 16 * scale
-    width = size - 2 * scale
-    height = round(alpha.height * width / alpha.width)
-    glyph = alpha.resize((width, height), Image.Resampling.LANCZOS)
+    width = size - scale
+    height = round(mark.height * width / mark.width)
+    glyph = mark.resize((width, height), Image.Resampling.LANCZOS)
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     black = Image.new("RGBA", glyph.size, (0, 0, 0, 255))
     black.putalpha(glyph)
@@ -90,7 +160,9 @@ for scale in (1, 2):
     suffix = "@2x" if scale == 2 else ""
     image.save(TRAY / f"trayTemplate{suffix}.png")
 
-canvas.save(
+# Windows draws tray icons as supplied, so use the full-bleed tile rather than
+# the macOS-margin artwork; that was what made the mark look tiny there.
+win.save(
     TRAY / "tray-win.ico",
     format="ICO",
     sizes=[(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48)],

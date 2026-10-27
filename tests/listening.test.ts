@@ -17,6 +17,7 @@ const history: HistoryEntry[] = [
     artistId: 'alpha-id',
     album: 'One',
     albumId: 'one-id',
+    releaseType: 'EP',
     durationSec: 200,
     playedAt: NOW - 1000,
     completion: 0.5,
@@ -114,6 +115,11 @@ check(
   'the release stays a link',
   row.parts?.some((part) => part.albumId === 'one-id' && part.entity === 'album') === true,
   JSON.stringify(row.parts)
+)
+check(
+  'the row keeps the release identity for title navigation',
+  row.album === 'One' && row.albumId === 'one-id' && row.releaseType === 'EP',
+  JSON.stringify({ album: row.album, albumId: row.albumId, releaseType: row.releaseType })
 )
 
 const legacy = historyItem({ ...history[0], artist: 'Stormy, Manal', artistId: undefined, artistParts: undefined })

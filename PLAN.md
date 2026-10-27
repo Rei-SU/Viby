@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 15)
+Last updated: 2026-10-27 (rev 16)
 
 ---
 
@@ -669,6 +669,18 @@ The library only held liked songs, playlists and downloads, so keeping an album 
 
 Save appears only once the page's track list has loaded, so the tile can say `Album · 13 songs` instead of a bare label. `SavedAlbum` follows the same validate-on-write / self-heal-on-read policy as the rest of the library.
 
+### Song titles open their release (2026-10-27)
+
+Song titles in every list are now buttons. Clicking one opens where the song lives: an album or EP page, scrolled to that row and flashed for ~2.8s; a **single** opens the song page instead, because its one-track release adds nothing. The row itself still plays on click — the title stops propagation, and Space remains the global play/pause. The player-bar title keeps its existing behaviour (song page); the queue panel's titles gained the same affordance.
+
+Release identity had to travel with the song. `CatalogItem` and `Track` now carry `album`, `albumId` and `releaseType`; the parser fills them from row subtitle parts, and `DetailView.withDefaults()` stamps the page's own release onto every row so playback from an album page still knows its home. History entries keep `releaseType` too. `trackToItem()`, `toTrack()` and `historyItem()` preserve all three.
+
+`lib/release.ts` resolves the target. A known release type is immediate (a saved release already knows its label); otherwise it browses the release header — the response is cached, so the page that opens needs no second request. A result with no label and exactly one song is treated like a single. If the fetch fails, the song page is the graceful fallback. Search often returns the music video while the release lists the official audio, so the focus carries the title: when the id is absent, `trackTitleKey()` matches the recording (official video/audio/lyric/4K markers stripped; live/remix/acoustic stay distinct). The match highlights the row that actually exists on the page.
+
+`nav.openReleaseAt(item, trackId, title)` sets a one-shot `focus` (with a nonce, so clicking the same title again re-flashes) and clears it once the page has scrolled. Focus is not part of Back/Forward snapshots; it is cleared by every navigation. The page may still be loading or the row may sit past the first 120, so it waits for the result, expands pagination, and only scrolls when the row is outside the viewport — a visible row must not yank the page. The App's per-view scroll restoration is skipped while focus is pending, or it would overwrite the scroll. An async resolution also carries the navigation revision, so a click that finishes after the user has moved on cannot hijack the view.
+
+Verified: Da Funk (video id) opens *Homework*, scrolls to and flashes the official-audio row (different id, same recording); a single ("Flowers") opens the song page and its release name still opens the release; queue titles do the same; no click starts playback.
+
 ### Keyboard shortcuts (2026-10-27)
 
 The renderer only handled Ctrl/Cmd+K and the search dropdown keys, so Space did nothing after clicking a song. A small player layer (`src/renderer/lib/keyboard.ts`, installed by the app root) now handles:
@@ -839,9 +851,12 @@ Shipping contract: install and play. The user never installs Python and never se
 
 ### Branding (2026-10-19)
 
-- **Source artwork** lives at `assets/Logo.png` (1024²). `npm run icons` (`scripts/make-icons.py`) produces the platform icons: a 1024 PNG with the logo on the standard 824px rounded tile (transparent margin), `resources/icon.icns` via `iconutil`, and a 16–256px `resources/icon.ico` via Pillow.
+- **Source artwork** lives at `assets/Logo.png` (1024², a white mark on black). `npm run icons` (`scripts/make-icons.py`, run through `scripts/make-icons.mjs`) now produces **platform-specific** art, because one canvas cannot satisfy both platforms:
+  - **macOS:** the 1024 PNG keeps the Apple grid (824px rounded body, 100px transparent margin) but the mark is scaled to 74% of the body — it used to fill only 61%, which read small in the Dock. `resources/icon.icns` is written by the script itself (TOC plus 16/32/64/128/256/512/1024 base and @2x PNG chunks), so icon generation no longer needs macOS-only `iconutil`.
+  - **Windows:** the art fills the canvas (24px inset, no macOS margin) with the mark at 72%; the ICO carries 16/20/24/32/40/48/64/128/256. The dev window icon uses `resources/icon-win.png`, while packaged builds take the executable icon from `win.icon`.
+  - **Tray:** the macOS template is 16/32px (black mask so the system recolours it); `tray-win.ico` is the full-bleed Windows art at 16–48px, not the old macOS-margin canvas.
 - **Packaging** points `mac.icon` and `win.icon` at those files. The built bundle reports `CFBundleName`/`CFBundleDisplayName = Viby` and `CFBundleIconFile = icon.icns`; the `.icns` in the app matches `resources/icon.icns` byte for byte. The DMG/NSIS artifacts use the same icon.
-- **Development** sets the Dock icon from `resources/icon.png` and installs a custom application menu (`src/main/menu.ts`) instead of Electron's default File/Edit/View menu. Edit roles are preserved so copy/paste still works in the search fields and inputs.
+- **Development** sets the Dock icon from `resources/icon.png` (and the Windows window icon from `resources/icon-win.png`) and installs a custom application menu (`src/main/menu.ts`) instead of Electron's default File/Edit/View menu. Edit roles are preserved so copy/paste still works in the search fields and inputs.
 - **Menu name caveat:** macOS renders the first menu item with the *bundle* name, not the template label. Dev runs the `Electron.app` helper, so it still says "Electron"; the packaged app shows "Viby" (verified by screenshot: Apple / Viby / Edit / View / Window). Packaged Windows and Linux builds get no native menu bar — the custom titlebar is the chrome — while non-macOS development builds keep a minimal Edit/View menu for reload and DevTools. The packaged Windows executable takes its icon from `win.icon`.
 
 ## 17. Offline mode and downloads (shipped)

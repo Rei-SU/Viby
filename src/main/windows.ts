@@ -40,7 +40,14 @@ export function createWindow(options: { startMinimized?: boolean } = {}): Browse
     fullscreenable: true,
     backgroundColor: '#0b0b0d',
     // Packaged Windows uses the executable's icon; dev builds need it explicitly.
-    icon: app.isPackaged ? undefined : join(app.getAppPath(), 'resources', 'icon.png'),
+    // Windows gets the full-bleed mark, macOS the rounded app tile.
+    icon: app.isPackaged
+      ? undefined
+      : join(
+          app.getAppPath(),
+          'resources',
+          process.platform === 'win32' ? 'icon-win.png' : 'icon.png'
+        ),
     // `hiddenInset` hides the title bar but keeps the traffic lights on macOS.
     // On Windows we also hide the native caption and let the OS draw the
     // min/max/close buttons as an overlay on top of the renderer's titlebar,

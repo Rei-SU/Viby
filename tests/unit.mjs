@@ -16,6 +16,7 @@ const suites = {
   'artist-shelves': { file: 'artist-shelves.test.ts' },
   library: { file: 'library.test.ts', electron: true },
   'artist-credits': { file: 'artist-credits.test.ts' },
+  'track-title': { file: 'track-title.test.ts' },
   startup: { file: 'startup.test.ts', electron: true },
   lyrics: { file: 'lyrics.test.ts', electron: true },
   spotify: { file: 'spotify-import.test.ts' },

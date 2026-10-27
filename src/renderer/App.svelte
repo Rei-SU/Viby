@@ -179,6 +179,9 @@
     const next = viewKey()
     if (next === scrollKey) return
     scrollKey = next
+    // A release opened at a specific song scrolls itself there; restoring the
+    // old offset afterwards would hide the row again.
+    if (nav.focus) return
     const saved = scrollMemory.get(next) ?? 0
     requestAnimationFrame(() => {
       if (main) main.scrollTop = saved

@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onDestroy, tick, untrack } from 'svelte'
   import type { BrowseResult, CatalogItem, SavedAlbum } from '@shared/types'
+  import { trackTitleKey } from '@shared/track-title'
   import { api } from '../lib/api'
   import { artwork } from '../lib/artwork.svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
@@ -25,6 +27,14 @@
   let error = $state<string | null>(null)
   let shown = $state(PAGE)
   let loadRequest = 0
+  let tracksEl = $state<HTMLElement | undefined>(undefined)
+  /** The row just revealed by a song-title click; cleared after the flash. */
+  let highlighted = $state<string | null>(null)
+  let highlightTimer: ReturnType<typeof setTimeout> | null = null
+
+  onDestroy(() => {
+    if (highlightTimer) clearTimeout(highlightTimer)
+  })
 
   const isArtist = $derived(item.kind === 'artist')
   const shelves = $derived(result?.shelves ?? [])
@@ -138,6 +148,17 @@
     item.kind === 'album' ? (result?.header?.releaseType ?? item.releaseType ?? null) : item.kind
   )
 
+  /** The page's own release, attached to every row so playback knows where it lives. */
+  const pageRelease = $derived(
+    item.kind === 'album'
+      ? {
+          album: result?.header?.title ?? item.title,
+          albumId: item.browseId ?? item.id,
+          releaseType: releaseLabel ?? undefined
+        }
+      : null
+  )
+
   function withDefaults(track: CatalogItem): CatalogItem {
     let next = track
     if ((track.artists?.length ?? 0) === 0 && fallbackArtist) {
@@ -146,6 +167,14 @@
         subtitle: fallbackArtist.name,
         artists: [fallbackArtist.name],
         parts: [{ text: fallbackArtist.name, artistId: fallbackArtist.id, entity: 'artist' }]
+      }
+    }
+    if (pageRelease) {
+      next = {
+        ...next,
+        album: next.album ?? pageRelease.album,
+        albumId: next.albumId ?? pageRelease.albumId,
+        releaseType: next.releaseType ?? pageRelease.releaseType
       }
     }
     // Album rows often omit their own thumbnail. The header cover is the right
@@ -226,6 +255,11 @@
     const browseId = item.browseId ?? item.id
     shown = PAGE
     activeShelf = 0
+    highlighted = null
+    if (highlightTimer) {
+      clearTimeout(highlightTimer)
+      highlightTimer = null
+    }
 
     // Invalidate any request for the page we were on. The component instance is
     // reused as `item` changes, so an old response must not overwrite this page.
@@ -277,6 +311,79 @@
     loading = true
     void load(browseId, request)
   }
+
+  /**
+   * Reveal the song that was clicked in another list. The page may still be
+   * loading or the row may sit past the first page, so this waits for the
+   * result, expands the list and only then scrolls. The highlight is a short
+   * flash, not a persistent selection.
+   */
+  $effect(() => {
+    const focus = nav.focus
+    if (!focus || loading || !result) return
+
+    const list = isArtist ? trackList : displaySongs
+    let index = list.findIndex((track) => track.id === focus.trackId)
+    if (index < 0) {
+      // A search result can point at the music video while the release lists
+      // the official audio; same song, different id. Match the title then.
+      const key = trackTitleKey(focus.title)
+      index = list.findIndex((track) => trackTitleKey(track.title) === key)
+    }
+    if (index < 0) {
+      nav.clearFocus(focus.nonce)
+      return
+    }
+
+    const targetId = list[index].id
+    const nonce = focus.nonce
+    const page = Math.ceil((index + 1) / PAGE) * PAGE
+    let cancelled = false
+
+    void (async () => {
+      if (!isArtist && untrack(() => shown) < page) shown = page
+      await tick()
+      if (cancelled || nav.focus?.nonce !== nonce) return
+      if (!tracksEl) {
+        nav.clearFocus(nonce)
+        return
+      }
+
+      const row = [...tracksEl.querySelectorAll<HTMLElement>('[data-track-id]')].find(
+        (element) => element.dataset.trackId === targetId
+      )
+      if (!row) {
+        nav.clearFocus(nonce)
+        return
+      }
+
+      // A row the user can already see should not yank the whole page; only
+      // rows below the fold get centred.
+      const view = row.closest('.content')?.getBoundingClientRect()
+      const rect = row.getBoundingClientRect()
+      const visible = view && rect.top >= view.top + 8 && rect.bottom <= view.bottom - 8
+      if (!visible) {
+        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        row.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
+      }
+
+      // Restart the flash even when the same title is clicked again.
+      highlighted = null
+      await tick()
+      if (cancelled) return
+      highlighted = targetId
+      if (highlightTimer) clearTimeout(highlightTimer)
+      highlightTimer = setTimeout(() => {
+        if (highlighted === targetId) highlighted = null
+        highlightTimer = null
+      }, 2800)
+      nav.clearFocus(nonce)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  })
 
   function playAll(): void {
     void player.playList(isArtist ? trackList : displaySongs, 0)
@@ -453,13 +560,14 @@
     {#if trackList.length > 0}
       <section class="shelf">
         <h2>Top songs</h2>
-        <ol class="tracks">
+        <ol class="tracks" bind:this={tracksEl}>
           {#each trackList as track, i (track.id + i)}
             <TrackRow
               item={track}
               context={trackList}
               index={i}
               showIndex
+              focused={highlighted === track.id}
               onQueue={(t) => player.enqueue(t)}
             />
           {/each}
@@ -492,7 +600,7 @@
       {/key}
     {/if}
   {:else if displaySongs.length > 0}
-    <ol class="tracks">
+    <ol class="tracks" bind:this={tracksEl}>
       {#each displaySongs.slice(0, shown) as track, i (track.id + i)}
         <TrackRow
           item={track}
@@ -500,6 +608,7 @@
           index={i}
           showIndex
           showArt={false}
+          focused={highlighted === track.id}
           onQueue={(t) => player.enqueue(t)}
         />
       {/each}

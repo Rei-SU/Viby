@@ -32,7 +32,12 @@ if (!app.isPackaged) {
 // installer's "run Viby", a bare exe, or a dev run — inherits no id, so the
 // shell can drive Viby from the media flyout but has nothing to match its
 // Now Playing controls against in the taskbar.
-if (process.platform === 'win32') app.setAppUserModelId('com.viby.app')
+if (process.platform === 'win32') {
+  // A dev run must not claim the installed app's identity: Windows would group
+  // the window under the installed shortcut and use its (older) icon instead of
+  // the window's own. The packaged build still matches the installer's AUMID.
+  app.setAppUserModelId(app.isPackaged ? 'com.viby.app' : 'com.viby.app.dev')
+}
 
 // Music must keep playing when the window is behind another app or minimised.
 // Chromium otherwise throttles the renderer and suspends "background media" to

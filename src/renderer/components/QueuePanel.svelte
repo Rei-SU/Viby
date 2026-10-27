@@ -2,6 +2,7 @@
   import { onDestroy, tick } from 'svelte'
   import { player } from '../lib/player.svelte'
   import { downloads } from '../lib/downloads.svelte'
+  import { openTrackTarget } from '../lib/release'
   import ArtistLinks from './ArtistLinks.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -231,7 +232,17 @@
             </span>
             <Cover src={track.thumbnail} size={34} radius={6} alt={track.title} />
             <span class="text">
-              <span class="t truncate">{track.title}</span>
+              <button
+                type="button"
+                class="t truncate"
+                title={track.album ? `Open ${track.album}` : `Open ${track.title}`}
+                onclick={(event) => {
+                  event.stopPropagation()
+                  void openTrackTarget(track)
+                }}
+              >
+                {track.title}
+              </button>
               <span class="a truncate">
                 <ArtistLinks parts={track.artistParts} name={track.artist} id={track.artistId} />
               </span>
@@ -377,6 +388,23 @@
   .t {
     font-size: 12.5px;
     font-weight: 480;
+  }
+
+  button.t {
+    display: block;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    transition: color var(--speed) var(--ease);
+  }
+
+  button.t:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   li.current .t {

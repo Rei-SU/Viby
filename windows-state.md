@@ -54,10 +54,13 @@ committed `icon.ico`/`icon.png` are usable, so this only blocked regenerating
 icons on Windows.
 **File:** `scripts/make-icons.py`
 
-**Status:** Closed. `iconutil` is now optional (the existing `.icns` is kept when
-it is missing), and `npm run icons` runs `scripts/make-icons.mjs`, which finds
-whichever of `python`/`py`/`python3` exists. Verified on Windows 11 with Python
-3 + Pillow.
+**Status:** Closed. `npm run icons` runs `scripts/make-icons.mjs`, which finds
+whichever of `python`/`py`/`python3` exists, and the generator now writes
+`icon.icns` itself (Pillow, full base + @2x set) instead of shelling out to
+`iconutil`. Verified on Windows 11 with Python 3 + Pillow. The 2026-10-27 pass
+also generates platform-specific artwork: macOS keeps the 824px body but a
+larger mark, Windows and its tray icon use full-bleed art, and `icon-win.png`
+feeds the development window icon.
 
 ### 1.4 `npm run measure` is macOS-only — Minor
 Hard-codes `dist/mac/Viby.app`, `ps`, and macOS process paths. Not runnable on

@@ -1,4 +1,5 @@
 import type { BrowseHeader, CatalogItem, CatalogKind, MoodCategory, Shelf, SubtitlePart } from '@shared/types'
+import { trackTitleKey } from '@shared/track-title'
 
 /**
  * Tolerant InnerTube response parsing.
@@ -45,19 +46,6 @@ export function extractItems(response: unknown): CatalogItem[] {
     seen.add(key)
     return true
   })
-}
-
-/** "Song (Official Video)" and "Song [4K]" are the same recording as "Song". */
-function trackTitleKey(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(
-      /[\[(]\s*(?:official\s+)?(?:music\s+)?(?:video|audio|visuali[sz]er|lyric\s+video|hd|4k)\s*[\])]/g,
-      ''
-    )
-    .replace(/\s*(?:official|lyric)\s+video\s*/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 /**
@@ -417,6 +405,7 @@ function fromResponsiveListItem(renderer: AnyObj): CatalogItem | null {
     .filter((part) => part.artistId)
     .map((part) => part.text.trim())
     .filter(Boolean)
+  const albumPart = parts.find((part) => part.albumId || part.entity === 'album')
 
   return {
     id: videoId || browseId,
@@ -425,6 +414,8 @@ function fromResponsiveListItem(renderer: AnyObj): CatalogItem | null {
     releaseType: kind === 'album' ? releaseTypeOf(subtitle) : undefined,
     title,
     subtitle,
+    album: kind === 'song' ? albumPart?.text.trim() : undefined,
+    albumId: kind === 'song' ? albumPart?.albumId : undefined,
     parts: parts.length ? parts : undefined,
     thumbnail: bestThumbnail(renderer),
     durationSec: parseDuration(timeText ?? ''),
@@ -453,6 +444,7 @@ function fromTwoRowItem(renderer: AnyObj): CatalogItem | null {
   const parts = partsFrom(runsOf(renderer.subtitle))
   const kind: CatalogKind =
     videoId ? 'song' : pageKind !== 'unknown' ? pageKind : kindFromSubtitle(subtitle)
+  const albumPart = parts.find((part) => part.albumId || part.entity === 'album')
 
   return {
     id: videoId || browseId,
@@ -461,6 +453,8 @@ function fromTwoRowItem(renderer: AnyObj): CatalogItem | null {
     releaseType: kind === 'album' ? releaseTypeOf(subtitle) : undefined,
     title,
     subtitle,
+    album: kind === 'song' ? albumPart?.text.trim() : undefined,
+    albumId: kind === 'song' ? albumPart?.albumId : undefined,
     parts: parts.length ? parts : undefined,
     thumbnail: bestThumbnail(renderer),
     videoType: videoTypeOf(renderer)

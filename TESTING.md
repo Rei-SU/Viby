@@ -58,6 +58,7 @@ ones that touch main-process modules.
 | `startup` | login-item payloads: dev no-op, Windows path/args, macOS bundle, unsupported platforms; defaults |
 | `listening` | seven-day summaries, duration weighting, duplicate history, history rows and their artist/release links |
 | `artist-credits` | credit parsing: the leading artist run, separator trimming, conservative splitting of combined names, structured credits winning over the fallback |
+| `track-title` | recording identity: official video/audio/lyric/4K markers ignored, live/remix/acoustic kept distinct, case and spacing normalised |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
@@ -122,6 +123,7 @@ the app while they run — they own the queue.
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |
 | `links` | player-bar title → song page, artist link, related list, every credited artist linked in the dock |
+| `release-focus` | a song title opens its release at the row and flashes it, a single opens the song page, queue titles follow, release names stay links |
 | `lyrics` | panel opens docked beside the page, page width shrinks and restores, synced active line, click-to-seek, closes |
 | `queue` | queue docks beside the page, count and Clear, grip reorder by pointer and keyboard, remove, empty state, lyrics sharing the panel |
 | `lyrics-change` | a new track's lyrics reset to the top (no inherited scroll) |
@@ -167,21 +169,22 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts` | unit `images` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
-| `src/renderer/lib/nav.svelte.ts` | e2e `navigation`, `links` |
+| `src/renderer/lib/nav.svelte.ts`, `src/renderer/lib/release.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title` |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |
-| `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change` · behaviour (reorder) |
+| `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change`, `release-focus` · behaviour (reorder) |
 | `src/renderer/lib/history.svelte.ts`, `HistoryPanel`, `favorites.svelte.ts` | unit `listening` · e2e `home`, `queue` · behaviour |
 | `src/renderer/components/MoodGrid.svelte`, `MoodView.svelte`, `src/renderer/lib/moods.svelte.ts` | unit `innertube` · e2e `home`, `navigation`, `carousel` |
 | `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker` | e2e `library` · behaviour |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts` | unit `artist-credits`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
-| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts` · visual check |
+| `src/shared/track-title.ts`, title navigation metadata | unit `track-title`, `innertube`, `listening` · e2e `release-focus` |
+| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts`, `release-focus` · visual check |
 | `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue` |
 | `src/renderer/lib/rail-fit.ts` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
 | `src/renderer/lib/keyboard.ts` | e2e `shortcuts` · behaviour |
 | `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel` |
-| `src/renderer/components/DetailView.svelte`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library` · unit `listening` |
+| `src/renderer/components/DetailView.svelte`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |
 | `src/renderer/App.svelte` | all e2e (layout, routes, panels) |
@@ -198,7 +201,7 @@ Find the row for what you changed; run what it lists.
   `winCodeSign` archive (it contains macOS symlinks). CI runners already have it on.
 - **Environment variables** in PowerShell use `$env:NAME='value'`, not the POSIX
   `NAME=value` form. Example: `$env:VIBY_DEBUG_PORT='9222'; npm run dev`.
-- **`npm run icons`** and **`npm run measure`** are macOS-only (iconutil / `ps`).
+- **`npm run measure`** is macOS-only (`ps` and macOS process paths). **`npm run icons`** runs on Windows too: the script writes the `.icns` itself (Pillow, no `iconutil`) and only needs Python 3 + Pillow.
 - The unit runner (`tests/unit.mjs`) now resolves esbuild via Node and writes
   bundles to the OS temp dir, so it runs on Windows too.
 

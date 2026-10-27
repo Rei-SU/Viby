@@ -555,6 +555,7 @@ let importResolveController: AbortController | null = null
           artistParts: entry.artistParts ?? track?.artistParts,
           album: entry.album ?? track?.album,
           albumId: entry.albumId ?? track?.albumId,
+          releaseType: entry.releaseType ?? track?.releaseType,
           durationSec: entry.durationSec ?? track?.durationSec,
           thumbnail: entry.thumbnail ?? track?.thumbnail
         }

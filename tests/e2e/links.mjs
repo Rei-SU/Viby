@@ -46,9 +46,12 @@ export async function run(app, check) {
 
   const cardArtist = await app.evaluate(`
     (async () => {
-      const { nav } = window.__viby
+      const { nav, searchState } = window.__viby
       nav.go('search')
       await new Promise((r) => setTimeout(r, 300))
+      // An earlier scenario may have left a category chip selected; cards only
+      // exist in the "All" view.
+      searchState.setFilter('all')
       const input = document.querySelector('.searchbox input')
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
       setter.call(input, 'daft punk')
