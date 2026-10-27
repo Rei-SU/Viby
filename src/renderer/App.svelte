@@ -54,6 +54,29 @@
     resizeTimer = setTimeout(() => (resizing = false), 180)
   }
 
+  // One press of a mouse side button can reach the app twice: as a `mouseup`
+  // from Chromium's XBUTTON handling, and as an app-command or macOS swipe
+  // relayed by main. The timestamp keeps that to a single history step.
+  let lastNavigate = 0
+
+  function navigate(command: 'back' | 'forward'): void {
+    const now = performance.now()
+    if (command === 'back' ? !nav.canGoBack : !nav.canGoForward) return
+    if (now - lastNavigate < 200) return
+    lastNavigate = now
+    if (command === 'back') nav.back()
+    else nav.forward()
+  }
+
+  /** Buttons 3 and 4 are the Back and Forward side buttons. */
+  function onMouseUp(event: MouseEvent): void {
+    if (event.button !== 3 && event.button !== 4) return
+    // The same press also fires `auxclick`; handling only `mouseup` keeps it
+    // to one step.
+    event.preventDefault()
+    navigate(event.button === 3 ? 'back' : 'forward')
+  }
+
   function isActive(id: View): boolean {
     return nav.view === id && !nav.detail && !nav.track && !nav.collection
   }
@@ -180,11 +203,16 @@
     void downloads.init()
     void player.init()
     updates.init()
-    return api.app.onOpenSettings(() => nav.go('settings'))
+    const offSettings = api.app.onOpenSettings(() => nav.go('settings'))
+    const offNavigate = api.app.onNavigate(navigate)
+    return () => {
+      offSettings()
+      offNavigate()
+    }
   })
 </script>
 
-<svelte:window onclick={() => (netMenu = false)} onresize={onResize} />
+<svelte:window onclick={() => (netMenu = false)} onresize={onResize} onmouseup={onMouseUp} />
 
 <div class="layout" class:lyrics-open={lyrics.open} class:resizing>
   <!-- The window has no native title bar on macOS, so this strip is the only

@@ -179,6 +179,39 @@ clicking play/pause toggles playback and the button redraws as pause/play.
 **Files:** `src/main/taskbar.ts`, `src/shared/ipc.ts`, `src/preload/index.ts`,
 `src/renderer/lib/player.svelte.ts`, `scripts/make-icons.py`
 
+### 4.5 Mouse side buttons (Back / Forward) — Verified on Windows
+The Back/Forward buttons on a mouse did nothing. Viby's history is pure Svelte
+state (`nav.svelte.ts`), so Chromium's own history walk is a no-op and
+`webContents.goBack()` is not an option: the app never pushes a history entry.
+
+- **Windows: the renderer sees the buttons.** An XBUTTON press arrives as
+  `pointerdown` / `mousedown` / `pointerup` / `mouseup` with `button: 3` (Back,
+  `buttons: 8`) or `button: 4` (Forward, `buttons: 16`), followed by `auxclick`.
+  `App.svelte` handles `mouseup` only — listening to `auxclick` as well would
+  step twice per press — and `preventDefault()`s it. Verified by injecting
+  XBUTTON1/XBUTTON2 with `mouse_event` and logging the events.
+- **`app-command` does not fire for a real XBUTTON press.** Chromium consumes
+  WM_XBUTTONUP and converts it to the mouse event above. The `browser-backward` /
+  `browser-forward` handler in `windows.ts` still earns its place for drivers
+  that report through WM_APPCOMMAND instead (verified end to end by sending
+  WM_APPCOMMAND directly), but it and the `mouseup` path can never double-step
+  on a normal press. A 200ms guard in `navigate()` covers setups where both do
+  fire; verified by delivering both signals 20ms apart and getting one step.
+- **macOS needs the swipe relay.** Plain buttons 4/5 are swallowed by Chromium
+  (which walks the single-entry history), and Logitech Options+ /
+  SensibleSideButtons turn the buttons into an AppKit swipe, which Electron only
+  surfaces as the macOS-only `swipe` event. `windows.ts` relays it over
+  `app:navigate`. Electron names the direction after the gesture's `deltaX`, so
+  `left` is Back (the mapping Chrome uses). Unverified on real hardware — no Mac
+  in this pass.
+
+Verified on Windows 11 (Electron 45, dev build): one press per history step in
+both directions, a press with an empty stack is a no-op, and the titlebar arrows
+enable/disable in step with the buttons.
+
+**Files:** `src/renderer/App.svelte`, `src/main/windows.ts`, `src/shared/ipc.ts`,
+`src/preload/index.ts`
+
 ---
 
 ## 5. File system / paths

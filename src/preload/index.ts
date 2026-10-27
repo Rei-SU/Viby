@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import {
   CH,
   type LyricsRequest,
+  type NavCommand,
   type PlayerCommand,
   type ResolveRequest,
   type TaskbarState,
@@ -35,6 +36,11 @@ const api: VibyApi = {
       const handler = (): void => callback()
       ipcRenderer.on(CH.appOpenSettings, handler)
       return () => ipcRenderer.removeListener(CH.appOpenSettings, handler)
+    },
+    onNavigate: (callback: (command: NavCommand) => void) => {
+      const handler = (_event: unknown, command: NavCommand): void => callback(command)
+      ipcRenderer.on(CH.appNavigate, handler)
+      return () => ipcRenderer.removeListener(CH.appNavigate, handler)
     },
     copyText: (text: string) => ipcRenderer.invoke(CH.appCopyText, text)
   },
