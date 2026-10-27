@@ -1,14 +1,12 @@
 # Performance work handoff
 
-**Date:** 2026-10-26  
-**Repo:** Viby (Electron music client)  
-**Branch:** `main`, 5 commits ahead of `origin/main`. **Nothing has been pushed.**  
-**Machine:** Intel Mac, macOS 15.7.7, 8 GB RAM.  
-**Packaged app:** `dist/mac/Viby.app`, Electron 45.0.0, x64, unsigned.
+**Written:** 2026-10-26 on `main`, packaged x64 build, Electron 45.0.0, Intel Mac (macOS 15.7.7, 8 GB RAM).
 
-## Goal
+**Status (2026-10-27):** superseded as a plan. The 1 Hz clock throttle, the measurement-harness fixes and the Electron 45 baseline below all shipped; [PLAN.md](PLAN.md) §6 is the canonical record. This file is kept for the harness gotchas and the attribution evidence.
 
-Reduce resource use of the **packaged** app. The user asked: “investigate what is eating too much resources and find room for optimization.” The immediate budget target was `<5%` CPU while playing.
+**Branch note:** this was written on `main`, which has since moved to 0.2.4. `home-redesign` diverged at `7f06952` and does **not** contain `main`'s newer commits — including the taskbar-preview playback controls (`d698227`), mouse back/forward navigation, wheel volume, the repeat-mode icon and the 0.2.3–0.2.4 releases. Do not read the branch/push state below as current.
+
+**Goal (historical):** reduce resource use of the packaged app. The immediate target was <5% CPU while playing.
 
 The 1 Hz player-clock win is done. The remaining work is the lyrics panel and, if the `<5%` target must be met, the live scrubber.
 
@@ -21,6 +19,8 @@ The 1 Hz player-clock win is done. The remaining work is the lyrics panel and, i
 - The measurement harness was fixed: display sleep and window occlusion were producing impossible numbers. It now keeps the display awake, raises the app, counts CPU per PID, and fails if playback never starts.
 
 ## Commits
+
+These landed on `main`; the original local-history caveat no longer applies.
 
 ```
 8e8548b docs: record the Electron 45 performance baseline
@@ -183,6 +183,8 @@ Idle is 373 MB with 27 MB under the 400 MB ceiling. Playing/lyrics are 434/466 M
 
 ## Suggested first commands
 
+These were the handoff-machine steps; `dist:dir` and `measure` are macOS-only, and the current branch is `home-redesign`.
+
 ```bash
 git log --oneline -5
 npm run typecheck
@@ -190,4 +192,4 @@ npm run dist:dir
 npm run measure
 ```
 
-Then open `LyricsPanel.svelte` and start the mask/scroll experiments.
+Then open `LyricsPanel.svelte` and start the mask/scroll experiments — still the largest remaining CPU consumer on the Intel Mac.
