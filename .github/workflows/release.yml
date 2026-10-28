@@ -111,8 +111,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # A tag pushed with main can be missing from a fresh checkout; the bake
+      # reads every tag, so fetch them explicitly before building.
+      - name: Fetch version tags for the in-app release notes
+        run: git fetch --tags --force
+
       - name: Build (dmg, x64 and arm64)
         run: npm run dist:mac -- --publish never
+        env:
+          VIBY_REQUIRE_CHANGELOG: '1'
 
       # artifactName templates cannot map arm64 -> arm or x64 -> intel, so the
       # two installers are renamed here, before upload. macOS produces no
@@ -159,12 +166,18 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # A tag pushed with main can be missing from a fresh checkout; the bake
+      # reads every tag, so fetch them explicitly before building.
+      - name: Fetch version tags for the in-app release notes
+        run: git fetch --tags --force
+
       # Uploads into the draft prepared above; electron-builder lists releases
       # first and never calls its own create step when one exists.
       - name: Build and publish (NSIS installer, x64)
         run: npm run dist:win -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VIBY_REQUIRE_CHANGELOG: '1'
 
   publish-release:
     name: Publish the finished release

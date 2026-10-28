@@ -121,14 +121,29 @@ function readTags() {
 
 function main() {
   let entries = []
+  let version = ''
   let note = ''
 
   try {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-    entries = collectEntries(readTags(), pkg.version, process.env.GITHUB_REPOSITORY || undefined)
+    version = String(pkg.version ?? '')
+    entries = collectEntries(readTags(), version, process.env.GITHUB_REPOSITORY || undefined)
     note = entries.length > 0 ? `latest ${entries[0].version}` : 'no version tags with notes'
   } catch (error) {
     note = `skipped (${error instanceof Error ? error.message : String(error)})`
+  }
+
+  // A release that ships without its own notes leaves the What's New sheet
+  // with nothing to show and hides Settings > View notes. Release builds set
+  // this so the problem fails the build instead of reaching users.
+  if (
+    process.env.VIBY_REQUIRE_CHANGELOG === '1' &&
+    !entries.some((entry) => entry.version === version)
+  ) {
+    console.error(
+      `changelog: no notes for ${version || 'the running version'}; refusing to build a release without them.`
+    )
+    process.exit(1)
   }
 
   const file = join(root, 'resources', 'changelog.json')
