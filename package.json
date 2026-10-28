@@ -7,9 +7,10 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "dev": "electron-vite dev",
-    "preview": "electron-vite preview",
-    "build": "electron-vite build",
+    "dev": "node scripts/build-changelog.mjs && electron-vite dev",
+    "preview": "node scripts/build-changelog.mjs && electron-vite preview",
+    "build": "node scripts/build-changelog.mjs && electron-vite build",
+    "changelog": "node scripts/build-changelog.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && svelte-check --tsconfig ./tsconfig.web.json",
     "icons": "node scripts/make-icons.mjs",
     "runtime": "node scripts/fetch-runtime.mjs",

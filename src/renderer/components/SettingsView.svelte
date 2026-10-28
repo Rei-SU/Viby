@@ -7,6 +7,7 @@
   import { network } from '../lib/network.svelte'
   import { nav } from '../lib/nav.svelte'
   import { updates } from '../lib/updates.svelte'
+  import { changelog } from '../lib/changelog.svelte'
   import Icon from './Icon.svelte'
 
   const CAPS = [
@@ -332,6 +333,16 @@
         {/if}
       </div>
     </div>
+
+    {#if changelog.hasCurrent}
+      <div class="row">
+        <div class="label">
+          <span>What's new</span>
+          <span class="hint">The release notes for the version you're running.</span>
+        </div>
+        <button class="ghost" onclick={() => void changelog.showCurrent()}>View notes</button>
+      </div>
+    {/if}
 
     <div class="row">
       <div class="label">

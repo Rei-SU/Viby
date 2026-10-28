@@ -43,7 +43,8 @@ const api: VibyApi = {
       ipcRenderer.on(CH.appNavigate, handler)
       return () => ipcRenderer.removeListener(CH.appNavigate, handler)
     },
-    copyText: (text: string) => ipcRenderer.invoke(CH.appCopyText, text)
+    copyText: (text: string) => ipcRenderer.invoke(CH.appCopyText, text),
+    changelog: () => ipcRenderer.invoke(CH.appChangelog)
   },
   settings: {
     get: () => ipcRenderer.invoke(CH.settingsGet),

@@ -9,6 +9,9 @@ release/
 coverage/
 .eslintcache
 
+# Generated release notes baked into the build from the annotated tags
+resources/changelog.json
+
 # Managed yt-dlp binary is provisioned at runtime, never committed
 resources/bin/yt-dlp*
 resources/bin/*.exe

@@ -3,6 +3,7 @@ import type {
   BrowseResult,
   CacheStats,
   CatalogItem,
+  ChangelogInfo,
   DownloadCollectionInput,
   DownloadProgress,
   DownloadsSnapshot,
@@ -35,6 +36,7 @@ export const CH = {
   appOpenSettings: 'app:open-settings',
   appCopyText: 'app:copy-text',
   appNavigate: 'app:navigate',
+  appChangelog: 'app:changelog',
 
   playerResolve: 'player:resolve',
   playerPrefetch: 'player:prefetch',
@@ -165,6 +167,8 @@ export interface VibyApi {
     onNavigate(callback: (command: NavCommand) => void): () => void
     /** Copy diagnostic text (for example a playback error) to the OS clipboard. */
     copyText(text: string): Promise<boolean>
+    /** Release notes baked into this build, newest first. */
+    changelog(): Promise<ChangelogInfo>
   }
   settings: {
     get(): Promise<Settings>

@@ -102,6 +102,11 @@ export type Settings = {
   autoUpdateCheck: boolean
   /** A version the user chose not to be offered again. Empty when none. */
   skippedUpdateVersion: string
+  /**
+   * The last version whose release notes were shown. Empty on a first install,
+   * which is how Viby knows not to open the What's New sheet then.
+   */
+  lastSeenVersion: string
 }
 
 /** Connectivity as the main process sees it, not just `navigator.onLine`. */
@@ -147,6 +152,26 @@ export type UpdateState = {
   checkedAt?: number
   /** True when the offered version is one the user skipped. */
   skipped?: boolean
+}
+
+/**
+ * One release's notes, baked into the build from its annotated tag so the
+ * What's New sheet works offline and matches exactly what shipped.
+ */
+export type ChangelogEntry = {
+  version: string
+  /** Tagger date as YYYY-MM-DD, empty when the tag had none. */
+  date: string
+  /** GitHub release page for this version. */
+  url: string
+  sections: { title: string; items: string[] }[]
+}
+
+export type ChangelogInfo = {
+  /** The running version. */
+  version: string
+  /** Newest first, never newer than `version`. */
+  entries: ChangelogEntry[]
 }
 
 export type CatalogKind = 'song' | 'album' | 'artist' | 'playlist' | 'unknown'

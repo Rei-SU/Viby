@@ -17,8 +17,10 @@
   import PlaylistPicker from './components/PlaylistPicker.svelte'
   import QueueDropBar from './components/QueueDropBar.svelte'
   import SidePanel from './components/SidePanel.svelte'
+  import ChangelogDialog from './components/ChangelogDialog.svelte'
   import { sidePanel } from './lib/side-panel.svelte'
   import { toast } from './lib/toast.svelte'
+  import { changelog } from './lib/changelog.svelte'
   import { lyrics } from './lib/lyrics.svelte'
   import ImportView from './components/ImportView.svelte'
   import SettingsView from './components/SettingsView.svelte'
@@ -213,6 +215,7 @@
     void savedAlbums.load()
     void player.init()
     updates.init()
+    void changelog.init()
     const offSettings = api.app.onOpenSettings(() => nav.go('settings'))
     const offNavigate = api.app.onNavigate(navigate)
     const offShortcuts = installShortcuts()
@@ -384,6 +387,7 @@
   <PlayerBar />
   <PlaylistPicker />
   <QueueDropBar />
+  <ChangelogDialog />
 
   <div class="alerts">
     {#if backOnline}

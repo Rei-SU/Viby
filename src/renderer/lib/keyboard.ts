@@ -2,6 +2,7 @@ import { favorites } from './favorites.svelte'
 import { player } from './player.svelte'
 import { playlistPicker } from './playlist-picker.svelte'
 import { sidePanel } from './side-panel.svelte'
+import { changelog } from './changelog.svelte'
 
 /**
  * Player-wide keyboard shortcuts.
@@ -24,6 +25,9 @@ function isFormControl(target: EventTarget | null): boolean {
 export function installShortcuts(): () => void {
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.defaultPrevented || event.isComposing) return
+    // The What's New sheet owns the keyboard while it is open; its own handler
+    // closes it, and Space must not start playback behind it.
+    if (changelog.open) return
 
     if (event.key === 'Escape') {
       // The playlist picker owns Escape while it is open.

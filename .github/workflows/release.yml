@@ -88,7 +88,11 @@ jobs:
     needs: prepare-release
     runs-on: macos-15
     steps:
+      # Full history so scripts/build-changelog.mjs can read every version tag
+      # and bake the release notes into the app.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -132,7 +136,11 @@ jobs:
     needs: prepare-release
     runs-on: windows-latest
     steps:
+      # Full history so scripts/build-changelog.mjs can read every version tag
+      # and bake the release notes into the app.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

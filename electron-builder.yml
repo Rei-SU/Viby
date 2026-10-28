@@ -9,6 +9,8 @@ directories:
 files:
   - out/**/*
   - package.json
+  # Baked from the annotated tags by scripts/build-changelog.mjs.
+  - resources/changelog.json
 
 # yt-dlp runs on the vendored CPython, so a packaged Viby needs no system Python.
 # Both are copied into userData on first run, which keeps yt-dlp writable and

@@ -38,6 +38,7 @@ import {
 } from '@shared/ipc'
 import { summarizeHistory } from '@shared/listening'
 import { setTaskbarState } from './taskbar'
+import { changelogInfo } from './changelog'
 import { qualityCapKbps, setSettings, settings } from './settings'
 import { session } from './session'
 import { cachedLyrics, getLyrics } from './lyrics'
@@ -239,6 +240,7 @@ let importResolveController: AbortController | null = null
   })
 
   ipcMain.handle(CH.settingsGet, (): Settings => settings().get())
+  ipcMain.handle(CH.appChangelog, () => changelogInfo())
 
   ipcMain.handle(CH.appCopyText, (_e, text: unknown): boolean => {
     if (typeof text !== 'string' || text.length === 0 || text.length > 20_000) return false

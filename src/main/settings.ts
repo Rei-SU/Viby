@@ -21,7 +21,9 @@ export const DEFAULT_SETTINGS: Settings = {
   /** Check GitHub for a newer release on launch. Updates are never silent. */
   autoUpdateCheck: true,
   /** Empty means no version is skipped. */
-  skippedUpdateVersion: ''
+  skippedUpdateVersion: '',
+  /** Empty means Viby has never shown release notes on this install. */
+  lastSeenVersion: ''
 }
 
 const MIN_CACHE_BYTES = 64 * 1024 * 1024
@@ -70,6 +72,9 @@ function sanitizePatch(patch: Partial<Settings> | null | undefined): Partial<Set
   if (input.skippedUpdateVersion !== undefined) {
     clean.skippedUpdateVersion =
       typeof input.skippedUpdateVersion === 'string' ? input.skippedUpdateVersion : ''
+  }
+  if (input.lastSeenVersion !== undefined) {
+    clean.lastSeenVersion = typeof input.lastSeenVersion === 'string' ? input.lastSeenVersion : ''
   }
   return clean
 }
