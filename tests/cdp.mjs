@@ -42,23 +42,27 @@ export async function connect() {
     }
   })
 
-  const evaluate = (expression, { awaitPromise = true, userGesture = false } = {}) =>
+  const send = (method, params = {}) =>
     new Promise((resolve, reject) => {
       const id = nextId++
       pending.set(id, (msg) => {
         if (msg.error) return reject(new Error(JSON.stringify(msg.error)))
-        const result = msg.result?.result
-        if (result?.subtype === 'error') return reject(new Error(result.description))
-        resolve(result?.value)
+        resolve(msg)
       })
-      ws.send(
-        JSON.stringify({
-          id,
-          method: 'Runtime.evaluate',
-          params: { expression, awaitPromise, returnByValue: true, userGesture }
-        })
-      )
+      ws.send(JSON.stringify({ id, method, params }))
     })
 
-  return { evaluate, close: () => ws.close() }
+  const evaluate = async (expression, { awaitPromise = true, userGesture = false } = {}) => {
+    const msg = await send('Runtime.evaluate', {
+      expression,
+      awaitPromise,
+      returnByValue: true,
+      userGesture
+    })
+    const result = msg.result?.result
+    if (result?.subtype === 'error') throw new Error(result.description)
+    return result?.value
+  }
+
+  return { evaluate, send, close: () => ws.close() }
 }

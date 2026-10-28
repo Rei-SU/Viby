@@ -129,7 +129,7 @@
   <div class="recent-card">
     <header class="card-head">
       <div>
-        <span class="eyebrow">Your listening</span>
+        <span class="eyebrow">History</span>
         <h2>Recently played</h2>
       </div>
       <div class="head-actions">

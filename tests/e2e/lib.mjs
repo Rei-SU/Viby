@@ -7,11 +7,12 @@ export { sleep }
  * before we touch anything, and a helper that puts the app back how it was.
  */
 export async function openApp() {
-  const { evaluate, close } = await connect()
+  const { evaluate, send, close } = await connect()
   const settings = await evaluate('window.__viby.api.settings.get()')
 
   return {
     evaluate,
+    send,
     close,
     settings,
 

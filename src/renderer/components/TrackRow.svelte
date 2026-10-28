@@ -65,6 +65,18 @@
   const offlineBlocked = $derived(playable && network.offline && !downloaded)
   const blocked = $derived(unavailable || offlineBlocked)
   const canPlay = $derived(playable && !blocked)
+  /**
+   * Hover actions take no room until the row is hovered, so the row's width
+   * budget has to know how many buttons will slide in. Each is a 28px box plus
+   * a 4px gap (`--actions-w`).
+   */
+  const actionCount = $derived(
+    (canPlay && showFavorite ? 1 : 0) +
+      (canPlay && showDownload ? 1 : 0) +
+      (canPlay ? 1 : 0) +
+      (canPlay && onQueue ? 1 : 0) +
+      (onRemove ? 1 : 0)
+  )
   const rounded = $derived(item.kind === 'artist')
   const downloadState = $derived(downloads.stateFor(item.id))
   const downloadJob = $derived(downloads.jobFor(item.id))
@@ -171,16 +183,28 @@
       }
     }}
   >
-    <span class="idx">
-      {#if playing}
-        <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
-      {:else if showIndex}
-        <span class="tabular">{index !== undefined ? index + 1 : ''}</span>
-      {/if}
-    </span>
+    {#if showIndex}
+      <!-- Only indexed lists (albums, playlists, downloads) reserve a column.
+           A row without numbers starts at its artwork instead of indenting
+           past an empty slot. -->
+      <span class="idx">
+        {#if playing}
+          <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+        {:else}
+          <span class="tabular">{index !== undefined ? index + 1 : ''}</span>
+        {/if}
+      </span>
+    {/if}
 
     {#if showArt}
-      <Cover src={art} size={40} radius={rounded ? 20 : 6} alt={item.title} />
+      <span class="art" class:rounded>
+        <Cover src={art} size={40} radius={rounded ? 20 : 6} alt={item.title} />
+        {#if playing && !showIndex}
+          <!-- No number column to hold the indicator, so it sits on the cover
+               rather than shifting the row when playback starts. -->
+          <span class="eq over" aria-hidden="true"><i></i><i></i><i></i></span>
+        {/if}
+      </span>
     {/if}
 
     <span class="text">
@@ -215,83 +239,91 @@
     <span class="row-meta tabular">{meta}</span>
   {/if}
 
-  {#if canPlay && showFavorite}
-    <button
-      class="row-action fav"
-      class:on={favorited}
-      title={favorited ? 'Remove from favourites' : 'Add to favourites'}
-      aria-label={favorited ? 'Remove from favourites' : 'Add to favourites'}
-      onclick={(event) => {
-        event.stopPropagation()
-        void toggleFavorite()
-      }}
-    >
-      <Icon name="heart" size={15} solid={favorited} />
-    </button>
-  {/if}
-
-  {#if canPlay && showDownload}
-    <button
-      class="row-action dl"
-      class:on={downloadState === 'done'}
-      class:failed={downloadState === 'failed'}
-      class:busy={downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused'}
-      title={downloadTitle}
-      aria-label={downloadTitle}
-      onclick={(event) => {
-        event.stopPropagation()
-        void toggleDownload()
-      }}
-    >
-      {#if downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused'}
-        <span class="spin" aria-hidden="true"></span>
-      {:else if downloadState === 'done'}
-        <Icon name="check" size={15} />
-      {:else}
-        <Icon name="download" size={15} />
+  {#if actionCount > 0}
+    <!-- Hover actions live outside the row's width until it is hovered: the
+         reserved gutter beside every duration was permanent dead space. The
+         container grows from the right edge, so the buttons slide in while the
+         duration steps aside. -->
+    <span class="actions" style={`--actions-w: ${actionCount * 32}px`}>
+      {#if canPlay && showFavorite}
+        <button
+          class="row-action fav"
+          class:on={favorited}
+          title={favorited ? 'Remove from favourites' : 'Add to favourites'}
+          aria-label={favorited ? 'Remove from favourites' : 'Add to favourites'}
+          onclick={(event) => {
+            event.stopPropagation()
+            void toggleFavorite()
+          }}
+        >
+          <Icon name="heart" size={15} solid={favorited} />
+        </button>
       {/if}
-    </button>
-  {/if}
 
-  {#if canPlay}
-    <button
-      class="row-action"
-      title="Add to playlist"
-      aria-label="Add to playlist"
-      onclick={(event) => {
-        event.stopPropagation()
-        playlistPicker.show(toTrack(item), event.currentTarget as HTMLElement)
-      }}
-    >
-      <Icon name="plus" size={15} />
-    </button>
-    {#if onQueue}
-      <button
-        class="row-action"
-        title="Add to queue"
-        aria-label="Add to queue"
-        onclick={(event) => {
-          event.stopPropagation()
-          onQueue(item)
-        }}
-      >
-        <Icon name="queueAdd" size={15} />
-      </button>
-    {/if}
-  {/if}
+      {#if canPlay && showDownload}
+        <button
+          class="row-action dl"
+          class:on={downloadState === 'done'}
+          class:failed={downloadState === 'failed'}
+          class:busy={downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused'}
+          title={downloadTitle}
+          aria-label={downloadTitle}
+          onclick={(event) => {
+            event.stopPropagation()
+            void toggleDownload()
+          }}
+        >
+          {#if downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused'}
+            <span class="spin" aria-hidden="true"></span>
+          {:else if downloadState === 'done'}
+            <Icon name="check" size={15} />
+          {:else}
+            <Icon name="download" size={15} />
+          {/if}
+        </button>
+      {/if}
 
-  {#if onRemove}
-    <button
-      class="row-action"
-      title="Remove"
-      aria-label="Remove"
-      onclick={(event) => {
-        event.stopPropagation()
-        onRemove(item)
-      }}
-    >
-      <Icon name="close" size={14} />
-    </button>
+      {#if canPlay}
+        <button
+          class="row-action"
+          title="Add to playlist"
+          aria-label="Add to playlist"
+          onclick={(event) => {
+            event.stopPropagation()
+            playlistPicker.show(toTrack(item), event.currentTarget as HTMLElement)
+          }}
+        >
+          <Icon name="plus" size={15} />
+        </button>
+        {#if onQueue}
+          <button
+            class="row-action"
+            title="Add to queue"
+            aria-label="Add to queue"
+            onclick={(event) => {
+              event.stopPropagation()
+              onQueue(item)
+            }}
+          >
+            <Icon name="queueAdd" size={15} />
+          </button>
+        {/if}
+      {/if}
+
+      {#if onRemove}
+        <button
+          class="row-action"
+          title="Remove"
+          aria-label="Remove"
+          onclick={(event) => {
+            event.stopPropagation()
+            onRemove(item)
+          }}
+        >
+          <Icon name="close" size={14} />
+        </button>
+      {/if}
+    </span>
   {/if}
 </li>
 
@@ -367,6 +399,14 @@
     text-align: right;
     display: grid;
     place-items: center;
+  }
+
+  /* The cover and its now-playing overlay share one box, so the indicator can
+     sit on the artwork without a layout of its own. */
+  .art {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
   }
 
   .text {
@@ -456,6 +496,32 @@
       background var(--speed) var(--ease);
   }
 
+  /* Zero width until the row is hovered: no permanent gutter beside the
+     duration. The strip grows from the right edge, so its buttons slide in
+     and the duration steps aside. min-width: 0 defeats a flex item's
+     automatic min-content floor, which would keep the strip open. */
+  .actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    min-width: 0;
+    width: 0;
+    overflow: hidden;
+    transition: width 170ms var(--ease);
+  }
+
+  .row:hover .actions,
+  .row:focus-within .actions {
+    width: var(--actions-w);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .actions {
+      transition: none;
+    }
+  }
+
   .row:hover .row-action,
   .row:focus-within .row-action,
   .row-action:focus-visible {
@@ -507,6 +573,20 @@
     align-items: flex-end;
     gap: 2px;
     height: 11px;
+  }
+
+  .eq.over {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: rgba(8, 8, 11, 0.58);
+  }
+
+  .art.rounded .eq.over {
+    border-radius: 50%;
   }
 
   .eq i {

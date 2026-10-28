@@ -63,6 +63,22 @@ export async function run(app, check) {
             actions: row.querySelectorAll('.row-action').length
           })),
           showMore: Boolean(document.querySelector('.recent-card .more')),
+          eyebrow: document.querySelector('.recent-card .eyebrow')?.textContent?.trim() ?? null,
+          rowLead: (() => {
+            const row = document.querySelector('.recent-list li')
+            if (!row) return null
+            const main = row.querySelector('.main')
+            const art = row.querySelector('.art')
+            return {
+              main: Math.round(main.getBoundingClientRect().left),
+              art: art ? Math.round(art.getBoundingClientRect().left) : null,
+              index: Boolean(row.querySelector('.idx')),
+              first: main.firstElementChild?.classList.contains('art') ?? false,
+              rowRight: Math.round(row.getBoundingClientRect().right),
+              durRight: Math.round(row.querySelector('.dur')?.getBoundingClientRect().right ?? 0),
+              actions: Math.round(row.querySelector('.actions')?.getBoundingClientRect().width ?? 0)
+            }
+          })(),
           weekTitle: document.querySelector('.week-head h2')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
           weekClock: document.querySelector('.week-clock .pixel-clock')?.getAttribute('data-clock-value') ?? null,
           weekClockLabel: document.querySelector('.week-clock .pixel-clock')?.getAttribute('aria-label') ?? null,
@@ -104,6 +120,66 @@ export async function run(app, check) {
       JSON.stringify(state?.rows)
     )
     check('the card offers Show more', state?.showMore === true)
+    check(
+      'the history card is labelled History',
+      state?.eyebrow === 'History',
+      String(state?.eyebrow)
+    )
+    // The row used to reserve a 16px number column plus a 12px gap even when
+    // there was no number to show, indenting every cover from the card's text.
+    check(
+      'history rows start at their artwork, with no empty number column',
+      state?.rowLead?.index === false &&
+        state.rowLead.first === true &&
+        Math.abs((state.rowLead.art ?? 0) - (state.rowLead.main + 10)) <= 1,
+      JSON.stringify(state?.rowLead)
+    )
+    // The hover actions used to hold a permanent 96px gutter beside every
+    // duration. They now collapse to nothing and slide in only on hover.
+    check(
+      'hover actions take no room until the row is hovered',
+      state?.rowLead?.actions === 0 &&
+        Math.abs((state.rowLead.rowRight ?? 0) - (state.rowLead.durRight ?? 0) - 10) <= 1,
+      JSON.stringify(state?.rowLead)
+    )
+
+    await app.send('DOM.enable')
+    await app.send('CSS.enable')
+    const tree = await app.send('DOM.getDocument', { depth: -1 })
+    const rowNode = await app.send('DOM.querySelector', {
+      nodeId: tree.result.root.nodeId,
+      selector: '.recent-list li'
+    })
+    await app.send('CSS.forcePseudoState', {
+      nodeId: rowNode.result.nodeId,
+      forcedPseudoClasses: ['hover']
+    })
+    await sleep(400)
+    const hovered = await app.evaluate(`(() => {
+      const row = document.querySelector('.recent-list li')
+      const actions = row.querySelector('.actions')
+      return {
+        actions: Math.round(actions.getBoundingClientRect().width),
+        buttons: [...actions.querySelectorAll('.row-action')].map((button) =>
+          Math.round(button.getBoundingClientRect().width)
+        ),
+        rowRight: Math.round(row.getBoundingClientRect().right),
+        durRight: Math.round(row.querySelector('.dur').getBoundingClientRect().right)
+      }
+    })()`)
+    await app.send('CSS.forcePseudoState', {
+      nodeId: rowNode.result.nodeId,
+      forcedPseudoClasses: []
+    })
+    await sleep(300)
+    check(
+      'hovering a row slides its actions in and the duration steps aside',
+      hovered.actions === 96 &&
+        hovered.buttons.length === 3 &&
+        hovered.buttons.every((width) => width === 28) &&
+        Math.abs(hovered.rowRight - hovered.durRight - 106) <= 1,
+      JSON.stringify(hovered)
+    )
     check(
       'the weekly card uses the Vibing Time title',
       state?.weekTitle === 'Vibing Time this week',
