@@ -147,6 +147,58 @@ export async function run(app, check) {
     )
     check('Home does not overflow horizontally', state?.overflow === false)
 
+    // The docked panel narrows the content column without resizing the window.
+    // Before the header wrapped, "Vibing Time this week" ran into the pixel
+    // clock as soon as the two cards were ~320px wide (PLAN §13).
+    const narrow = await app.evaluate(
+      `(async () => {
+        const root = document.documentElement
+        const { sidePanel } = window.__viby
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+        try {
+          root.style.setProperty('--panel-w', '460px')
+          sidePanel.toggle('queue')
+          await wait(800)
+          const h2 = document.querySelector('.week-head h2')
+          const clock = document.querySelector('.week-clock')
+          const card = document.querySelector('.week-card')
+          if (!h2 || !clock || !card) return { found: false }
+          const range = document.createRange()
+          range.selectNodeContents(h2)
+          const text = range.getBoundingClientRect()
+          const box = clock.getBoundingClientRect()
+          const overlapX = Math.min(text.right, box.right) - Math.max(text.left, box.left)
+          const overlapY = Math.min(text.bottom, box.bottom) - Math.max(text.top, box.top)
+          return {
+            found: true,
+            card: Math.round(card.getBoundingClientRect().width),
+            overlaps: overlapX > 0 && overlapY > 0,
+            // The heading may wrap, but the clock must stay anchored on the
+            // title's row instead of being pushed underneath it.
+            clockOnTitleRow: box.top < text.bottom,
+            wrapped: range.getClientRects().length > 1,
+            gapX: Math.round(box.left - text.right),
+            gapY: Math.round(box.top - text.bottom)
+          }
+        } finally {
+          sidePanel.close()
+          root.style.removeProperty('--panel-w')
+          await wait(400)
+        }
+      })()`,
+      { userGesture: true }
+    )
+    check(
+      'the weekly heading never overlaps the pixel clock in a narrow column',
+      narrow.found === true && narrow.overlaps === false,
+      JSON.stringify(narrow)
+    )
+    check(
+      'the clock keeps its place and "this week" wraps instead',
+      narrow.found === true && narrow.clockOnTitleRow === true,
+      JSON.stringify(narrow)
+    )
+
     // The clock scrambles once per mount, then settles. Leaving and returning
     // to Home remounts it; no CSS animation should keep running.
     const boot = await app.evaluate(

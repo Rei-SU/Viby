@@ -270,7 +270,9 @@
 
   .week-head {
     /* Align the title with the peer card's title, which sits under an eyebrow
-       of its own. The badge keeps the time on this line. */
+       of its own. The badge keeps the time on this line; when the docked panel
+       narrows the page, "this week" wraps under the heading instead of pushing
+       the clock out of place. */
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -279,17 +281,23 @@
   }
 
   .week-title {
+    /* Shrink the heading, never the clock: the clock keeps its size and its
+       position on the right while the title takes what is left. */
+    flex: 1 1 auto;
     min-width: 0;
   }
 
   .week-head h2 {
     margin: 0;
-    white-space: nowrap;
+    /* "Vibing Time" stays whole; "this week" drops to the next line. */
+    white-space: normal;
   }
 
   .week-head h2 span {
     color: var(--text-faint);
     font-weight: 500;
+    /* "this week" wraps as a unit under the title, never as "this" / "week". */
+    white-space: nowrap;
   }
 
   .week-sub {
