@@ -52,6 +52,13 @@ steps or logs; keep it to what a user would notice. The workflow runs
 `scripts/check-release-notes.mjs` before creating the draft and rejects
 missing, empty or unknown sections and internal jargon.
 
+macOS builds are ad-hoc signed but not notarized, so the notes must tell Apple
+Silicon users the one command that works:
+`xattr -dr com.apple.quarantine /Applications/Viby.app`. Do not point them at
+Privacy & Security → Open Anyway. A quarantined build whose signature cannot be
+validated is reported as "damaged", and that dialog has no Open Anyway button;
+it is a Gatekeeper decision, not a corrupt download.
+
 `--cleanup=verbatim` matters: without it, git strips lines starting with `#`,
 including every `### Added` heading. The annotated tag message becomes the
 release body, with a compare link to the previous tag appended by the workflow.
