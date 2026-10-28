@@ -128,10 +128,7 @@
 <section class="dashboard" aria-label="Your listening snapshot">
   <div class="recent-card">
     <header class="card-head">
-      <div>
-        <span class="eyebrow">History</span>
-        <h2>Recently played</h2>
-      </div>
+      <h2>Recently played</h2>
       <div class="head-actions">
         {#if latest}
           <button class="more" onclick={showHistory}>Show more</button>
@@ -156,10 +153,7 @@
 
   <aside class="week-card">
     <header class="week-head">
-      <div class="week-title">
-        <h2>Vibing Time <span>this week</span></h2>
-        <p class="week-sub">{totalDetail}</p>
-      </div>
+      <h2>Vibing Time <span>this week</span></h2>
       <span
         class="week-clock"
         class:text={!clock.hasTime}
@@ -172,6 +166,7 @@
         {/if}
       </span>
     </header>
+    <p class="week-sub">{totalDetail}</p>
 
     <span class="list-label">Top artists</span>
     {#if artists.length > 0}
@@ -245,23 +240,14 @@
 
   .card-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 14px;
   }
 
-  .eyebrow {
-    display: block;
-    color: var(--text-faint);
-    font-size: 9.5px;
-    font-weight: 550;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
   h2 {
-    margin: 3px 0 0;
+    margin: 0;
     color: var(--text);
     font-size: 18px;
     font-weight: 620;
@@ -269,27 +255,17 @@
   }
 
   .week-head {
-    /* Align the title with the peer card's title, which sits under an eyebrow
-       of its own. The badge keeps the time on this line; when the docked panel
-       narrows the page, "this week" wraps under the heading instead of pushing
-       the clock out of place. */
+    /* Both cards' titles sit on one line, level with the header actions. The
+       clock hangs from that line instead of defining the row's height. */
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 14px;
-    margin-top: 14px;
-  }
-
-  .week-title {
-    /* Shrink the heading, never the clock: the clock keeps its size and its
-       position on the right while the title takes what is left. */
-    flex: 1 1 auto;
-    min-width: 0;
   }
 
   .week-head h2 {
-    margin: 0;
-    /* "Vibing Time" stays whole; "this week" drops to the next line. */
+    flex: 1 1 auto;
+    min-width: 0;
     white-space: normal;
   }
 
@@ -311,6 +287,11 @@
     align-items: center;
     justify-content: flex-end;
     flex-shrink: 0;
+    /* The clock starts on the title's line and hangs below it — never above,
+       where it would crowd the card's top padding. The negative bottom margin
+       (52px clock − 26px title line) keeps the header one line tall, so both
+       cards' lists still begin at the same height. */
+    margin-block: 0 -26px;
     color: var(--text);
   }
 

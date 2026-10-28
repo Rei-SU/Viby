@@ -63,7 +63,28 @@ export async function run(app, check) {
             actions: row.querySelectorAll('.row-action').length
           })),
           showMore: Boolean(document.querySelector('.recent-card .more')),
+          recentTitle: document.querySelector('.recent-card h2')?.textContent?.trim() ?? null,
           eyebrow: document.querySelector('.recent-card .eyebrow')?.textContent?.trim() ?? null,
+          heads: (() => {
+            const box = (selector) => {
+              const el = document.querySelector(selector)
+              if (!el) return null
+              const r = el.getBoundingClientRect()
+              return {
+                top: Math.round(r.top * 10) / 10,
+                bottom: Math.round(r.bottom * 10) / 10,
+                height: Math.round(r.height * 10) / 10,
+                centre: Math.round(((r.top + r.bottom) / 2) * 10) / 10
+              }
+            }
+            return {
+              title: box('.recent-card h2'),
+              actions: box('.recent-card .head-actions'),
+              card: box('.week-card'),
+              weekTitle: box('.week-head h2'),
+              clock: box('.week-clock')
+            }
+          })(),
           rowLead: (() => {
             const row = document.querySelector('.recent-list li')
             if (!row) return null
@@ -120,10 +141,28 @@ export async function run(app, check) {
       JSON.stringify(state?.rows)
     )
     check('the card offers Show more', state?.showMore === true)
+    // "History" and "Recently played" meant the same thing twice, stacked. The
+    // eyebrow is gone and the title sits on the actions' line, level with the
+    // peer card's heading.
     check(
-      'the history card is labelled History',
-      state?.eyebrow === 'History',
-      String(state?.eyebrow)
+      'the history card has one title, with no eyebrow above it',
+      state?.recentTitle === 'Recently played' && state?.eyebrow === null,
+      JSON.stringify({ title: state?.recentTitle, eyebrow: state?.eyebrow })
+    )
+    check(
+      'the history title, its actions and the week title share one line',
+      Math.abs((state?.heads?.title?.top ?? 0) - (state?.heads?.weekTitle?.top ?? 99)) <= 1.5 &&
+        Math.abs((state?.heads?.actions?.centre ?? 0) - (state?.heads?.title?.centre ?? 99)) <= 1.5,
+      JSON.stringify(state?.heads)
+    )
+    // The clock is twice as tall as a title line. It starts on the title's line
+    // and hangs below it, so it never crowds the card's top padding, and its
+    // negative bottom margin keeps both cards' lists starting at the same y.
+    check(
+      'the week clock starts on the title line, clear of the card edge',
+      Math.abs((state?.heads?.clock?.top ?? 0) - (state?.heads?.weekTitle?.top ?? 99)) <= 1.5 &&
+        (state?.heads?.clock?.top ?? 0) - (state?.heads?.card?.top ?? 0) >= 16,
+      JSON.stringify(state?.heads)
     )
     // The row used to reserve a 16px number column plus a 12px gap even when
     // there was no number to show, indenting every cover from the card's text.
