@@ -75,7 +75,7 @@ differently.
 ### 1.4 Scopes for this repository
 
 `main`, `renderer`, `preload`, `ipc`, `player`, `library`, `downloads`,
-`runtime`, `release`, `deps`, `tests`, `docs`.
+`discord`, `runtime`, `release`, `deps`, `tests`, `docs`.
 
 Use the narrowest true scope. `fix(player): resume after track end` beats
 `fix: stuff`. Omit the scope only when no single area applies, e.g.

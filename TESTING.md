@@ -62,6 +62,7 @@ ones that touch main-process modules.
 | `pixel-scramble` | dot-matrix boot: random digits, fixed colon, left-to-right lock order and the final landed value |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
+| `discord` | Discord Rich Presence: IPC frame codec, pipe discovery, activity mapping (art fallbacks, truncation, timestamps), rate limiter, and the client against a fake Discord socket |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
 | `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks, cancel, skipped versions, Ed25519 manifest verification, signed-hash hand-off |
 | `release-notes` | release-notes lint: allowed sections, empty/missing/duplicate sections, internal jargon, CRLF |
@@ -203,6 +204,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |
 | `src/renderer/App.svelte` | all e2e (layout, routes, panels) |
+| `src/main/discord/**` | unit `discord` · manual Discord check (Listening label, album art, Get Viby button, pause clears) |
 | `src/renderer/styles/global.css` | visual check · e2e `images` as a sanity pass |
 | `src/shared/**`, `src/preload/**`, `src/renderer/lib/api.ts` | **everything** (contract) |
 | `electron.vite.config.ts`, `package.json`, `electron-builder.yml` | build + launch smoke test; e2e `images` |
@@ -223,6 +225,9 @@ Find the row for what you changed; run what it lists.
 ## What the suites cannot check
 
 - **The OS media keys / Now Playing panel** — needs a human.
+- **Discord Rich Presence as friends see it** — the fake-socket unit test proves the
+  protocol, but the Listening label, album art, buttons (which only other users
+  can see) and pause-clears need a real Discord client and a second account.
 - **Window drag/resize** — needs a human (the drag strip's computed style is
   asserted, but not that the window moves).
 - **Memory/CPU budget** — `npm run measure` against the packaged app (run `npm run dist:dir` first). It samples RSS/CPU per process across idle, playback, lyrics and a 2-minute soak.

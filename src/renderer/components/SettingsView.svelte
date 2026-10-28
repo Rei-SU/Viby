@@ -311,6 +311,30 @@
   </section>
 
   <section>
+    <h2>Integrations</h2>
+
+    <div class="row">
+      <div class="label">
+        <span>Show what I'm listening to on Discord</span>
+        <span class="hint">
+          Uses the Discord desktop app. Friends see the song only if Discord's Activity Privacy is
+          on. Pausing or stopping clears it. Nothing else leaves Viby.
+        </span>
+      </div>
+      <button
+        class="switch"
+        class:on={current?.discordPresence}
+        role="switch"
+        aria-checked={current?.discordPresence}
+        aria-label="Show what I'm listening to on Discord"
+        onclick={() => patch({ discordPresence: !current?.discordPresence })}
+      >
+        <span class="thumb"></span>
+      </button>
+    </div>
+  </section>
+
+  <section>
     <h2>Updates</h2>
 
     <div class="row">

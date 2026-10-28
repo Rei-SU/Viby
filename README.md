@@ -50,6 +50,7 @@ The build is ad-hoc signed but not notarized. Gatekeeper may report it as damage
 - **A library that stays yours.** Liked songs, playlists, saved albums and EPs, history and downloads live on your disk, fully usable signed out. No account, no cloud, no "syncing…" spinner.
 - **Downloads that belong to the library.** Download songs, albums, playlists or Liked Songs; badges and progress rings show what is on disk. Viby follows your connection and can be switched offline by hand, with an Offline Home for what you kept.
 - **Lyrics that keep up.** Time-synced lyrics from LRCLIB, plain text from lyrics.ovh as a backup, click any line to seek, and a docked panel that leaves the page usable.
+- **Your music on Discord.** Friends see what's playing while the Discord desktop app is running. On by default; pausing clears it, and one switch in Settings turns it off.
 - **Your playlists, not a fresh start.** Paste a public Spotify, Apple Music, Deezer, YouTube Music or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is offered for review, never silently swapped.
 - **Small things that add up.** Search from the titlebar (`⌘K` / `Ctrl K` or `/`), a full set of player shortcuts, launch at login with an optional minimized start, optional close-to-tray playback, Windows taskbar controls, and a What's New sheet after an update.
 - **Quiet by design.** A monochrome interface, a slim icon rail, and a light footprint — under 400 MB at idle in our macOS tests.
@@ -109,7 +110,7 @@ Packaged builds need no Python install, no configuration file and no first-run s
 
 ## Privacy
 
-No account is required. No analytics, no telemetry, no ad tracking. Your library, playlists, history, downloads and cache live in your user data folder, and the app only talks to the network to browse and search the catalogue, play music, fetch lyrics and artist images, download music, import a link you paste, and check for updates. If optional accounts ship later, they will only back up and sync your library; listening will never require one.
+No account is required. No analytics, no telemetry, no ad tracking. Your library, playlists, history, downloads and cache live in your user data folder, and the app only talks to the network to browse and search the catalogue, play music, fetch lyrics and artist images, download music, import a link you paste, and check for updates. Discord presence (optional) sends the current song to the Discord app on your computer; Discord shows it according to your own Activity Privacy settings. If optional accounts ship later, they will only back up and sync your library; listening will never require one.
 
 ## Contributing
 

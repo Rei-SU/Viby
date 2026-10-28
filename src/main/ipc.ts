@@ -20,6 +20,7 @@ import type {
   OfflineMode,
   PlaybackSession,
   Playlist,
+  PresenceSnapshot,
   ResolveResult,
   Result,
   SavedAlbum,
@@ -61,6 +62,7 @@ import { fetchLatestRelease } from './release-feed'
 import { downloadMacInstaller } from './updater-manual'
 import { applyBackgroundPlayback } from './background'
 import { applyLaunchAtLogin } from './startup'
+import { setDiscordEnabled, updateDiscordPresence } from './discord'
 
 const resolver = new Resolver()
 const inflightDownloads = new Set<string>()
@@ -271,6 +273,8 @@ let importResolveController: AbortController | null = null
     // Stream URLs were resolved for the old quality ceiling; drop them so the
     // next play honours the new setting instead of reusing a stale bitrate.
     if (next.audioQuality !== previous) resolver.clearUrlCache()
+
+    if (patch.discordPresence !== undefined) setDiscordEnabled(next.discordPresence)
 
     return next
   })
@@ -527,6 +531,10 @@ let importResolveController: AbortController | null = null
       powerSaveBlocker.stop(blockerId)
       blockerId = null
     }
+  })
+
+  ipcMain.on(CH.playerPresence, (_e, snapshot: PresenceSnapshot) => {
+    updateDiscordPresence(snapshot)
   })
 
   ipcMain.on(CH.playerTaskbar, (_e, next: TaskbarState) => {

@@ -19,6 +19,7 @@ import type {
   NetworkState,
   OfflineMode,
   PlaybackSession,
+  PresenceSnapshot,
   SavedAlbum,
   SearchFilterName,
   Settings,
@@ -62,6 +63,8 @@ const api: VibyApi = {
     prefetch: (input: string) => ipcRenderer.send(CH.playerPrefetch, input),
     cancel: () => ipcRenderer.send(CH.playerCancel),
     setPlaying: (playing: boolean) => ipcRenderer.send(CH.playerState, playing),
+    setPresence: (snapshot: PresenceSnapshot) =>
+      ipcRenderer.send(CH.playerPresence, snapshot),
     setTaskbarControls: (state: TaskbarState) => ipcRenderer.send(CH.playerTaskbar, state),
     onCommand: (callback: (command: PlayerCommand) => void) => {
       const handler = (_event: unknown, command: PlayerCommand): void => callback(command)

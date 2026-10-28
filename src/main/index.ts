@@ -9,6 +9,7 @@ import { initTaskbar } from './taskbar'
 import { isQuitting, keepsAppAlive, markQuitting } from './lifecycle'
 import { settings } from './settings'
 import { applyLaunchAtLogin, launchedAtLogin } from './startup'
+import { initDiscord, stopDiscord } from './discord'
 
 // Dev-only: lets the app be driven and inspected over the DevTools protocol
 // (PLAN §12). Never enabled in a packaged build.
@@ -73,7 +74,11 @@ if (!gotLock) {
   app.quit()
 } else {
   // Normal quits (menu, Cmd+Q, updater, OS shutdown) must win over close-to-tray.
-  app.on('before-quit', markQuitting)
+  app.on('before-quit', () => {
+    markQuitting()
+    // Closing the socket removes the activity from Discord immediately.
+    stopDiscord()
+  })
 
   app.on('second-instance', () => {
     if (app.isReady()) showMainWindow()
@@ -94,6 +99,7 @@ if (!gotLock) {
       const current = settings().get()
       // Keep the OS login item in sync with the saved choice (packaged only).
       applyLaunchAtLogin(current)
+      initDiscord(current.discordPresence)
       const startMinimized =
         current.launchAtLogin && current.launchMinimized && launchedAtLogin()
 

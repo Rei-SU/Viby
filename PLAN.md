@@ -208,7 +208,7 @@ Import is link-only by decision: no CSV or plain-text floor in v1, and only play
 **Matcher behaviour** (#8): exact title+artist match on YouTube Music search → auto-accept. Low confidence (fuzzy-only match, duration mismatch >10s, or several close candidates) → the review screen shows candidate choices with artist and duration, and lets you pick, skip, or leave the row unmatched. Nothing is silently wrong. YouTube playlists bypass matching and use their exact ids; album-level import is not in v1.
 
 ### 5.7 Not in v1
-Equalizer, gapless, crossfade, sleep timer, scrobbling, Discord presence, mini-player, tray, listening stats, device sync, i18n, mobile, local file playback. Each is a clean addition later; none blocks the core. Accounts and cross-device sync are also post-v1: local-first stays the default, and listening never requires signing in.
+Equalizer, gapless, crossfade, sleep timer, scrobbling, mini-player, tray, listening stats, device sync, i18n, mobile, local file playback. Each is a clean addition later; none blocks the core. Accounts and cross-device sync are also post-v1: local-first stays the default, and listening never requires signing in.
 
 ## 6. Performance budget
 
@@ -1133,3 +1133,17 @@ Offline e2e, failure-classification tests and docs are in place. The Windows 11 
 ### 17.11 Explicit non-goals (v1)
 
 Exporting to Music/Finder, tag editing, download caps or quotas, auto-download rules, per-download quality overrides, syncing download state across devices, Android/SD-card storage, one-click artist discography downloads.
+
+## 18. Discord Rich Presence (shipped)
+
+Viby shows what is playing as Discord Rich Presence over Discord's local RPC socket. No bot, token or account is involved; the public Application ID `1565024229705908265` identifies the Viby app.
+
+**Decisions (2026-10-28).** On by default, opt-out in Settings. Presence is cleared when paused or stopped. Album art is the track's YouTube thumbnail (falling back to the app icon when none is usable), the activity reads "Listening to Viby" with the song and artist underneath, and a single "Get Viby" button links the releases page. Zero new runtime dependencies: the IPC client is owned here rather than adding a library.
+
+**Design.** Main owns the socket (`src/main/discord/`); the renderer sends a plain `PresenceSnapshot` only on track, play/pause and seek changes (Svelte proxies never cross IPC). `buildActivity` projects the position forward from `updatedAt`, so a rate-limited send still shows an accurate progress bar. Discord allows 5 updates per 20 seconds, so the manager coalesces to the newest state and spaces sends 4 s apart; it reconnects with 30 s → 60 s → 2 m → 5 m backoff and answers pings with pongs. Pausing or clearing sends a null activity; disabling or quitting closes the socket, which removes the presence.
+
+**Activity.** type `Listening` (2), name `Viby`, details = title, state = artist, `status_display_type = state` so the member list shows the artist under the music note, start/end timestamps, large image = artwork URL (or omitted so Discord shows the app icon), large text = album, click-through to the YouTube Music track, one "Get Viby" button. Text truncates to 128 characters and the image URL falls back to a short `i.ytimg.com` thumbnail past Discord's 313-character limit.
+
+**Settings.** `discordPresence` (default true). The row explains that the Discord desktop app and its Activity Privacy setting control visibility, and that only the current song leaves Viby.
+
+**Verified.** Unit `discord` covers the frame codec, activity mapping, rate limiter and a live-socket client against a fake Discord server; a silent probe against the real Discord client confirmed the handshake and a null activity. The visible card was checked in the running app on 2026-10-28 (Listening label and album art); the Get Viby button is only visible to other users and still needs a second account to confirm.

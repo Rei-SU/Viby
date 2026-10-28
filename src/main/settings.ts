@@ -21,6 +21,8 @@ export const DEFAULT_SETTINGS: Settings = {
   offlineMode: 'auto',
   /** Check GitHub for a newer release on launch. Updates are never silent. */
   autoUpdateCheck: true,
+  /** Show the current song on Discord. On by default; the app still needs Discord running. */
+  discordPresence: true,
   /** Empty means no version is skipped. */
   skippedUpdateVersion: '',
   /** Empty means Viby has never shown release notes on this install. */
@@ -71,6 +73,9 @@ function sanitizePatch(patch: Partial<Settings> | null | undefined): Partial<Set
   }
   if (input.autoUpdateCheck !== undefined) {
     clean.autoUpdateCheck = Boolean(input.autoUpdateCheck)
+  }
+  if (input.discordPresence !== undefined) {
+    clean.discordPresence = Boolean(input.discordPresence)
   }
   if (input.skippedUpdateVersion !== undefined) {
     clean.skippedUpdateVersion =

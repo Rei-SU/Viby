@@ -208,6 +208,37 @@
     player.syncTaskbarControls()
   })
 
+  // Discord Rich Presence: send a plain snapshot when playback state changes or
+  // after a seek. Normal 1 Hz position ticks are skipped so main only hears
+  // meaningful changes; main projects the position from `updatedAt`.
+  let presenceKey = ''
+  let lastSentPosition = -1
+  $effect(() => {
+    const track = player.current
+    const playing = player.playing
+    const position = player.position
+    const duration = player.duration
+    const key = `${track?.id ?? ''}|${playing}|${Math.round(duration)}`
+    if (key === presenceKey && Math.abs(position - lastSentPosition) < 4) return
+    presenceKey = key
+    lastSentPosition = position
+    api.player.setPresence({
+      track: track
+        ? {
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            durationSec: track.durationSec,
+            thumbnail: track.thumbnail
+          }
+        : null,
+      playing,
+      position,
+      updatedAt: Date.now()
+    })
+  })
+
   onMount(() => {
     void network.init()
     void downloads.init()

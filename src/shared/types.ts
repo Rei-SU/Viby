@@ -100,6 +100,8 @@ export type Settings = {
   offlineMode: OfflineMode
   /** Check GitHub for a newer release on launch. Updates are never silent. */
   autoUpdateCheck: boolean
+  /** Show the current song on Discord when the desktop app is running. */
+  discordPresence: boolean
   /** A version the user chose not to be offered again. Empty when none. */
   skippedUpdateVersion: string
   /**
@@ -314,6 +316,26 @@ export type PlaybackSession = {
   track: Track | null
   queue: Track[]
   index: number
+  position: number
+  updatedAt: number
+}
+
+/**
+ * The player state Discord needs, copied to plain primitives before it crosses
+ * IPC (Svelte state proxies cannot be structured-cloned). Main projects the
+ * position forward from `updatedAt`, so a rate-limited update still shows an
+ * accurate progress bar.
+ */
+export type PresenceSnapshot = {
+  track: {
+    id: string
+    title: string
+    artist: string
+    album?: string
+    durationSec: number
+    thumbnail?: string
+  } | null
+  playing: boolean
   position: number
   updatedAt: number
 }

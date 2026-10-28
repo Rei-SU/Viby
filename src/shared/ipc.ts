@@ -18,6 +18,7 @@ import type {
   OfflineMode,
   PlaybackSession,
   Playlist,
+  PresenceSnapshot,
   ResolveResult,
   Result,
   SearchFilterName,
@@ -42,6 +43,7 @@ export const CH = {
   playerPrefetch: 'player:prefetch',
   playerCancel: 'player:cancel',
   playerState: 'player:state',
+  playerPresence: 'player:presence',
   playerTaskbar: 'player:taskbar',
   playerCommand: 'player:command',
 
@@ -189,6 +191,8 @@ export interface VibyApi {
     cancel(): void
     /** Tells main whether audio is currently playing, for the power blocker. */
     setPlaying(playing: boolean): void
+    /** Mirror the current track for Discord Rich Presence; main decides if it is on. */
+    setPresence(snapshot: PresenceSnapshot): void
     /** Windows: mirror playback into the taskbar thumbnail toolbar. */
     setTaskbarControls(state: TaskbarState): void
     /** Windows: play/pause, previous and next from the taskbar thumbnail toolbar. */
