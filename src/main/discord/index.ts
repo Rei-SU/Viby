@@ -14,11 +14,17 @@ function socketPaths(): string[] {
   return override ? [override] : discordIpcPaths()
 }
 
+function badgeUrl(): string | undefined {
+  // Dev/test only: preview an asset that is not on main yet.
+  return !app.isPackaged ? process.env.VIBY_DISCORD_BADGE_URL : undefined
+}
+
 export function initDiscord(enabled: boolean): void {
   if (!presence) {
     presence = new DiscordPresence({
       clientId: DISCORD_CLIENT_ID,
-      paths: socketPaths()
+      paths: socketPaths(),
+      badgeUrl: badgeUrl()
     })
   }
   presence.setEnabled(enabled)

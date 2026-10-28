@@ -21,6 +21,8 @@ export type DiscordPresenceOptions = {
   retryDelays?: number[]
   updateLimit?: number
   updateWindowMs?: number
+  /** Animated badge URL; tests and dev runs can point it at a reachable copy. */
+  badgeUrl?: string
 }
 
 /**
@@ -62,7 +64,9 @@ export class DiscordPresence {
   }
 
   update(snapshot: PresenceSnapshot): void {
-    if (!this.enabled) return
+    if (!this.enabled || !snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      return
+    }
     this.snapshot = snapshot
     this.schedule()
   }
@@ -144,7 +148,7 @@ export class DiscordPresence {
     const client = this.client
     if (!this.enabled || !client?.isReady || !this.snapshot) return
 
-    const activity = buildActivity(this.snapshot, this.now())
+    const activity = buildActivity(this.snapshot, this.now(), this.options.badgeUrl)
     const key = activity ? JSON.stringify(activity) : 'null'
     // Nothing to say yet: do not clear an activity that was never shown.
     if (!activity && this.lastActivity === '') return

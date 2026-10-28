@@ -7,7 +7,7 @@ import net from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PresenceSnapshot } from '../src/shared/types'
-import { buildActivity, type DiscordActivity } from '../src/main/discord/activity'
+import { buildActivity, DISCORD_BADGE_URL, type DiscordActivity } from '../src/main/discord/activity'
 import { DiscordIpcClient } from '../src/main/discord/client'
 import { DISCORD_OPCODE, FrameDecoder, encodeFrame } from '../src/main/discord/frame'
 import { discordIpcPaths } from '../src/main/discord/paths'
@@ -70,25 +70,41 @@ console.log('\nactivity mapping:')
     id: 'abc123def45',
     title: 'Instant Crush',
     artist: 'Daft Punk',
+    artistId: 'UCdaftpunk',
     album: 'Random Access Memories',
     durationSec: 180,
     thumbnail: 'https://lh3.googleusercontent.com/x=w544'
   }
-  const snap: PresenceSnapshot = { track, playing: true, position: 30, updatedAt: 100_000 }
+  const snap: PresenceSnapshot = {
+    track,
+    playing: true,
+    position: 30,
+    quality: 'AAC 130k',
+    updatedAt: 100_000
+  }
   const act = buildActivity(snap, 100_000)
   check('playing builds an activity', act !== null)
   if (act) {
     check('name is Viby', act.name === 'Viby')
     check('type is Listening', act.type === 2)
     check('details is the title', act.details === 'Instant Crush')
+    check('details links the track', act.details_url === `https://music.youtube.com/watch?v=${track.id}`)
     check('state is the artist alone', act.state === 'Daft Punk')
+    check('state links the artist', act.state_url === `https://music.youtube.com/channel/${track.artistId}`)
     check('member list shows the state field', act.status_display_type === 1)
     check('start projects from position', act.timestamps?.start === 70_000, String(act.timestamps?.start))
     check('end adds the duration', act.timestamps?.end === 250_000, String(act.timestamps?.end))
     check('large image is the thumbnail', act.assets?.large_image === track.thumbnail)
     check('large text is the album', act.assets?.large_text === track.album)
     check('large url links the track', act.assets?.large_url === `https://music.youtube.com/watch?v=${track.id}`)
-    check('one Get Viby button', act.buttons?.length === 1 && act.buttons[0].label === 'Get Viby')
+    check('small image is the vinyl badge', act.assets?.small_image === DISCORD_BADGE_URL)
+    check('small text is the quality', act.assets?.small_text === 'Playing · AAC 130k')
+    check(
+      'buttons are Get Viby and YouTube Music',
+      act.buttons?.length === 2 &&
+        act.buttons[0].label === 'Get Viby' &&
+        act.buttons[1].label === 'Listen on YouTube Music'
+    )
   }
 
   // A delayed update must keep the same start time: position advances by the
@@ -128,7 +144,67 @@ console.log('\nactivity mapping:')
     { track: { ...track, id: 'not-a-video-id', thumbnail: undefined }, playing: true, position: 0, updatedAt: 0 },
     0
   )
-  check('no usable art drops assets', noId?.assets === undefined)
+  check('no usable art drops the large image', noId?.assets?.large_image === undefined)
+
+  const customBadge = buildActivity(snap, 100_000, 'https://example.com/badge.gif')
+  check('a custom badge URL is used', customBadge?.assets?.small_image === 'https://example.com/badge.gif')
+
+  const noArtistId = buildActivity(
+    { ...snap, track: { ...track, artistId: undefined } },
+    100_000
+  )
+  check(
+    'without an artist id the name becomes a search link',
+    noArtistId?.state_url === `https://music.youtube.com/search?q=${encodeURIComponent(track.artist)}`
+  )
+
+  const noQuality = buildActivity({ ...snap, quality: undefined }, 100_000)
+  check('the hover falls back to Playing', noQuality?.assets?.small_text === 'Playing')
+
+  const badArtistId = buildActivity(
+    { ...snap, track: { ...track, artistId: 'not-a-channel' } },
+    100_000
+  )
+  check(
+    'an invalid artist id falls back to a search link',
+    badArtistId?.state_url === `https://music.youtube.com/search?q=${encodeURIComponent(track.artist)}`
+  )
+
+  const badBadge = buildActivity(snap, 100_000, 'http://example.com/badge.gif')
+  check('a non-https badge is dropped', badBadge?.assets?.small_image === undefined)
+
+  const malformed = buildActivity(
+    {
+      track: {
+        ...track,
+        title: 42 as unknown as string,
+        artist: null as unknown as string,
+        durationSec: Number.NaN,
+        thumbnail: null as unknown as string
+      },
+      playing: true,
+      position: Number.NaN,
+      updatedAt: Number.NaN,
+      quality: 42 as unknown as string
+    },
+    100_000
+  )
+  check('malformed fields do not throw', malformed !== null)
+  check('non-finite duration has no end', malformed?.timestamps?.end === undefined)
+  check('non-finite position gives a finite start', Number.isFinite(malformed?.timestamps?.start))
+  check('a malformed artist produces no state', malformed?.state === undefined)
+  check(
+    'a non-object track is ignored',
+    buildActivity(
+      {
+        track: 'bad' as unknown as PresenceSnapshot['track'],
+        playing: true,
+        position: 0,
+        updatedAt: 0
+      },
+      0
+    ) === null
+  )
 }
 
 console.log('\nrate limiter:')
@@ -223,7 +299,9 @@ console.log('\nclient over a real socket:')
     check('clear sends a null activity', ((clear?.args as { activity?: unknown })?.activity) === null)
 
     serverSocket?.write(encodeFrame(DISCORD_OPCODE.ping, { nonce: 'ping-1' }))
-    await tick()
+    for (let i = 0; i < 20 && !received.some((m) => m.cmd === 'PONG'); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
     check('client answers ping with pong', received.some((m) => m.cmd === 'PONG'))
   } finally {
     client.close()
@@ -303,6 +381,10 @@ console.log('\npresence manager:')
   manager.update({ ...snapshot, playing: false })
   await tick()
   check('a duplicate paused state does not resend', fake?.activities.length === 2)
+
+  manager.update(null as unknown as PresenceSnapshot)
+  await tick()
+  check('a malformed snapshot is ignored', fake?.activities.length === 2)
 
   manager.setEnabled(false)
   check('disabling closes the client', fake?.closed === true)

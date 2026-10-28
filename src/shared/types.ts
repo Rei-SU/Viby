@@ -331,12 +331,15 @@ export type PresenceSnapshot = {
     id: string
     title: string
     artist: string
+    artistId?: string
     album?: string
     durationSec: number
     thumbnail?: string
   } | null
   playing: boolean
   position: number
+  /** The stream's real codec/bitrate, for the small-image hover text. */
+  quality?: string
   updatedAt: number
 }
 

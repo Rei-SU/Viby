@@ -33,6 +33,7 @@
   import { installShortcuts } from './lib/keyboard'
   import { artwork } from './lib/artwork.svelte'
   import { searchState } from './lib/search.svelte'
+  import { qualityLabel } from './lib/quality'
 
   const navItems: {
     id: View
@@ -209,25 +210,33 @@
   })
 
   // Discord Rich Presence: send a plain snapshot when playback state changes or
-  // after a seek. Normal 1 Hz position ticks are skipped so main only hears
-  // meaningful changes; main projects the position from `updatedAt`.
+  // after a seek. Discord advances the progress bar from the timestamps itself,
+  // so normal 1 Hz position ticks are deliberately ignored; this keeps the
+  // 5-per-20s update budget free for track changes.
   let presenceKey = ''
   let lastSentPosition = -1
+  let lastSentAt = 0
   $effect(() => {
     const track = player.current
     const playing = player.playing
     const position = player.position
     const duration = player.duration
-    const key = `${track?.id ?? ''}|${playing}|${Math.round(duration)}`
-    if (key === presenceKey && Math.abs(position - lastSentPosition) < 4) return
+    const quality = qualityLabel(player.stream)
+    const key = `${track?.id ?? ''}|${playing}|${Math.round(duration)}|${quality ?? ''}`
+    const now = Date.now()
+    const expected = playing ? lastSentPosition + (now - lastSentAt) / 1000 : lastSentPosition
+    const jumped = Math.abs(position - expected) > 2
+    if (key === presenceKey && !jumped) return
     presenceKey = key
     lastSentPosition = position
+    lastSentAt = now
     api.player.setPresence({
       track: track
         ? {
             id: track.id,
             title: track.title,
             artist: track.artist,
+            artistId: track.artistId,
             album: track.album,
             durationSec: track.durationSec,
             thumbnail: track.thumbnail
@@ -235,6 +244,7 @@
         : null,
       playing,
       position,
+      quality: quality ?? undefined,
       updatedAt: Date.now()
     })
   })

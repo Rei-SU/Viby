@@ -8,6 +8,7 @@
   import { toast } from '../lib/toast.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import { codecLabel, qualityLabel } from '../lib/quality'
 
   let dragging = $state(false)
   let dragValue = $state(0)
@@ -96,26 +97,9 @@
   }
 
   // What the stream actually is — not what the setting says it should be.
-  const codec = $derived.by(() => {
-    const ext = player.stream?.ext
-    switch (ext) {
-      case 'm4a':
-      case 'mp4':
-        return 'AAC'
-      case 'webm':
-      case 'opus':
-      case 'ogg':
-        return 'OPUS'
-      case 'mp3':
-        return 'MP3'
-      default:
-        return ext ? ext.toUpperCase() : null
-    }
-  })
+  const codec = $derived(codecLabel(player.stream?.ext))
 
-  const qualityText = $derived(
-    codec ? `${codec}${player.stream?.bitrateKbps ? ` ${player.stream.bitrateKbps}k` : ''}` : null
-  )
+  const qualityText = $derived(qualityLabel(player.stream))
 
   const qualityTitle = $derived.by(() => {
     const stream = player.stream

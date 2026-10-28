@@ -29,7 +29,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function errorMessage(data: unknown): string | undefined {
-  if (!isRecord(data) || !isRecord(data.data)) return undefined
+  if (!isRecord(data)) return undefined
+  if (typeof data.message === 'string') return data.message
+  if (!isRecord(data.data)) return undefined
   return typeof data.data.message === 'string' ? data.data.message : undefined
 }
 
@@ -85,15 +87,20 @@ export class DiscordIpcClient {
         reject(new Error('Discord did not answer the activity update'))
       }, RESPONSE_TIMEOUT_MS)
       this.pending.set(nonce, { resolve, reject, timer })
+      try {
+        socket.write(
+          encodeFrame(DISCORD_OPCODE.frame, {
+            cmd: 'SET_ACTIVITY',
+            args: { pid: this.pid, activity },
+            nonce
+          })
+        )
+      } catch (error) {
+        clearTimeout(timer)
+        this.pending.delete(nonce)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
     })
-
-    socket.write(
-      encodeFrame(DISCORD_OPCODE.frame, {
-        cmd: 'SET_ACTIVITY',
-        args: { pid: this.pid, activity },
-        nonce
-      })
-    )
     await response
   }
 
@@ -101,7 +108,9 @@ export class DiscordIpcClient {
     const socket = this.socket
     this.socket = null
     this.ready = false
-    this.rejectAll(new Error('Discord connection closed'))
+    const error = new Error('Discord connection closed')
+    this.failReadyWait(error)
+    this.rejectAll(error)
     if (!socket) return
     try {
       socket.end(encodeFrame(DISCORD_OPCODE.close, {}))
@@ -120,6 +129,11 @@ export class DiscordIpcClient {
 
     this.decoder = new FrameDecoder()
     this.socket = socket
+    // Keep a listener attached for the whole attempt: a timeout or a late error
+    // must never surface as an unhandled 'error' event.
+    socket.on('error', () => {
+      // A close event follows every socket error.
+    })
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -151,9 +165,6 @@ export class DiscordIpcClient {
     })
 
     socket.on('data', (chunk) => this.handleData(chunk))
-    socket.on('error', () => {
-      // A close event follows every socket error.
-    })
     socket.on('close', () => this.handleClose(socket))
 
     try {
@@ -161,6 +172,7 @@ export class DiscordIpcClient {
     } catch (error) {
       if (this.socket === socket) this.socket = null
       this.ready = false
+      this.failReadyWait(new Error('Discord handshake failed'))
       this.rejectAll(new Error('Discord handshake failed'))
       socket.destroy()
       throw error
@@ -177,12 +189,18 @@ export class DiscordIpcClient {
         reject(new Error('Discord did not finish the handshake'))
       }, READY_TIMEOUT_MS)
       this.readyWait = { resolve, reject, timer }
-      socket.write(
-        encodeFrame(DISCORD_OPCODE.handshake, {
-          v: 1,
-          client_id: this.options.clientId
-        })
-      )
+      try {
+        socket.write(
+          encodeFrame(DISCORD_OPCODE.handshake, {
+            v: 1,
+            client_id: this.options.clientId
+          })
+        )
+      } catch (error) {
+        clearTimeout(timer)
+        this.readyWait = null
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
     })
   }
 
@@ -198,7 +216,11 @@ export class DiscordIpcClient {
 
     for (const frame of frames) {
       if (frame.opcode === DISCORD_OPCODE.ping) {
-        this.socket?.write(encodeFrame(DISCORD_OPCODE.pong, frame.data))
+        try {
+          this.socket?.write(encodeFrame(DISCORD_OPCODE.pong, frame.data))
+        } catch {
+          // The socket is closing; the close handler will clean up.
+        }
         continue
       }
       if (frame.opcode === DISCORD_OPCODE.close) {
@@ -240,13 +262,16 @@ export class DiscordIpcClient {
     this.ready = false
 
     const error = new Error('Discord connection closed')
-    if (this.readyWait) {
-      clearTimeout(this.readyWait.timer)
-      this.readyWait.reject(error)
-      this.readyWait = null
-    }
+    this.failReadyWait(error)
     this.rejectAll(error)
     this.closeHandler?.()
+  }
+
+  private failReadyWait(error: Error): void {
+    if (!this.readyWait) return
+    clearTimeout(this.readyWait.timer)
+    this.readyWait.reject(error)
+    this.readyWait = null
   }
 
   private resolvePending(nonce: string, value: unknown): void {
