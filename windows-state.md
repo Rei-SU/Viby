@@ -561,4 +561,31 @@ published release was not exercised because 0.2.4 is the current release; the
 installer arguments above are the exact ones `quitAndInstall(true, true)`
 produces.
 
+## 17. The What's New sheet did not appear after 0.5.0 (2026-10-28)
 
+After updating to 0.5.0 on Windows 11, the app relaunched on the new version
+but no sheet appeared. `%APPDATA%\Viby\settings.json` was rewritten at 02:49
+with `"lastSeenVersion": "0.5.0"` and no `lastShownVersion`, which is the
+signature of the first-install branch: the upgrade had no baseline, so the
+app treated it as a fresh install and recorded the version silently.
+
+The installed `resources/app.asar` also had the wrong baked notes:
+
+```
+asar version: 0.5.0
+entries: 0.2.4 | 0.2.3 | 0.2.2 | 0.2.1 | 0.2.0 | 0.1.2
+```
+
+The bake stopped at 0.2.4, so the build checkout did not see the `v0.5.0` tag
+even though the release body had the correct notes. That made `hasCurrent`
+false and hid the Settings > Updates "View notes" row. Running the same bake
+locally against the pushed tag produced seven entries including 0.5.0.
+
+**Fix:** a first install is now detected from whether `settings.json` existed
+at startup, `lastShownVersion` records what was actually displayed (an empty
+value includes the version a build marked seen without showing it), and
+release jobs fetch tags explicitly and fail closed with
+`VIBY_REQUIRE_CHANGELOG=1` when the running version has no baked notes.
+
+**Status:** Fixed for 0.5.1. The affected install (seen 0.5.0, shown empty)
+will get 0.5.0 and 0.5.1 in the next sheet.

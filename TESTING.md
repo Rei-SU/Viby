@@ -65,7 +65,7 @@ ones that touch main-process modules.
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
 | `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks, cancel, skipped versions, Ed25519 manifest verification, signed-hash hand-off |
 | `release-notes` | release-notes lint: allowed sections, empty/missing/duplicate sections, internal jargon, CRLF |
-| `changelog` | baking release notes from tags: sections, plain text, ordering, never ahead of the running version, release links |
+| `changelog` | baking release notes from tags (sections, plain text, ordering, never ahead of the running version, release links) and which notes a launch shows (first install, upgrade from before the sheet, seen-but-never-shown catch-up, seen/shown baselines) |
 
 ### Manual update smoke test (Windows, real hardware)
 
@@ -81,8 +81,10 @@ running per-user install on a real machine.
    and reach 100%, then Viby must quit, install and relaunch by itself — no
    second click and no installer wizard.
 5. Confirm Viby reopens on the new version (`Settings → Updates` shows the new
-   current version) and that the What's New sheet names it with its notes.
-   Closing it must record the version, so a restart does not show it again.
+   current version) and that the What's New sheet names it with its notes. If
+   the previous version's sheet never appeared, that version's notes must be in
+   the sheet too. Closing it must record the version, so a restart does not
+   show it again.
 6. Open `%APPDATA%\Viby\logs\updater.log`; it must contain the check, download
    and install entries with no verification errors.
 7. Cancel path: start a download, click **Cancel**, then download again. The
@@ -124,7 +126,7 @@ the app while they run — they own the queue.
 | `images` | Home artwork actually renders, home carousels stay inside the docked page, no broken images |
 | `home` | recent history rows, the history panel, weekly listening stats (pixel clock with HRS/MIN units, no chart or progress bars), the one-shot scramble on return, mood icons and mood pages |
 | `carousel` | rails hide their scrollbar, header chevrons page the row, the wheel scrolls sideways on Windows |
-| `changelog` | after an update the What's New sheet shows the new version's notes once, Escape/Close dismiss it, the version is recorded, and Settings reopens it |
+| `changelog` | after an update the What's New sheet shows the running version's notes once, includes a version marked seen without a sheet, caps a multi-version jump at three with the earlier count, Escape/Close dismiss it, and Settings reopens it |
 | `shortcuts` | Space, transport/seek/volume keys, mute/shuffle/repeat/like, Escape, `/`, and text-field guards |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
 | `playback-failure` | media errors stop the fake Pause, retry a fresh source, and recover from a local download or show a visible error |
