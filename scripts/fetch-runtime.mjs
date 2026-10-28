@@ -24,12 +24,12 @@ import {
   openSync,
   readSync,
   readdirSync,
+  readlinkSync,
   renameSync,
-  rmSync,
-  symlinkSync
+  rmSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
@@ -88,18 +88,13 @@ try {
 
   rmSync(dest, { recursive: true, force: true })
   mkdirSync(dirname(dest), { recursive: true })
-  cpSync(join(work, 'python'), dest, { recursive: true })
-  // cpSync rewrites relative symlinks to absolute paths into the temp dir.
-  if (platform !== 'win32') {
-    const bin = join(dest, 'bin')
-    const interpreter = `python${PYTHON.split('.').slice(0, 2).join('.')}`
-    for (const name of ['python', 'python3']) {
-      rmSync(join(bin, name), { force: true })
-      symlinkSync(interpreter, join(bin, name))
-    }
-  }
+  // `verbatimSymlinks` keeps the archive's relative links relative. Without it
+  // cpSync rewrites them to absolute paths inside `work`, which is deleted
+  // below, leaving dangling symlinks that only show up when the app is signed.
+  cpSync(join(work, 'python'), dest, { recursive: true, verbatimSymlinks: true })
 
   trim(dest, platform, PYTHON)
+  assertNoBrokenSymlinks(dest)
 
   // Apple Silicon refuses entirely unsigned code, and these builds are shipped
   // unsigned. Ad-hoc signing is free and keeps the runtime launchable. A plain
@@ -199,7 +194,10 @@ function trim(root, targetPlatform, version) {
     join(lib, 'site-packages', '_distutils_hack'),
     join(lib, 'site-packages', 'distutils-precedence.pth'),
     join(root, 'include'),
-    join(root, 'share')
+    join(root, 'share'),
+    // Compile-time metadata for building C extensions; nothing at runtime reads
+    // it. Its symlinks pointed at files that no longer exist.
+    join(root, 'lib', 'pkgconfig')
   ]
   // Windows-only extras a headless audio extractor never imports.
   if (isWin) {
@@ -227,5 +225,34 @@ function trim(root, targetPlatform, version) {
     for (const name of ['2to3', '2to3-3.12', 'idle3', 'idle3.12', 'pip', 'pip3', 'pip3.12', 'pydoc3', 'pydoc3.12', 'python3-config', 'python3.12-config']) {
       rmSync(join(root, 'bin', name), { recursive: true, force: true })
     }
+  }
+}
+
+/**
+ * Signing walks the whole bundle with `fs.stat`, so a single dangling symlink
+ * aborts the release. Fail here, with the offending link named, instead.
+ */
+function assertNoBrokenSymlinks(root) {
+  const broken = []
+  const stack = [root]
+  while (stack.length > 0) {
+    const dir = stack.pop()
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      if (entry.isSymbolicLink()) {
+        const target = readlinkSync(path)
+        const resolved = isAbsolute(target) ? target : resolve(dir, target)
+        if (!existsSync(resolved)) broken.push(`${path} -> ${target}`)
+      } else if (entry.isDirectory()) {
+        // Never follow directory links: the runtime has none today, and a loop
+        // would hang the build.
+        stack.push(path)
+      }
+    }
+  }
+  if (broken.length > 0) {
+    throw new Error(
+      `vendored runtime has ${broken.length} dangling symlink(s):\n  ${broken.join('\n  ')}`
+    )
   }
 }
