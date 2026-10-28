@@ -65,6 +65,7 @@ ones that touch main-process modules.
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
 | `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks, cancel, skipped versions, Ed25519 manifest verification, signed-hash hand-off |
 | `release-notes` | release-notes lint: allowed sections, empty/missing/duplicate sections, internal jargon, CRLF |
+| `changelog` | baking release notes from tags: sections, plain text, ordering, never ahead of the running version, release links |
 
 ### Manual update smoke test (Windows, real hardware)
 
@@ -77,9 +78,11 @@ running per-user install on a real machine.
 3. Bump `package.json`, tag and push a newer `v*` release; wait for it to go
    live.
 4. In the installed build: check → **Download**. The progress bar must advance
-   and reach 100%, then **Restart & install**.
-5. Confirm Viby quits, NSIS installs silently, and Viby reopens on the new
-   version (`Settings → Updates` shows the new current version).
+   and reach 100%, then Viby must quit, install and relaunch by itself — no
+   second click and no installer wizard.
+5. Confirm Viby reopens on the new version (`Settings → Updates` shows the new
+   current version) and that the What's New sheet names it with its notes.
+   Closing it must record the version, so a restart does not show it again.
 6. Open `%APPDATA%\Viby\logs\updater.log`; it must contain the check, download
    and install entries with no verification errors.
 7. Cancel path: start a download, click **Cancel**, then download again. The
@@ -89,9 +92,11 @@ running per-user install on a real machine.
    deleted and the state must show the verification failure, never install.
 
 Verified on Windows 11 (2026-10-25, Electron 45): the NSIS installer replaced the
-running per-user install and relaunched successfully. Windows 10 uses the same
-x64 build and is covered by the Windows 11 pass by maintainer decision. Re-run
-this after any updater change.
+running per-user install and relaunched successfully. The silent update path
+(`--updated /S --force-run`) was re-verified on 2026-10-28; the full in-app
+hand-off still needs a newer published release to exercise. Windows 10 uses the
+same x64 build and is covered by the Windows 11 pass by maintainer decision.
+Re-run this after any updater change.
 
 ### E2E scenarios (app must be running)
 
@@ -119,6 +124,7 @@ the app while they run — they own the queue.
 | `images` | Home artwork actually renders, home carousels stay inside the docked page, no broken images |
 | `home` | recent history rows, the history panel, weekly listening stats (pixel clock with HRS/MIN units, no chart or progress bars), the one-shot scramble on return, mood icons and mood pages |
 | `carousel` | rails hide their scrollbar, header chevrons page the row, the wheel scrolls sideways on Windows |
+| `changelog` | after an update the What's New sheet shows the new version's notes once, Escape/Close dismiss it, the version is recorded, and Settings reopens it |
 | `shortcuts` | Space, transport/seek/volume keys, mute/shuffle/repeat/like, Escape, `/`, and text-field guards |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
 | `playback-failure` | media errors stop the fake Pause, retry a fresh source, and recover from a local download or show a visible error |
@@ -172,6 +178,8 @@ Find the row for what you changed; run what it lists.
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
+| `src/main/changelog.ts`, `src/renderer/lib/changelog.svelte.ts`, `ChangelogDialog`, `scripts/build-changelog.mjs` | unit `changelog`, `release-notes` · e2e `changelog`, `settings` |
+| `src/shared/version.ts`, `src/main/version.ts` | unit `version`, `updates`, `changelog` |
 | `src/renderer/lib/nav.svelte.ts`, `src/renderer/lib/release.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title` |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts`, `release-focus` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |

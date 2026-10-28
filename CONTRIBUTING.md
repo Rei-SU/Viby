@@ -55,7 +55,10 @@ missing, empty or unknown sections and internal jargon.
 `--cleanup=verbatim` matters: without it, git strips lines starting with `#`,
 including every `### Added` heading. The annotated tag message becomes the
 release body, with a compare link to the previous tag appended by the workflow.
-There is no separate changelog file to keep in sync.
+There is no separate changelog file to keep in sync: the same message is baked
+into the build by `scripts/build-changelog.mjs`, which is what the in-app
+What's New sheet shows. The build jobs fetch the full tag history for this, so
+a release built from a shallow clone would have no notes to show.
 
 The build jobs use the repository's built-in `GITHUB_TOKEN`. Publishing also
 requires the update-signing secret below: once a public key is pinned, the
