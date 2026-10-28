@@ -4,11 +4,36 @@
   import ArtistLinks from './ArtistLinks.svelte'
   import { favorites } from '../lib/favorites.svelte'
   import { sidePanel } from '../lib/side-panel.svelte'
+  import { isTrackDrag, trackDrag } from '../lib/track-drag.svelte'
+  import { toast } from '../lib/toast.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
 
   let dragging = $state(false)
   let dragValue = $state(0)
+  /** A song is hovering the queue button, ready to be appended. */
+  let queueOver = $state(false)
+
+  $effect(() => {
+    if (!trackDrag.active) queueOver = false
+  })
+
+  function queueDragOver(event: DragEvent): void {
+    if (!isTrackDrag(event)) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    queueOver = true
+  }
+
+  function onQueueDrop(event: DragEvent): void {
+    if (!isTrackDrag(event)) return
+    event.preventDefault()
+    queueOver = false
+    const item = trackDrag.item
+    if (!item) return
+    player.enqueue(item)
+    toast.show(`Added ${item.title} to queue`)
+  }
 
   const shownPosition = $derived(dragging ? dragValue : player.position)
   const track = $derived(player.current)
@@ -288,9 +313,14 @@
     <button
       class="icon"
       class:on={sidePanel.mode === 'queue'}
-      title="Queue"
+      class:drop-ready={trackDrag.active}
+      class:queue-over={queueOver}
+      title={queueOver ? 'Add to queue' : 'Queue'}
       aria-label="Queue"
       onclick={() => sidePanel.toggle('queue')}
+      ondragover={queueDragOver}
+      ondragleave={() => (queueOver = false)}
+      ondrop={onQueueDrop}
     >
       <Icon name="list" size={16} />
     </button>
@@ -405,6 +435,21 @@
 
   .icon.on {
     color: var(--accent);
+  }
+
+  /* While a song is in the air, the queue button advertises itself as a target;
+     hovering it with the drag fills it in. */
+  .icon.drop-ready {
+    color: var(--text);
+    background: var(--glass-hover);
+    outline: 1px dashed var(--stroke-strong);
+    outline-offset: -1px;
+  }
+
+  .icon.queue-over {
+    background: var(--glass-active);
+    outline-style: solid;
+    outline-color: var(--text);
   }
 
   .fav.on {

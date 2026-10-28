@@ -116,6 +116,47 @@ await evaluate(`(() => { window.__viby.player.move(99, 0); return true })()`)
 s = await state()
 check('an out-of-range move is ignored', s.order === 'Q3,Q2,Q1', JSON.stringify(s))
 
+// ---- insert (a song dragged to a queue slot) -------------------------------
+console.log('\ninsert:')
+await playQueue(TRACKS, 1)
+s = await waitFor((x) => x.title === 'Q2' && x.playing)
+
+await evaluate(
+  `(() => { window.__viby.player.insertAt(2, { id: 'insert-x', kind: 'song', title: 'QX', subtitle: 'x' }); return true })()`
+)
+s = await state()
+check(
+  'inserting after the current row leaves it playing',
+  s.order === 'Q1,Q2,QX,Q3' && s.title === 'Q2' && s.index === 1 && s.playing,
+  JSON.stringify(s)
+)
+
+await evaluate(
+  `(() => { window.__viby.player.insertAt(0, { id: 'insert-y', kind: 'song', title: 'QY', subtitle: 'y' }); return true })()`
+)
+s = await state()
+check(
+  'inserting above the current row follows it down',
+  s.order === 'QY,Q1,Q2,QX,Q3' && s.title === 'Q2' && s.index === 2,
+  JSON.stringify(s)
+)
+
+await evaluate(
+  `(() => { window.__viby.player.insertAt(99, { id: 'insert-z', kind: 'song', title: 'QZ', subtitle: 'z' }); return true })()`
+)
+s = await state()
+check(
+  'an out-of-range slot appends',
+  s.order === 'QY,Q1,Q2,QX,Q3,QZ' && s.index === 2,
+  JSON.stringify(s)
+)
+
+await evaluate(
+  `(() => { window.__viby.player.insertAt(1, { id: 'insert-a', kind: 'album', title: 'Not a song', subtitle: '' }); return true })()`
+)
+s = await state()
+check('only songs can be inserted', s.order === 'QY,Q1,Q2,QX,Q3,QZ', JSON.stringify(s))
+
 await evaluate(`(() => { window.__viby.player.clearQueue(); return true })()`)
 
 // ---- repeat one ------------------------------------------------------------

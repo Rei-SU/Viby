@@ -3,9 +3,12 @@ export const description =
 
 export async function run(app, check) {
   // A synthetic queue keeps this scenario offline and silent.
-  const seeded = await app.evaluate(`(() => {
+  const seeded = await app.evaluate(`(async () => {
     const { player, sidePanel } = window.__viby
     sidePanel.close()
+    // The grid track takes 300ms to collapse; measuring before it settles reads
+    // the open width and makes the "page gives up the panel width" check flake.
+    await new Promise((resolve) => setTimeout(resolve, 400))
     player.clearQueue()
     player.enqueueAll([
       { id: 'panel-a', kind: 'song', title: 'Panel A', subtitle: 'one', durationSec: 60 },
@@ -195,6 +198,199 @@ export async function run(app, check) {
     'the empty state explains the queue',
     (cleared.empty ?? '').startsWith('Nothing queued'),
     String(cleared.empty)
+  )
+
+  // Drag a song in from outside the queue. Home rows are history rows: they have
+  // no Add-to-queue button, which is exactly the "any song" case.
+  const flow = await app.evaluate(
+    `(async () => {
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const { api, nav, player } = window.__viby
+      const now = Date.now()
+      const thumb = ${JSON.stringify(
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+      )}
+      const titles = ['Drag test one', 'Drag test two']
+      for (const [i, title] of titles.entries()) {
+        await api.history.add({
+          trackId: 'queue-drag-' + (i + 1),
+          title,
+          artist: 'Drag Artist',
+          album: 'Drag album',
+          durationSec: 200,
+          playedAt: now + i,
+          completion: 1,
+          thumbnail: thumb
+        })
+      }
+      nav.go('library')
+      await wait(250)
+      nav.go('home')
+      await wait(1000)
+
+      const recent = () => [...document.querySelectorAll('.recent-list li')]
+      const byTitle = (title) =>
+        recent().find((row) => row.querySelector('.title')?.textContent?.trim() === title)
+      const start = (row) => {
+        const dt = new DataTransfer()
+        row.dispatchEvent(
+          new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt })
+        )
+        return dt
+      }
+      const at = (dt, x, y) => ({
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dt,
+        clientX: x,
+        clientY: y
+      })
+      const order = () => player.queue.map((track) => track.title)
+      const toast = () =>
+        document.querySelector('.alerts .toast')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null
+
+      const report = {}
+      report.sources = recent().length
+      report.draggable = recent().length > 0 && recent().every((row) => row.draggable)
+
+      // A. An empty queue still accepts a drop, and the drag advertises itself.
+      const first = byTitle('Drag test one')
+      const dtA = start(first)
+      await wait(80)
+      report.barShown = Boolean(document.querySelector('.drop-bar'))
+      report.buttonReady =
+        document.querySelector('.dock .icon[aria-label="Queue"]')?.classList.contains('drop-ready') ??
+        false
+      const queue = document.querySelector('.panel .queue')
+      const qr = queue.getBoundingClientRect()
+      queue.dispatchEvent(new DragEvent('dragover', at(dtA, qr.left + 140, qr.top + 60)))
+      await wait(80)
+      report.emptyHint = queue.classList.contains('drop-active')
+      queue.dispatchEvent(new DragEvent('drop', at(dtA, qr.left + 140, qr.top + 60)))
+      first.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dtA }))
+      await wait(250)
+      report.emptyDrop = {
+        order: order(),
+        toast: toast(),
+        emptyGone: !document.querySelector('.panel .queue .empty'),
+        barGone: !document.querySelector('.drop-bar')
+      }
+
+      // B. Dropping between two rows inserts at that slot, with a line as the cue.
+      player.clearQueue()
+      player.enqueueAll([
+        { id: 'drag-a', kind: 'song', title: 'Queue A', subtitle: 'a', durationSec: 60 },
+        { id: 'drag-b', kind: 'song', title: 'Queue B', subtitle: 'b', durationSec: 60 },
+        { id: 'drag-c', kind: 'song', title: 'Queue C', subtitle: 'c', durationSec: 60 }
+      ])
+      await wait(250)
+      const second = byTitle('Drag test two')
+      const dtB = start(second)
+      await wait(80)
+      const rows = [...document.querySelectorAll('.panel .queue li')]
+      const target = rows[1].getBoundingClientRect()
+      const queueB = document.querySelector('.panel .queue')
+      const optsB = at(dtB, target.left + 120, target.top + target.height / 2)
+      queueB.dispatchEvent(new DragEvent('dragover', optsB))
+      await wait(100)
+      const line = document.querySelector('.panel .drop-line')
+      report.line = line ? Math.round(parseFloat(line.style.top)) : null
+      report.lineAtSecondRow = line
+        ? Math.abs(line.getBoundingClientRect().top - target.top) <= 2
+        : false
+      queueB.dispatchEvent(new DragEvent('drop', optsB))
+      second.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dtB }))
+      await wait(250)
+      report.positioned = {
+        order: order(),
+        toast: toast(),
+        lineGone: !document.querySelector('.panel .drop-line')
+      }
+
+      // C. The floating bar appends.
+      const dtC = start(byTitle('Drag test one'))
+      await wait(80)
+      const bar = document.querySelector('.drop-bar')
+      const br = bar.getBoundingClientRect()
+      const optsC = at(dtC, br.left + 30, br.top + br.height / 2)
+      bar.dispatchEvent(new DragEvent('dragover', optsC))
+      await wait(80)
+      report.barOver = bar.classList.contains('over')
+      bar.dispatchEvent(new DragEvent('drop', optsC))
+      byTitle('Drag test one')?.dispatchEvent(
+        new DragEvent('dragend', { bubbles: true, dataTransfer: dtC })
+      )
+      await wait(250)
+      report.appendedByBar = { order: order(), toast: toast() }
+
+      // D. The player-bar queue button appends too.
+      const dtD = start(byTitle('Drag test two'))
+      await wait(80)
+      const button = document.querySelector('.dock .icon[aria-label="Queue"]')
+      const dr = button.getBoundingClientRect()
+      const optsD = at(dtD, dr.left + 10, dr.top + 10)
+      button.dispatchEvent(new DragEvent('dragover', optsD))
+      await wait(80)
+      report.buttonOver = button.classList.contains('queue-over')
+      button.dispatchEvent(new DragEvent('drop', optsD))
+      byTitle('Drag test two')?.dispatchEvent(
+        new DragEvent('dragend', { bubbles: true, dataTransfer: dtD })
+      )
+      await wait(250)
+      report.appendedByButton = { order: order(), toast: toast() }
+
+      await api.debug?.forgetHistory(titles)
+      return report
+    })()`,
+    { userGesture: true }
+  )
+
+  check(
+    'every song row is draggable, with or without a queue button',
+    flow.sources >= 2 && flow.draggable === true,
+    JSON.stringify({ sources: flow.sources, draggable: flow.draggable })
+  )
+  check(
+    'a drag advertises the queue button and the drop bar',
+    flow.barShown === true && flow.buttonReady === true,
+    JSON.stringify({ bar: flow.barShown, button: flow.buttonReady })
+  )
+  check(
+    'an empty queue accepts a drop',
+    flow.emptyDrop?.order.join(',') === 'Drag test one' &&
+      flow.emptyDrop?.emptyGone === true &&
+      /Added Drag test one to queue/.test(flow.emptyDrop?.toast ?? '') &&
+      flow.emptyHint === true &&
+      flow.emptyDrop?.barGone === true,
+    JSON.stringify(flow.emptyDrop)
+  )
+  check(
+    'the drop line marks the slot under the pointer',
+    Number.isFinite(flow.line) && flow.lineAtSecondRow === true,
+    JSON.stringify({ line: flow.line, atRow: flow.lineAtSecondRow })
+  )
+  check(
+    'dropping between rows inserts there, not at the end',
+    flow.positioned?.order.join(',') === 'Queue A,Drag test two,Queue B,Queue C' &&
+      flow.positioned?.lineGone === true &&
+      /Added Drag test two to queue/.test(flow.positioned?.toast ?? ''),
+    JSON.stringify(flow.positioned)
+  )
+  check(
+    'the floating bar appends to the queue',
+    flow.barOver === true &&
+      flow.appendedByBar?.order.join(',') ===
+        'Queue A,Drag test two,Queue B,Queue C,Drag test one' &&
+      /Added Drag test one to queue/.test(flow.appendedByBar?.toast ?? ''),
+    JSON.stringify(flow.appendedByBar)
+  )
+  check(
+    'the queue button appends to the queue',
+    flow.buttonOver === true &&
+      flow.appendedByButton?.order.join(',') ===
+        'Queue A,Drag test two,Queue B,Queue C,Drag test one,Drag test two' &&
+      /Added Drag test two to queue/.test(flow.appendedByButton?.toast ?? ''),
+    JSON.stringify(flow.appendedByButton)
   )
 
   const closedAgain = await app.evaluate(

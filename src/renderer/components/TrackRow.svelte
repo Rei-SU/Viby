@@ -7,6 +7,7 @@
   import { favorites } from '../lib/favorites.svelte'
   import { network } from '../lib/network.svelte'
   import { openTrackFromItem } from '../lib/release'
+  import { TRACK_DRAG_TYPE, trackDrag } from '../lib/track-drag.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
   import SubtitleParts from './SubtitleParts.svelte'
@@ -78,6 +79,7 @@
       (onRemove ? 1 : 0)
   )
   const rounded = $derived(item.kind === 'artist')
+  const dragging = $derived(trackDrag.active && trackDrag.sourceId === item.id)
   const downloadState = $derived(downloads.stateFor(item.id))
   const downloadJob = $derived(downloads.jobFor(item.id))
   const art = $derived(downloads.entryFor(item.id)?.artUrl ?? item.thumbnail)
@@ -118,6 +120,78 @@
     } else if (!blocked) {
       nav.open(item)
     }
+  }
+
+  /**
+   * A compact cover+title card instead of a snapshot of the whole row, so the
+   * drag reads as "a song in hand" rather than a 500px slab of interface.
+   */
+  function dragGhost(): HTMLElement {
+    const ghost = document.createElement('div')
+    ghost.style.cssText = [
+      'position:fixed',
+      'top:-1000px',
+      'left:-1000px',
+      'display:flex',
+      'align-items:center',
+      'gap:10px',
+      'max-width:260px',
+      'padding:8px 14px 8px 8px',
+      'border-radius:10px',
+      'background:rgba(26,26,32,.96)',
+      'border:1px solid rgba(255,255,255,.14)',
+      'box-shadow:0 14px 34px rgba(0,0,0,.55)',
+      'color:#f2f2f5',
+      'font:600 12.5px/1.35 -apple-system, "Segoe UI", Inter, sans-serif'
+    ].join(';')
+
+    if (art) {
+      const img = document.createElement('img')
+      img.src = art
+      img.draggable = false
+      img.style.cssText =
+        'width:34px;height:34px;border-radius:6px;object-fit:cover;flex:none'
+      ghost.append(img)
+    }
+
+    const copy = document.createElement('div')
+    copy.style.cssText = 'min-width:0;display:flex;flex-direction:column;gap:1px'
+    const title = document.createElement('span')
+    title.textContent = item.title
+    title.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+    const hint = document.createElement('span')
+    hint.textContent = 'Add to queue'
+    hint.style.cssText = 'color:rgba(255,255,255,.55);font-weight:500;font-size:10.5px'
+    copy.append(title, hint)
+    ghost.append(copy)
+
+    document.body.append(ghost)
+    // Chromium snapshots the element during dragstart; it can go straight after.
+    setTimeout(() => ghost.remove(), 0)
+    return ghost
+  }
+
+  function dragStart(event: DragEvent): void {
+    if (!canPlay || !event.dataTransfer) {
+      event.preventDefault()
+      return
+    }
+    trackDrag.begin(item)
+    // Copy, not move: the row stays where it is; only the queue gains a track.
+    event.dataTransfer.effectAllowed = 'copy'
+    // The store carries the item for live previews; these keep the payload
+    // valid and give other apps something readable if it ever leaves Viby.
+    event.dataTransfer.setData(TRACK_DRAG_TYPE, item.id)
+    event.dataTransfer.setData('text/plain', `${item.title} — ${item.subtitle}`)
+    try {
+      event.dataTransfer.setDragImage(dragGhost(), 18, 20)
+    } catch {
+      // Synthetic drags (tests) have no native drag to attach an image to.
+    }
+  }
+
+  function dragEnd(): void {
+    trackDrag.end()
   }
 
   function fmt(seconds?: number): string {
@@ -161,7 +235,11 @@
   class:active
   class:unavailable={blocked}
   class:focused
+  class:dragging
   data-track-id={item.id}
+  draggable={canPlay}
+  ondragstart={dragStart}
+  ondragend={dragEnd}
   onpointerenter={hoverStart}
   onpointerleave={hoverEnd}
 >
@@ -369,6 +447,12 @@
 
   .row.unavailable {
     opacity: 0.38;
+  }
+
+  /* The source row fades while its ghost is in the air, so the list shows what
+     is being carried without removing the row. */
+  .row.dragging {
+    opacity: 0.4;
   }
 
   .row.unavailable:hover {

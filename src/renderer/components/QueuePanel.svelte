@@ -2,6 +2,8 @@
   import { onDestroy, tick } from 'svelte'
   import { player } from '../lib/player.svelte'
   import { downloads } from '../lib/downloads.svelte'
+  import { isTrackDrag, trackDrag } from '../lib/track-drag.svelte'
+  import { toast } from '../lib/toast.svelte'
   import { openTrackTarget } from '../lib/release'
   import ArtistLinks from './ArtistLinks.svelte'
   import Cover from './Cover.svelte'
@@ -37,11 +39,73 @@
   let lineVisible = $state(false)
   let announce = $state('')
 
+  // A drag that started in another list (search, album, Home...). Its slot is
+  // read from the live rows instead of the pointer drag's frozen measurements.
+  let external = $state(false)
+  let externalTop = $state(0)
+  let externalSlot = 0
+
   let scrollDir = 0
   let raf = 0
 
   // Closing the panel mid-drag must not leave window listeners behind.
   onDestroy(stopDrag)
+
+  // Escape cancels a drag without ever entering this list, so the drag store
+  // ending is the one signal that always arrives.
+  $effect(() => {
+    if (!trackDrag.active) external = false
+  })
+
+  function rows(): HTMLElement[] {
+    return listEl ? [...listEl.querySelectorAll<HTMLElement>(':scope > li')] : []
+  }
+
+  /** Insertion slot for a drag that started outside the queue. */
+  function externalSlotAt(clientY: number): number {
+    if (!listEl) return 0
+    const y = clientY - listEl.getBoundingClientRect().top + listEl.scrollTop
+    const items = rows()
+    for (let i = 0; i < items.length; i++) {
+      if (y < items[i].offsetTop + items[i].offsetHeight / 2) return i
+    }
+    return items.length
+  }
+
+  function externalLineTop(slot: number): number {
+    const items = rows()
+    if (items.length === 0) return 0
+    if (slot >= items.length) {
+      const last = items[items.length - 1]
+      return last.offsetTop + last.offsetHeight
+    }
+    return items[Math.max(0, slot)].offsetTop
+  }
+
+  function onDragOver(event: DragEvent): void {
+    if (drag || !isTrackDrag(event)) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    externalSlot = externalSlotAt(event.clientY)
+    externalTop = externalLineTop(externalSlot)
+    external = true
+  }
+
+  function onDragLeave(event: DragEvent): void {
+    const next = event.relatedTarget as Node | null
+    if (next && (event.currentTarget as HTMLElement).contains(next)) return
+    external = false
+  }
+
+  function onDrop(event: DragEvent): void {
+    if (drag || !isTrackDrag(event)) return
+    event.preventDefault()
+    external = false
+    const item = trackDrag.item
+    if (!item) return
+    const at = player.insertAt(externalSlot, item)
+    if (at >= 0) toast.show(`Added ${item.title} to queue`)
+  }
 
   /** Row boxes relative to the scroll content, so autoscroll cannot skew them. */
   function measure(): RowRect[] {
@@ -191,7 +255,15 @@
   }
 </script>
 
-<div class="queue">
+<div
+  class="queue"
+  class:drop-active={external}
+  role="region"
+  aria-label="Play queue"
+  ondragover={onDragOver}
+  ondragleave={onDragLeave}
+  ondrop={onDrop}
+>
   {#if player.queue.length === 0}
     <p class="empty">Nothing queued. Play a song and it lines up here.</p>
   {:else}
@@ -267,8 +339,12 @@
         </li>
       {/each}
 
-      {#if drag?.moved && lineVisible}
-        <span class="drop-line" style="top: {lineTop}px" aria-hidden="true"></span>
+      {#if (drag?.moved && lineVisible) || external}
+        <span
+          class="drop-line"
+          style="top: {external ? externalTop : lineTop}px"
+          aria-hidden="true"
+        ></span>
       {/if}
     </ul>
   {/if}
@@ -291,6 +367,11 @@
     line-height: 1.5;
     padding: 6px 20px;
     margin: 0;
+  }
+
+  /* An empty queue still accepts a drop; the hint brightens with the drag. */
+  .queue.drop-active .empty {
+    color: var(--text);
   }
 
   .list {

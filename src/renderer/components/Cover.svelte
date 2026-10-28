@@ -36,6 +36,7 @@
     class:fluid
     {src}
     {alt}
+    draggable="false"
     loading="lazy"
     decoding="async"
     onerror={() => {

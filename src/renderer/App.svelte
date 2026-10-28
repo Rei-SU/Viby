@@ -15,8 +15,10 @@
   import CollectionView from './components/CollectionView.svelte'
   import DownloadCollectionView from './components/DownloadCollectionView.svelte'
   import PlaylistPicker from './components/PlaylistPicker.svelte'
+  import QueueDropBar from './components/QueueDropBar.svelte'
   import SidePanel from './components/SidePanel.svelte'
   import { sidePanel } from './lib/side-panel.svelte'
+  import { toast } from './lib/toast.svelte'
   import { lyrics } from './lib/lyrics.svelte'
   import ImportView from './components/ImportView.svelte'
   import SettingsView from './components/SettingsView.svelte'
@@ -381,11 +383,18 @@
   <SidePanel />
   <PlayerBar />
   <PlaylistPicker />
+  <QueueDropBar />
 
   <div class="alerts">
     {#if backOnline}
       <div class="toast" role="status">
         <Icon name="check" size={14} /> Back online
+      </div>
+    {/if}
+
+    {#if toast.message}
+      <div class="toast" role="status">
+        <Icon name="queueAdd" size={14} /> {toast.message}
       </div>
     {/if}
 

@@ -309,6 +309,27 @@ class Player {
     for (const item of items) this.enqueue(item)
   }
 
+  /**
+   * Insert at a queue slot without interrupting playback; out-of-range slots
+   * append. Returns the slot actually used, or -1 when the item cannot play.
+   *
+   * A drop is a position, not an append: the queue panel shows a line between
+   * rows, and everything at or below it shifts down one. The playing row has to
+   * follow its own shift or the next track would change under the user.
+   */
+  insertAt(index: number, item: CatalogItem): number {
+    if (!isPlayable(item)) return -1
+    const at = Math.max(0, Math.min(Math.trunc(index), this.queue.length))
+    const next = [...this.queue]
+    next.splice(at, 0, toTrack(item))
+    if (this.index >= at) this.index += 1
+    this.queue = next
+    // An empty queue is prepared, not started (see `enqueue`).
+    if (this.index < 0) this.index = 0
+    this.persistSession(true)
+    return at
+  }
+
   async playAt(i: number): Promise<void> {
     if (i < 0 || i >= this.queue.length) return
     this.index = i

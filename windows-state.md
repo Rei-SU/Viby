@@ -496,3 +496,27 @@ contents.
 video, acapella) instead of 4; *After Hours* still shows all 14 album tracks;
 the `navigation` and `home` e2e suites pass.
 
+## 15. Drag any song to the queue — Windows verification (0.2.4, 2026-10-28)
+
+The Spotify-style drag source uses HTML5 drag-and-drop on every `TrackRow`, with
+the player-bar queue button, the open queue list (positioned insert) and a
+floating drop bar as targets. Verified on Windows 11 in the dev app:
+
+- `npm run typecheck` — 0 errors, 0 warnings.
+- `node tests/e2e/run.mjs home library queue quick-search` — all checks pass,
+  including the seven new drag checks in `queue`.
+- `node tests/behaviour.mjs` — all pass, including the four new `insertAt` cases.
+- Native (trusted) drag through Chromium's own pipeline:
+  `Input.setInterceptDrags({enabled:true})` captured items
+  `['application/x-viby-track','text/plain']`, then `Input.dispatchDragEvent`
+  `dragEnter`/`dragOver`/`drop` showed the insertion line and inserted
+  "Bali maak" between "Native A" and "Native B", with the toast and the drag bar
+  clearing afterwards.
+
+Caveat for future Windows testing: a plain `Input.dispatchMouseEvent` press and
+move does **not** start a native HTML5 drag in Electron/Chromium (the drag store
+and drop bar appear, but no `dragover` reaches the list). Drag interception plus
+`Input.dispatchDragEvent` is the reliable CDP path. A real mouse drag was not
+exercised by automation; the event pipeline above is the same one a real drag
+feeds. macOS was not re-checked (no Mac available).
+

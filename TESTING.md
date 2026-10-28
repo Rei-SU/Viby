@@ -127,7 +127,7 @@ the app while they run — they own the queue.
 | `links` | player-bar title → song page, artist link, related list, every credited artist linked in the dock |
 | `release-focus` | song row/card bodies play while only the title text opens the release at the row and flashes it; a single opens the song page; queue titles follow; release names stay links |
 | `lyrics` | panel opens docked beside the page, page width shrinks and restores, synced active line, click-to-seek, closes |
-| `queue` | queue docks beside the page, count and Clear, grip reorder by pointer and keyboard, remove, empty state, lyrics sharing the panel |
+| `queue` | queue docks beside the page, count and Clear, grip reorder by pointer and keyboard, remove, empty state, lyrics sharing the panel, and dragging any song row onto the empty queue / a slot / the drop bar / the queue button |
 | `lyrics-change` | a new track's lyrics reset to the top (no inherited scroll) |
 | `library` | playlists and saved releases appear, open, and delete cleanly |
 | `resume` | session save → reload → restored paused at the timestamp |
@@ -143,8 +143,8 @@ the app while they run — they own the queue.
 node tests/behaviour.mjs
 ```
 
-Queue editing and reordering, repeat modes, shuffle, favourites, history, media session. It owns
-the queue for its duration and restores settings afterwards.
+Queue editing and reordering, `insertAt` for drag-to-queue, repeat modes, shuffle, favourites,
+history, media session. It owns the queue for its duration and restores settings afterwards.
 
 ## Impact map
 
@@ -181,7 +181,8 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts` | unit `artist-credits`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
 | `src/shared/track-title.ts`, title navigation metadata | unit `track-title`, `innertube`, `listening` · e2e `release-focus` |
-| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts`, `release-focus` · visual check |
+| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts`, `release-focus`, `queue` · visual check |
+| `src/renderer/lib/track-drag.svelte.ts`, `toast.svelte.ts`, `QueueDropBar` | e2e `queue` · native drag via CDP `Input.setInterceptDrags` |
 | `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue` |
 | `src/renderer/lib/rail-fit.ts` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
 | `src/renderer/lib/keyboard.ts` | e2e `shortcuts` · behaviour |
