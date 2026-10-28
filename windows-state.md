@@ -587,5 +587,7 @@ value includes the version a build marked seen without showing it), and
 release jobs fetch tags explicitly and fail closed with
 `VIBY_REQUIRE_CHANGELOG=1` when the running version has no baked notes.
 
-**Status:** Fixed for 0.5.1. The affected install (seen 0.5.0, shown empty)
-will get 0.5.0 and 0.5.1 in the next sheet.
+**Status:** Fixed and verified on Windows 11. The affected install updated from
+0.5.0 through Settings > Updates, relaunched as 0.5.1, and the What's New sheet
+appeared with 0.5.1 and 0.5.0; closing it recorded `lastSeenVersion` and
+`lastShownVersion` as 0.5.1.
