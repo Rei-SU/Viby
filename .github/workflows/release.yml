@@ -121,6 +121,16 @@ jobs:
         env:
           VIBY_REQUIRE_CHANGELOG: '1'
 
+      # The arm64 app must carry a valid bundle seal: Apple Silicon reports a
+      # signature that fails validation as "damaged", which reads as a corrupt
+      # download and has no Open Anyway. An unsigned build must fail here, not
+      # in a user's first launch.
+      - name: Verify the app bundles are sealed
+        run: |
+          for app in dist/mac/Viby.app dist/mac-arm64/Viby.app; do
+            codesign --verify --strict --verbose=2 "$app"
+          done
+
       # artifactName templates cannot map arm64 -> arm or x64 -> intel, so the
       # two installers are renamed here, before upload. macOS produces no
       # update metadata (dmg.writeUpdateInfo: false), so the release receives

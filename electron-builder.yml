@@ -43,9 +43,14 @@ mac:
     - target: dmg
       arch: [x64, arm64]
   category: public.app-category.music
-  # Unsigned on purpose: signing needs a paid Apple Developer account.
-  # See PLAN §2.1 — in-place macOS updates require signing, Windows does not.
-  identity: null
+  # Ad-hoc sign the bundle ("-" means no certificate). `identity: null` skipped
+  # signing entirely, which left the arm64 app carrying Electron's upstream
+  # signature after packaging changed the bundle; Apple Silicon reports an
+  # invalid signature as "damaged", a dialog with no Open Anyway button. An
+  # ad-hoc seal is valid, so removing the download quarantine is enough.
+  # Developer ID signing + notarization would remove the warning entirely;
+  # that needs a paid Apple account (PLAN §2.1).
+  identity: '-'
   hardenedRuntime: false
   gatekeeperAssess: false
 
