@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import { compareVersions } from '@shared/version'
 import type { ChangelogEntry, ChangelogInfo } from '@shared/types'
+import { isFirstRun } from './settings'
 
 /**
  * Release notes baked into the build from the annotated tags
@@ -54,6 +55,7 @@ export function changelogInfo(): ChangelogInfo {
     version,
     // A tag can be ahead of package.json in a dev checkout; never show notes
     // for a version this build does not contain.
-    entries: load().filter((entry) => compareVersions(entry.version, version) <= 0)
+    entries: load().filter((entry) => compareVersions(entry.version, version) <= 0),
+    firstRun: isFirstRun()
   }
 }

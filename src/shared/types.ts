@@ -103,10 +103,17 @@ export type Settings = {
   /** A version the user chose not to be offered again. Empty when none. */
   skippedUpdateVersion: string
   /**
-   * The last version whose release notes were shown. Empty on a first install,
-   * which is how Viby knows not to open the What's New sheet then.
+   * The version whose notes the user is caught up with. Empty only when this
+   * install predates the sheet, which is why it is not enough to tell a first
+   * install apart; see `lastShownVersion`.
    */
   lastSeenVersion: string
+  /**
+   * The version whose notes were actually put on screen. Empty means no sheet
+   * has ever been shown here, so a version recorded as seen by an older build
+   * still has notes to catch up on.
+   */
+  lastShownVersion: string
 }
 
 /** Connectivity as the main process sees it, not just `navigator.onLine`. */
@@ -172,6 +179,12 @@ export type ChangelogInfo = {
   version: string
   /** Newest first, never newer than `version`. */
   entries: ChangelogEntry[]
+  /**
+   * True when this launch created the settings file. A first install has
+   * nothing to catch up on, and an empty baseline on any other install is an
+   * upgrade from a build that predates the sheet.
+   */
+  firstRun: boolean
 }
 
 export type CatalogKind = 'song' | 'album' | 'artist' | 'playlist' | 'unknown'

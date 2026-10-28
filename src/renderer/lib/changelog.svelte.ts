@@ -1,4 +1,5 @@
 import type { ChangelogEntry } from '@shared/types'
+import { unseenEntries } from '@shared/changelog'
 import { isNewer } from '@shared/version'
 import { api } from './api'
 
@@ -9,8 +10,8 @@ const MAX_VERSIONS = 3
  * The What's New sheet.
  *
  * The notes are baked into the build, so this is purely a local decision:
- * compare the running version with the one whose notes were last shown. An
- * empty value means a first install, where there is nothing to catch up on.
+ * compare the running version with the one whose notes were last shown. The
+ * rules live in `@shared/changelog` so they can be tested without a window.
  */
 class ChangelogStore {
   open = $state(false)
@@ -41,18 +42,33 @@ class ChangelogStore {
       this.current = info.version
       this.hasCurrent = info.entries.some((entry) => entry.version === info.version)
 
-      const seen = (await api.settings.get()).lastSeenVersion
-      if (!seen) {
-        // First install: remember the version so the next update has a baseline.
-        await api.settings.set({ lastSeenVersion: info.version })
+      const settings = await api.settings.get()
+      const unseen = unseenEntries(
+        info.entries,
+        settings.lastSeenVersion,
+        settings.lastShownVersion,
+        info.firstRun
+      )
+
+      if (info.firstRun) {
+        // Nothing to catch up on. Record both values so the next update is a
+        // normal one instead of looking like another first install.
+        await api.settings.set({
+          lastSeenVersion: info.version,
+          lastShownVersion: info.version
+        })
         return
       }
-      if (!isNewer(info.version, seen)) return
 
-      const unseen = info.entries.filter((entry) => isNewer(entry.version, seen))
       if (unseen.length === 0) {
-        // The update shipped without notes; do not ask again for this version.
-        await api.settings.set({ lastSeenVersion: info.version })
+        // Up to date, or this release shipped without notes: advance the
+        // baseline so it is not asked about again.
+        if (isNewer(info.version, settings.lastSeenVersion)) {
+          await api.settings.set({
+            lastSeenVersion: info.version,
+            lastShownVersion: info.version
+          })
+        }
         return
       }
 
@@ -78,6 +94,11 @@ class ChangelogStore {
       this.entries = [entry]
       this.earlier = 0
       this.open = true
+      // Reading the running version's notes catches this install up.
+      await api.settings.set({
+        lastSeenVersion: info.version,
+        lastShownVersion: info.version
+      })
     } catch {
       // Nothing to show.
     }
@@ -91,7 +112,10 @@ class ChangelogStore {
     this.earlier = 0
     if (!this.current) return
     try {
-      await api.settings.set({ lastSeenVersion: this.current })
+      await api.settings.set({
+        lastSeenVersion: this.current,
+        lastShownVersion: this.current
+      })
     } catch {
       // A failed write only means the sheet may appear once more.
     }
