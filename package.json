@@ -1,6 +1,6 @@
 {
   "name": "viby",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Ad-free, account-free desktop music client",
   "main": "./out/main/index.js",
   "author": "Viby",
