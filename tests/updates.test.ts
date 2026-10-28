@@ -193,6 +193,59 @@ console.log('\nWindows: in-place download and install:')
   check('install delegates to the native updater', installs === 1, String(installs))
 }
 
+console.log('\nWindows: downloadAndInstall restarts without a second click:')
+{
+  let installs = 0
+  const native = {
+    check: async (): Promise<string | null> => '0.2.0',
+    download: async (): Promise<void> => undefined,
+    install: (): void => {
+      installs++
+    }
+  }
+  const { updater } = build({
+    native,
+    latestRelease: async () => ({
+      version: '0.2.0',
+      url: 'https://example.test',
+      artifacts: { 'Viby-windows-x64.exe': 'c'.repeat(64) }
+    })
+  })
+  await updater.check()
+  const downloaded = await updater.downloadAndInstall()
+  check('the download still ends ready', downloaded.phase === 'ready', downloaded.phase)
+  check('install waits for the ready state to be broadcast', installs === 0, String(installs))
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  check('install runs on its own once ready', installs === 1, String(installs))
+}
+
+console.log('\nWindows: a failed download never installs:')
+{
+  let installs = 0
+  const native = {
+    check: async (): Promise<string | null> => '0.2.0',
+    download: async (): Promise<void> => {
+      throw new Error('network went away')
+    },
+    install: (): void => {
+      installs++
+    }
+  }
+  const { updater } = build({
+    native,
+    latestRelease: async () => ({
+      version: '0.2.0',
+      url: 'https://example.test',
+      artifacts: { 'Viby-windows-x64.exe': 'c'.repeat(64) }
+    })
+  })
+  await updater.check()
+  const failed = await updater.downloadAndInstall()
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  check('the failure is surfaced', failed.phase === 'error', failed.phase)
+  check('nothing is installed', installs === 0, String(installs))
+}
+
 console.log('\nWindows: install is inert before the download finishes:')
 {
   let installs = 0

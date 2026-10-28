@@ -171,6 +171,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts` | unit `images` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
+| `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
 | `src/renderer/lib/nav.svelte.ts`, `src/renderer/lib/release.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title` |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts`, `release-focus` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |

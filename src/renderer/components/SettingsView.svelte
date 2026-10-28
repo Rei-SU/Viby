@@ -129,7 +129,7 @@
       case 'available':
         return { label: 'Download', disabled: false, run: downloadUpdate }
       case 'ready':
-        return { label: 'Restart & install', disabled: false, run: installUpdate }
+        return { label: 'Restarting…', disabled: true, run: installUpdate }
       case 'manual':
         return { label: 'Quit Viby', disabled: false, run: installUpdate }
       default:
@@ -151,12 +151,14 @@
         return state.message ?? `You're up to date (${state.currentVersion}).`
       case 'available':
         return state.canInstall
-          ? `Version ${state.version} is available. It downloads in the background and installs when you restart.`
+          ? `Version ${state.version} is available. Downloading it restarts Viby to install it.`
           : `Version ${state.version} is available. Viby downloads the installer for this Mac and opens it.`
       case 'downloading':
-        return `Downloading ${state.version ?? 'the update'}… ${Math.round((state.progress ?? 0) * 100)}%`
+        return `Downloading ${state.version ?? 'the update'}… ${Math.round((state.progress ?? 0) * 100)}%${
+          state.canInstall ? ' Viby restarts when it finishes.' : ''
+        }`
       case 'ready':
-        return `Version ${state.version} is ready. Restart Viby to finish.`
+        return `Version ${state.version} is ready. Restarting Viby to install it…`
       case 'manual':
         return state.message ?? 'Installer opened. Drag Viby into Applications, then reopen it.'
       case 'error':

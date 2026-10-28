@@ -198,6 +198,25 @@ export class Updater {
     }
   }
 
+  /**
+   * Download, then install as soon as the bytes are verified.
+   *
+   * This is the Windows button path: the user asked once, so Viby should not
+   * ask again with a second "Restart & install" click. The install is deferred
+   * by a tick so the `ready` broadcast and the IPC reply reach the renderer
+   * before the process starts closing. The installer itself is silent and
+   * relaunches the app (`updater-native.ts`).
+   */
+  async downloadAndInstall(): Promise<UpdateState> {
+    const state = await this.download()
+    if (state.phase !== 'ready' || !this.deps.native) return state
+    setTimeout(() => {
+      // A cancel or a second click may have moved the state on.
+      if (this.state.phase === 'ready') this.install()
+    }, 0)
+    return state
+  }
+
   /** Abort a transfer. The state returns to `available` when it unwinds. */
   cancel(): UpdateState {
     if (this.state.phase === 'downloading') this.controller?.abort()

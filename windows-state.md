@@ -520,3 +520,45 @@ and drop bar appear, but no `dragover` reaches the list). Drag interception plus
 exercised by automation; the event pipeline above is the same one a real drag
 feeds. macOS was not re-checked (no Mac available).
 
+## 16. In-app updates showed the first-install wizard (0.2.4, 2026-10-28)
+
+Clicking **Download** in Settings downloaded the new build, but the NSIS
+assisted-installer wizard then appeared as if Viby were being installed for the
+first time, and the user had to click through it. Two separate causes:
+
+1. `updater-native.ts` called `autoUpdater.quitAndInstall(false, true)`. The
+   first argument is `isSilent`; `false` told electron-updater to run the
+   installer with its normal UI. With the assisted installer
+   (`nsis.oneClick: false`), that is the full welcome/mode/folder wizard.
+2. Even after the download verified, the state machine stopped at `ready` and
+   waited for a second **Restart & install** click.
+
+**Fix:** `install()` now calls `quitAndInstall(true, true)`, which passes `/S`
+and `--force-run`. The assisted installer reuses the previous `InstallLocation`
+from the registry (`multiUser.nsh`) and only runs the app after finishing when
+it is both silent and `--force-run` (`installSection.nsh`), so an update
+replaces the existing per-user copy and relaunches without a wizard. A new
+`Updater.downloadAndInstall()` (used by the `updatesDownload` IPC handler)
+schedules the install as soon as the verified download finishes, so Download is
+the only click. The `ready` state is still broadcast first, and the install is
+deferred by a tick so the renderer can show "Restarting…" and the IPC reply can
+land before the window closes.
+
+**Verified on Windows 11** (dev app stopped so the single-instance lock did not
+interfere): built `dist\Viby-windows-x64.exe`, recorded the installed exe hash,
+then ran it exactly as electron-updater does:
+
+```powershell
+Start-Process dist\Viby-windows-x64.exe -ArgumentList '--updated','/S','--force-run'
+```
+
+The installer exited with code 0, no Setup window appeared, the installed
+`%LOCALAPPDATA%\Programs\Viby\Viby.exe` hash changed to the new build, and a new
+`Viby` process/window started on its own. `node tests/unit.mjs updates` passes,
+including the new `downloadAndInstall` checks (install waits for the ready
+state; a failed download never installs). A full in-app update against a newer
+published release was not exercised because 0.2.4 is the current release; the
+installer arguments above are the exact ones `quitAndInstall(true, true)`
+produces.
+
+

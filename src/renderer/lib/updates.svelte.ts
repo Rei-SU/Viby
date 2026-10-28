@@ -37,7 +37,12 @@ class UpdateStore {
   }
 
   async download(): Promise<void> {
-    this.state = await api.updates.download()
+    try {
+      this.state = await api.updates.download()
+    } catch {
+      // The Windows updater quits as soon as the download verifies, so the IPC
+      // reply may never reach this frame. That is the intended outcome.
+    }
   }
 
   async cancel(): Promise<void> {

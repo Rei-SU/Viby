@@ -195,7 +195,7 @@ let importResolveController: AbortController | null = null
 
   ipcMain.handle(CH.updatesGet, () => updater.get())
   ipcMain.handle(CH.updatesCheck, () => updater.check())
-  ipcMain.handle(CH.updatesDownload, () => updater.download())
+  ipcMain.handle(CH.updatesDownload, () => updater.downloadAndInstall())
   ipcMain.handle(CH.updatesCancel, () => updater.cancel())
   ipcMain.handle(CH.updatesInstall, () => updater.install())
 

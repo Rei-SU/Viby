@@ -102,8 +102,11 @@ export function createNativeUpdater(): NativeUpdater {
       // quitAndInstall emits close before before-quit, which close-to-tray would
       // otherwise intercept and turn into a hide.
       markQuitting()
-      // Not silent; relaunch afterwards so the user lands back in the app.
-      autoUpdater.quitAndInstall(false, true)
+      // Silent: NSIS gets `/S`, so the assisted installer that a first install
+      // shows never appears during an update. `true` for isForceRunAfter adds
+      // `--force-run`, which the assisted installer honours only in silent mode
+      // (installSection.nsh), so the new version relaunches by itself.
+      autoUpdater.quitAndInstall(true, true)
     }
   }
 }
