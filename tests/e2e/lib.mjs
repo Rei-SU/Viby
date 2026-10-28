@@ -8,7 +8,19 @@ export { sleep }
  */
 export async function openApp() {
   const { evaluate, send, close } = await connect()
-  const settings = await evaluate('window.__viby.api.settings.get()')
+
+  // The dev app exposes its page before the renderer has mounted, so wait for
+  // the handle every scenario drives instead of racing the first evaluation.
+  let settings
+  for (let attempt = 0; attempt < 60 && !settings; attempt++) {
+    try {
+      settings = await evaluate('window.__viby?.api?.settings.get()')
+    } catch {
+      // The page is still loading.
+    }
+    if (!settings) await sleep(250)
+  }
+  if (!settings) throw new Error('the app handle did not appear on the page')
 
   return {
     evaluate,

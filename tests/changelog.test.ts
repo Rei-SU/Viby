@@ -7,6 +7,7 @@ import {
   parseReleaseNotes,
   parseTagVersion
 } from '../scripts/build-changelog.mjs'
+import { previousVersion, unseenEntries } from '../src/shared/changelog'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = ''): void {
@@ -73,6 +74,47 @@ console.log('\ntag versions:')
   check('accepts a bare version', parseTagVersion('0.2.4')?.join('.') === '0.2.4')
   check('rejects a prerelease', parseTagVersion('1.2.3-beta.1') === null)
   check('rejects a non-version tag', parseTagVersion('latest') === null)
+}
+
+console.log('\nwhat a launch should show:')
+{
+  const entry = (version: string) => ({
+    version,
+    date: '',
+    url: '',
+    sections: [{ title: 'Fixed', items: ['Something.'] }]
+  })
+  const entries = ['0.5.1', '0.5.0', '0.2.4', '0.2.3', '0.2.2'].map(entry)
+  const versions = (list: { version: string }[]) => list.map((item) => item.version).join(',')
+
+  check('a first install shows nothing', unseenEntries(entries, '', '', true).length === 0)
+  check(
+    'an install from before the sheet shows the running version only',
+    versions(unseenEntries(entries, '', '', false)) === '0.5.1',
+    versions(unseenEntries(entries, '', '', false))
+  )
+  check(
+    'a version recorded without a sheet is shown again',
+    versions(unseenEntries(entries, '0.5.0', '', false)) === '0.5.1,0.5.0',
+    versions(unseenEntries(entries, '0.5.0', '', false))
+  )
+  check(
+    'once shown, only newer notes are offered',
+    versions(unseenEntries(entries, '0.5.0', '0.5.0', false)) === '0.5.1',
+    versions(unseenEntries(entries, '0.5.0', '0.5.0', false))
+  )
+  check(
+    'being current offers nothing',
+    unseenEntries(entries, '0.5.1', '0.5.1', false).length === 0
+  )
+  check(
+    'a shown version ahead of seen is not offered twice',
+    versions(unseenEntries(entries, '0.2.4', '0.5.0', false)) === '0.5.1',
+    versions(unseenEntries(entries, '0.2.4', '0.5.0', false))
+  )
+  check('previousVersion finds the entry below seen', previousVersion(entries, '0.5.0') === '0.2.4')
+  check('previousVersion is empty for the oldest entry', previousVersion(entries, '0.2.2') === '')
+  check('previousVersion is empty without a baseline', previousVersion(entries, '') === '')
 }
 
 console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILURE(S)`}`)
