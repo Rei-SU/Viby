@@ -121,6 +121,7 @@ the app while they run — they own the queue.
 | `carousel` | rails hide their scrollbar, header chevrons page the row, the wheel scrolls sideways on Windows |
 | `shortcuts` | Space, transport/seek/volume keys, mute/shuffle/repeat/like, Escape, `/`, and text-field guards |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
+| `playback-failure` | media errors stop the fake Pause, retry a fresh source, and recover from a local download or show a visible error |
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |
 | `links` | player-bar title → song page, artist link, related list, every credited artist linked in the dock |
@@ -169,7 +170,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts` | unit `images` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
-| `src/renderer/lib/player.svelte.ts` | e2e `playback`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
+| `src/renderer/lib/player.svelte.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
 | `src/renderer/lib/nav.svelte.ts`, `src/renderer/lib/release.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title` |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts`, `release-focus` |
 | `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |

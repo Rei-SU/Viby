@@ -651,6 +651,14 @@ The Home card grouped plays by release and capped each group at two songs, which
 
 Two pitfalls shaped the code. `history.load()` reads its cache guard through `untrack`, because Home calls it from an effect: a tracked read made every response re-trigger the effect, invalidating each request so the summary never stuck. Rows are not keyed by track id: the history can hold the same song several times, and Svelte aborts a keyed each with `each_key_duplicate` — the card keys by position, the panel by entry plus position.
 
+### Playback failure recovery (2026-10-28)
+
+After autoplay advanced to a related track, the next title and artwork appeared but the deck stayed on Pause at 0:00. The detached media element was in `NETWORK_NO_SOURCE` with **error code 4** ("Format error") while `player.playing` was still true: `audio.play()` had resolved and fired `play`, the source then failed, and the automatic recovery swallowed the rejection of its own replacement `play()`. The UI was showing a pause state that did not exist.
+
+`audio.onerror` now parks the element and marks playback stopped before recovering. Recovery uses its full two-attempt budget in one pass, re-resolving a fresh URL each time; a rejected recovery `play()` is no longer swallowed, and when both attempts fail `failPlayback()` shows the playback error, leaves the dock on Play, detaches the dead source and clears the stream so the next attempt starts from scratch. Deliberate play commands (`playList`, `playAt`, Play, resume) reset that budget; the re-use path also handles a rejected `play()` instead of ignoring it. A media error can no longer leave the dock on a fake Pause.
+
+Verified with the new e2e `playback-failure`: a synthetic media error on a local download flips the dock to stopped/loading, recovery plays the download, and the fallback path shows Play plus the error alert. Normal cached playback and auto-advance still pass.
+
 ### Listening snapshot (2026-10-27)
 
 The weekly card carried a tiny seven-bar pulse chart and a share bar under every artist, which looked like a dashboard and answered questions nobody asked. It is now a clean reading of the week: **Vibing Time this week** is the only heading, the plays and unique songs sit underneath it, and the total time is a larger 5×7 dot-matrix clock on the right of the same row instead of a line of its own. The clock has no surrounding panel; the digits sit directly on the card. It is drawn in SVG (`PixelClock.svelte`), so it needs no pixel font, stays crisp and inherits the app's monochrome palette. Tiny **HRS** and **MIN** captions sit under their digit groups, so the colon cannot be mistaken for a time of day. The chart and every share bar are gone.

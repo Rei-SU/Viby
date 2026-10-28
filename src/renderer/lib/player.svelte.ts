@@ -263,6 +263,15 @@ class Player {
       const code = audio.error?.code
       if (code === 1) return
       console.warn('[player] media error', code ?? '?', this.current?.id ?? '-')
+      // `play()` can resolve (and fire `play`) before the source is known to be
+      // decodable. A media error means it is not playing; never leave the dock
+      // showing Pause over a dead element.
+      this.playing = false
+      api.player.setPlaying(false)
+      // A failed element can still report `paused === false`. Park it so the
+      // Play button's next click takes the resume/recover path rather than
+      // silently pausing a dead source.
+      if (!audio.paused) audio.pause()
       void this.recover()
     }
   }
@@ -275,6 +284,9 @@ class Player {
     if (tracks.length === 0) return
     this.queue = tracks
     this.index = Math.max(0, Math.min(startIndex, tracks.length - 1))
+    // A deliberate play action gets a fresh automatic-recovery budget.
+    this.recoverTrackId = this.queue[this.index]?.id ?? null
+    this.recoverAttempts = 0
     await this.start(true)
   }
 
@@ -300,6 +312,8 @@ class Player {
   async playAt(i: number): Promise<void> {
     if (i < 0 || i >= this.queue.length) return
     this.index = i
+    this.recoverTrackId = this.queue[i]?.id ?? null
+    this.recoverAttempts = 0
     await this.start(true)
   }
 
@@ -380,6 +394,9 @@ class Player {
 
     // Restored session: nothing is loaded yet, so start it at the saved position.
     if (!audio.src) {
+      // A fresh user attempt gets a fresh automatic-recovery budget.
+      this.recoverTrackId = this.current.id
+      this.recoverAttempts = 0
       void this.start(true)
       return
     }
@@ -411,6 +428,8 @@ class Player {
       const name = err instanceof DOMException ? err.name : ''
       // Replacing the source or an autoplay block is not a stream failure.
       if (name === 'AbortError' || name === 'NotAllowedError') return
+      this.playing = false
+      api.player.setPlaying(false)
       await this.recover()
     }
   }
@@ -661,7 +680,18 @@ class Player {
       // Already loaded: nothing to resolve, and anything older is now irrelevant.
       this.busy = false
       this.stopTimer()
-      if (autoplay) await audio.play().catch(() => undefined)
+      if (autoplay) {
+        try {
+          await audio.play()
+        } catch (err) {
+          if (token !== this.playToken) return
+          const name = err instanceof DOMException ? err.name : ''
+          if (name === 'AbortError' || name === 'NotAllowedError') return
+          this.playing = false
+          api.player.setPlaying(false)
+          void this.recover()
+        }
+      }
       return
     }
 
@@ -765,10 +795,15 @@ class Player {
         try {
           await audio.play()
         } catch (err) {
+          if (token !== this.playToken) return
+          const name = err instanceof DOMException ? err.name : ''
+          if (name === 'AbortError' || name === 'NotAllowedError') return
           // Media failures are handled by recover() (a fresh URL or a remote
           // fallback). Showing the raw message here produced "failed to load
           // because no supported source was found" even when a retry worked.
           console.warn('[player] play rejected', (err as Error)?.message ?? err)
+          this.playing = false
+          api.player.setPlaying(false)
           void this.recover()
         }
       }
@@ -799,7 +834,7 @@ class Player {
     if (this.recoveringFor === track.id) return
 
     if (network.offline && this.stream?.source !== 'download') {
-      this.error = "You're offline. This song isn't downloaded."
+      this.failPlayback("You're offline. This song isn't downloaded.")
       return
     }
 
@@ -808,41 +843,67 @@ class Player {
       this.recoverAttempts = 0
     }
     if (this.recoverAttempts >= 2) {
-      this.error = 'This track could not be played.'
+      this.failPlayback()
       return
     }
-    this.recoverAttempts += 1
 
     const token = this.playToken
     const recover = ++this.recoverToken
     this.recoveringFor = track.id
     this.recovering = true
     this.reconnecting = true
+
     try {
       const resumeAt = this.position
-      const res = await api.player.resolve({
-        input: track.id,
-        force: true,
-        // A cached or downloaded copy that failed to decode must not be handed back.
-        discardCache: this.stream?.kind === 'file'
-      })
-      if (
-        recover !== this.recoverToken ||
-        token !== this.playToken ||
-        this.current?.id !== track.id
-      ) {
-        return
-      }
-      if (!res.ok) {
-        if (res.error !== CANCELLED) this.error = res.error
-        return
+
+      // A fresh URL can fail too (the CDN can serve an unusable response). Use
+      // the whole retry budget here; previously a rejected recovery play() was
+      // swallowed, leaving the dock on Pause over a dead element forever.
+      while (this.recoverAttempts < 2) {
+        this.recoverAttempts += 1
+        const res = await api.player.resolve({
+          input: track.id,
+          force: true,
+          // A cached or downloaded copy that failed to decode must not be handed back.
+          discardCache: this.stream?.kind === 'file'
+        })
+        if (
+          recover !== this.recoverToken ||
+          token !== this.playToken ||
+          this.current?.id !== track.id
+        ) {
+          return
+        }
+        if (!res.ok) {
+          if (res.error === CANCELLED) return
+          this.failPlayback(res.error)
+          return
+        }
+
+        this.stream = res.data.stream
+        audio.src = res.data.stream.url
+        this.loadedId = track.id
+        if (resumeAt > 1) audio.currentTime = resumeAt
+        this.error = null
+
+        try {
+          await audio.play()
+          return
+        } catch (err) {
+          if (
+            recover !== this.recoverToken ||
+            token !== this.playToken ||
+            this.current?.id !== track.id
+          ) {
+            return
+          }
+          const name = err instanceof DOMException ? err.name : ''
+          if (name === 'AbortError') return
+          // The replaced source failed as well; spend the remaining attempt.
+        }
       }
 
-      this.stream = res.data.stream
-      audio.src = res.data.stream.url
-      this.loadedId = track.id
-      if (resumeAt > 1) audio.currentTime = resumeAt
-      await audio.play().catch(() => undefined)
+      this.failPlayback()
     } finally {
       if (recover === this.recoverToken) {
         this.recoveringFor = null
@@ -850,6 +911,27 @@ class Player {
         this.reconnecting = false
       }
     }
+  }
+
+  /**
+   * Recovery is exhausted. Show a real stopped state instead of leaving the
+   * dock on Pause, and detach the dead source so Play starts a fresh resolve.
+   */
+  private failPlayback(message = 'This track could not be played.'): void {
+    this.error = message
+    this.playing = false
+    this.busy = false
+    this.recovering = false
+    this.reconnecting = false
+    this.recoveringFor = null
+    api.player.setPlaying(false)
+    if (!audio.paused) audio.pause()
+    // No load(): an empty element would only emit another error event. Play
+    // notices the missing source and starts a fresh resolve.
+    audio.removeAttribute('src')
+    this.loadedId = null
+    this.stream = null
+    this.stopTimer()
   }
 
   private async advance(direction: 1 | -1): Promise<void> {
