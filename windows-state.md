@@ -362,6 +362,19 @@ installed app is open makes the dev instance quit immediately ("DevTools
 listening" then exit). Work around with `--user-data-dir=<temp>`.
 **File:** `src/main/index.ts`
 
+### 7.6 README screenshots need PrintWindow to show the window buttons — Resolved (docs)
+Windows draws the minimize/maximize/close buttons for `titleBarOverlay` itself,
+outside the renderer. `webContents.capturePage()` therefore leaves that strip
+empty, which is why the old README shots had a blank top-right corner. Capturing
+the native window with `PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT)` includes
+the real buttons (and works while the window is occluded); crop the result to
+`DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)`. At 96 DPI a 1614×1007
+window has a 1600×1000 visible frame, because the window rect carries ~7 px of
+invisible resize border. The current `docs/screenshots/` set was captured this
+way.
+
+**Files:** `docs/screenshots/`, `src/main/windows.ts` (`titleBarOverlay`)
+
 ---
 
 ## 8. Verified working on Windows
