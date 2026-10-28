@@ -14,7 +14,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Resolver, ResolveError } from '../src/main/ytdlp/resolver'
-import { runnerInfo } from '../src/main/ytdlp/binary'
+import { runnerInfo, shouldReplaceZipapp } from '../src/main/ytdlp/binary'
 
 let failures = 0
 
@@ -48,6 +48,31 @@ console.log('resolver regression tests\n')
 const info = await runnerInfo()
 console.log(`runner: ${info.kind} · ${info.runtime} · ${info.version} · ${info.path}\n`)
 check('runs on the vendored Python (no system dependency)', info.runtime === 'bundled', info.runtime)
+
+// A new app release ships a newer zipapp. Existing installs keep their copy in
+// userData, so the bundle must win — but never over a copy the user updated
+// from Settings, which can be newer than the bundle.
+check(
+  'a newer bundled zipapp replaces a stale managed copy',
+  shouldReplaceZipapp('2026.10.26', '2026.08.19')
+)
+check(
+  'an older bundled zipapp never downgrades a newer managed copy',
+  !shouldReplaceZipapp('2026.10.21', '2026.10.26')
+)
+check(
+  'the same version keeps the managed copy',
+  !shouldReplaceZipapp('2026.10.26', '2026.10.26')
+)
+check(
+  'an unknown managed version is replaced',
+  shouldReplaceZipapp('2026.10.26', null)
+)
+check(
+  'unparseable versions never trigger a replace',
+  !shouldReplaceZipapp('nightly', '2026.10.26') &&
+    !shouldReplaceZipapp('2026.10.26', '2026.10.26.1')
+)
 
 // The exact failure that reached the user: a video that does not exist. Before
 // the fix this crashed with "Cannot read properties of null (reading 'id')".

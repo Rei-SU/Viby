@@ -6,15 +6,18 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  readFileSync,
   renameSync,
   rmSync,
-  statSync
+  statSync,
+  writeFileSync
 } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { app } from 'electron'
 import type { YtDlpInfo } from '@shared/types'
+import { isNewer } from '../version'
 import { run } from './exec'
 
 /**
@@ -120,6 +123,15 @@ async function provision(): Promise<Runner> {
     process.env.PYTHONIOENCODING = 'utf-8'
     process.env.PYTHONPYCACHEPREFIX ??= join(app.getPath('userData'), 'pycache')
 
+    // A newer app ships a newer bundle; existing installs must pick it up
+    // without the user finding Settings → Update resolver.
+    try {
+      await syncBundledZipapp(interpreters.map((entry) => entry.command))
+    } catch (err) {
+      // The copy already in userData still works; never fail startup over this.
+      console.warn('[yt-dlp] could not refresh the bundled resolver', err)
+    }
+
     for (const { command, runtime } of interpreters) {
       const extracted = await ensureExtracted(command)
       if (extracted && (await works(command, extracted.entry))) {
@@ -206,6 +218,119 @@ async function ensureZipapp(dest: string): Promise<string> {
 
   await download(`${RELEASE_BASE}/yt-dlp`, dest)
   return dest
+}
+
+/**
+ * What the bundle looked like when we last compared it. Its only job is to keep
+ * the version probe off the startup path: the probe runs once per bundled file,
+ * not once per launch.
+ */
+type BundleMarker = { size: number; mtimeMs: number; version: string | null }
+
+function markerPath(): string {
+  return join(binDir(), 'bundled-zipapp.json')
+}
+
+function readMarker(): BundleMarker | null {
+  try {
+    const parsed = JSON.parse(readFileSync(markerPath(), 'utf8')) as Partial<BundleMarker>
+    if (typeof parsed.size !== 'number' || typeof parsed.mtimeMs !== 'number') return null
+    return {
+      size: parsed.size,
+      mtimeMs: parsed.mtimeMs,
+      version: typeof parsed.version === 'string' ? parsed.version : null
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeMarker(marker: BundleMarker): void {
+  try {
+    writeFileSync(markerPath(), JSON.stringify(marker))
+  } catch {
+    // The marker is an optimisation; failing to write it only costs a probe.
+  }
+}
+
+async function scriptVersion(python: string, script: string): Promise<string | null> {
+  try {
+    const { code, stdout } = await run(python, [script, '--version'], { timeoutMs: 20_000 })
+    if (code !== 0) return null
+    return stdout.trim().split(/\s+/)[0] || null
+  } catch {
+    return null
+  }
+}
+
+/** The extracted source is plain text, so reading its version needs no process. */
+function extractedVersion(): string | null {
+  try {
+    const text = readFileSync(join(binDir(), 'yt-dlp-src', 'yt_dlp', 'version.py'), 'utf8')
+    return /__version__\s*=\s*['"]([^'"]+)['"]/.exec(text)?.[1] ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether the bundled zipapp should replace the managed one. Exported so the
+ * resolver suite can pin the upgrade/never-downgrade rules without touching the
+ * real userData copy.
+ */
+export function shouldReplaceZipapp(bundled: string, current: string | null): boolean {
+  return !current || isNewer(bundled, current)
+}
+
+/**
+ * Replace a stale managed zipapp with the one this app version ships.
+ *
+ * `ensureZipapp` and `ensureExtracted` both trust whatever is already in
+ * userData, which meant a new app release never refreshed an existing install's
+ * resolver — only Settings → Update resolver did. A packaged bundle is newer
+ * than the copy the previous release installed, so compare the two and upgrade.
+ * The reverse must never happen: a copy the user updated from Settings can be
+ * newer than the bundle, and downgrading it would lose extractor fixes.
+ */
+async function syncBundledZipapp(interpreters: string[]): Promise<void> {
+  const bundled = join(resourcesBinDir(), ZIPAPP_NAME)
+  if (!existsSync(bundled)) return
+
+  const stat = statSync(bundled)
+  const marker = readMarker()
+  if (marker && marker.size === stat.size && marker.mtimeMs === stat.mtimeMs) return
+
+  const managed = managedZipappPath()
+  const extracted = join(binDir(), 'yt-dlp-src')
+
+  // Fresh install: take the bundle without spending a probe on it.
+  if (!existsSync(managed)) {
+    copyFileSync(bundled, managed)
+    makeExecutable(managed)
+    rmSync(extracted, { recursive: true, force: true })
+    writeMarker({ size: stat.size, mtimeMs: stat.mtimeMs, version: null })
+    return
+  }
+
+  let bundledVersion: string | null = null
+  for (const command of interpreters) {
+    bundledVersion = await scriptVersion(command, bundled)
+    if (bundledVersion) break
+  }
+  // No interpreter could read it. Leave the marker unset so the next launch
+  // tries again instead of silently keeping the old resolver forever.
+  if (!bundledVersion) return
+
+  const currentVersion =
+    extractedVersion() ?? (await scriptVersion(interpreters[0], managed))
+  if (shouldReplaceZipapp(bundledVersion, currentVersion)) {
+    copyFileSync(bundled, managed)
+    makeExecutable(managed)
+    // The unpacked copy is what actually runs; force it to be rebuilt.
+    rmSync(extracted, { recursive: true, force: true })
+  }
+
+  writeMarker({ size: stat.size, mtimeMs: stat.mtimeMs, version: bundledVersion })
 }
 
 async function ensureBinaryFile(): Promise<string> {
