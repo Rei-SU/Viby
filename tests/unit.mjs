@@ -33,7 +33,8 @@ const suites = {
   network: { file: 'network.test.ts', electron: true },
   version: { file: 'version.test.ts' },
   updates: { file: 'updates.test.ts' },
-  'release-notes': { file: 'release-notes.test.ts' }
+  'release-notes': { file: 'release-notes.test.ts' },
+  changelog: { file: 'changelog.test.ts' }
 }
 
 const requested = process.argv.slice(2)

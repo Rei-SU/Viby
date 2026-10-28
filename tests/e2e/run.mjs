@@ -1,6 +1,7 @@
 import { makeCheck, openApp } from './lib.mjs'
 import * as autoplay from './autoplay.mjs'
 import * as carousel from './carousel.mjs'
+import * as changelog from './changelog.mjs'
 import * as home from './home.mjs'
 import * as images from './images.mjs'
 import * as importScenario from './import.mjs'
@@ -27,7 +28,7 @@ import * as shortcuts from './shortcuts.mjs'
  *   node tests/e2e/run.mjs lyrics library     # only what you changed
  *   node tests/e2e/run.mjs                    # everything
  */
-const scenarios = { images, home, carousel, playback, 'playback-failure': playbackFailure, reconnect, autoplay, links, queue, 'release-focus': releaseFocus, lyrics, 'lyrics-change': lyricsChange, library, resume, navigation, offline, 'quick-search': quickSearch, settings, shortcuts, import: importScenario }
+const scenarios = { images, home, carousel, changelog, playback, 'playback-failure': playbackFailure, reconnect, autoplay, links, queue, 'release-focus': releaseFocus, lyrics, 'lyrics-change': lyricsChange, library, resume, navigation, offline, 'quick-search': quickSearch, settings, shortcuts, import: importScenario }
 
 const requested = process.argv.slice(2)
 const unknown = requested.filter((name) => !scenarios[name])
