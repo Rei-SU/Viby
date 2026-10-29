@@ -25,6 +25,7 @@ const suites = {
   'downloads-store': { file: 'downloads-store.test.ts', electron: true },
   'downloads-manager': { file: 'downloads-manager.test.ts', electron: true },
   'download-jobs': { file: 'download-jobs.test.ts' },
+  'lyrics-sync': { file: 'lyrics-sync.test.ts' },
   'download-groups': { file: 'download-groups.test.ts' },
   'library-items': { file: 'library-items.test.ts' },
   listening: { file: 'listening.test.ts' },
@@ -35,6 +36,7 @@ const suites = {
   version: { file: 'version.test.ts' },
   discord: { file: 'discord.test.ts' },
   'bounded-body': { file: 'bounded-body.test.ts' },
+  'main-guards': { file: 'main-guards.test.ts' },
   updates: { file: 'updates.test.ts' },
   'release-notes': { file: 'release-notes.test.ts' },
   changelog: { file: 'changelog.test.ts' }

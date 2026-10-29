@@ -13,6 +13,8 @@ import { isIP } from 'node:net'
 import { lookup } from 'node:dns/promises'
 import { net } from 'electron'
 import { mediaUrlFor } from '../media'
+import { extensionFor } from '../image-extension'
+import { isPrivateAddress } from '../private-address'
 
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024
 const MAX_CACHE_BYTES = 256 * 1024 * 1024
@@ -22,49 +24,8 @@ const EXTENSIONS = ['jpg', 'png', 'webp', 'gif'] as const
 type FetchInit = { signal?: AbortSignal; redirect?: 'follow' | 'manual' | 'error' }
 type FetchLike = (url: string, init?: FetchInit) => Promise<Response>
 
-function extensionFor(contentType: string, url: string): string {
-  const type = contentType.split(';')[0]?.trim().toLowerCase()
-  if (type === 'image/png') return 'png'
-  if (type === 'image/webp') return 'webp'
-  if (type === 'image/gif') return 'gif'
-  if (type === 'image/jpeg' || type === 'image/jpg') return 'jpg'
-  const fromUrl = /\.(jpe?g|png|webp|gif)(?:\?|$)/i.exec(url)?.[1]?.toLowerCase()
-  return fromUrl === 'jpeg' ? 'jpg' : (fromUrl ?? 'jpg')
-}
-
 function isRemote(url: string): boolean {
   return /^https?:\/\//i.test(url)
-}
-
-function isPrivateAddress(address: string): boolean {
-  const family = isIP(address)
-  if (family === 4) {
-    const [a, b] = address.split('.').map(Number)
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127)
-    )
-  }
-  if (family === 6) {
-    const lower = address.toLowerCase()
-    if (lower.startsWith('::ffff:')) return isPrivateAddress(lower.slice(7))
-    return (
-      lower === '::1' ||
-      lower === '::' ||
-      lower.startsWith('fc') ||
-      lower.startsWith('fd') ||
-      lower.startsWith('fe8') ||
-      lower.startsWith('fe9') ||
-      lower.startsWith('fea') ||
-      lower.startsWith('feb')
-    )
-  }
-  return true
 }
 
 /**

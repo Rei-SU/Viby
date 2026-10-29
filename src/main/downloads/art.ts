@@ -1,20 +1,11 @@
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fetchSafeRemoteImage } from '../cache/images'
+import { extensionFor } from '../image-extension'
 import type { DownloadsStore } from './store'
 
 const MAX_ART_BYTES = 6 * 1024 * 1024
 const ART_TIMEOUT_MS = 8_000
-
-function extensionFor(contentType: string, url: string): string {
-  const type = contentType.split(';')[0]?.trim().toLowerCase()
-  if (type === 'image/png') return 'png'
-  if (type === 'image/webp') return 'webp'
-  if (type === 'image/gif') return 'gif'
-  if (type === 'image/jpeg' || type === 'image/jpg') return 'jpg'
-  const fromUrl = /\.(jpe?g|png|webp|gif)(?:\?|$)/i.exec(url)?.[1]?.toLowerCase()
-  return fromUrl === 'jpeg' ? 'jpg' : (fromUrl ?? 'jpg')
-}
 
 /**
  * Cache cover art locally while the download runs. Offline screens with remote
