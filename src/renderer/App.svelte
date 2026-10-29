@@ -90,6 +90,12 @@
     return nav.view === id && !nav.detail && !nav.track && !nav.collection && !nav.mood
   }
 
+  /** The rail icon and the app menu go straight to the update card when present. */
+  function openSettings(): void {
+    if (updates.pending) updates.requestFocus()
+    nav.go('settings')
+  }
+
   function labelFor(item: (typeof navItems)[number]): string {
     if (item.id === 'settings' && updates.pending) return 'Settings — update available'
     if (network.localFirst && item.id === 'import') {
@@ -264,7 +270,7 @@
     void player.init()
     updates.init()
     void changelog.init()
-    const offSettings = api.app.onOpenSettings(() => nav.go('settings'))
+    const offSettings = api.app.onOpenSettings(openSettings)
     const offNavigate = api.app.onNavigate(navigate)
     const offShortcuts = installShortcuts()
     return () => {
@@ -382,7 +388,7 @@
           aria-current={active ? 'page' : undefined}
           aria-label={label}
           disabled={network.localFirst && item.id === 'import'}
-          onclick={() => nav.go(item.id)}
+          onclick={() => (item.id === 'settings' ? openSettings() : nav.go(item.id))}
         >
           <Icon name={item.icon} size={18} />
           <span class="nav-label" aria-hidden="true">{label}</span>

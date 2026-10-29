@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy, tick } from 'svelte'
   import type { CacheStats, Settings, UpdateState, YtDlpInfo } from '@shared/types'
   import { api } from '../lib/api'
   import { artwork } from '../lib/artwork.svelte'
@@ -24,6 +25,81 @@
   let resolverBusy = $state(false)
   let resolverError = $state('')
   let update = $derived(updates.state)
+  let updateSection = $state<HTMLElement>()
+  let updateFlash = $state(false)
+  let flashTimer: ReturnType<typeof setTimeout> | null = null
+  let scrollTimer: ReturnType<typeof setTimeout> | null = null
+
+  onDestroy(() => {
+    if (flashTimer) clearTimeout(flashTimer)
+    if (scrollTimer) clearTimeout(scrollTimer)
+  })
+
+  /**
+   * Settings rows load asynchronously and change height right after mount,
+   * which can swallow a smooth scroll. Re-assert the target briefly so the
+   * section actually lands, then stop.
+   */
+  function revealUpdateSection(target: HTMLElement): void {
+    const step = (attempt: number): void => {
+      const view = target.closest('.content')
+      const rect = target.getBoundingClientRect()
+      const bounds = view?.getBoundingClientRect()
+      const visible = bounds
+        ? rect.top >= bounds.top + 8 && rect.bottom <= bounds.bottom - 8
+        : false
+      if (!visible) {
+        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        target.scrollIntoView({
+          block: 'center',
+          behavior: reduceMotion || attempt > 0 ? 'auto' : 'smooth'
+        })
+      }
+      if (attempt < 2) scrollTimer = setTimeout(() => step(attempt + 1), 350)
+    }
+    if (scrollTimer) clearTimeout(scrollTimer)
+    step(0)
+  }
+
+  const updateBadge = $derived.by(() => {
+    if (!updates.pending) return null
+    switch (update?.phase) {
+      case 'available':
+        return 'Update available'
+      case 'ready':
+        return 'Ready to install'
+      case 'manual':
+        return 'Installer ready'
+      default:
+        return null
+    }
+  })
+
+  // A click on the marked settings icon should land on this section, not leave
+  // the user hunting below the fold.
+  $effect(() => {
+    const nonce = updates.focusRequest
+    const target = updateSection
+    if (!nonce || !target) return
+
+    void (async () => {
+      await tick()
+      if (updates.focusRequest !== nonce) return
+
+      revealUpdateSection(target)
+
+      updateFlash = false
+      await tick()
+      if (updates.focusRequest !== nonce) return
+      updateFlash = true
+      if (flashTimer) clearTimeout(flashTimer)
+      flashTimer = setTimeout(() => {
+        updateFlash = false
+        flashTimer = null
+      }, 2600)
+      updates.clearFocus(nonce)
+    })()
+  })
 
   $effect(() => {
     void load()
@@ -334,18 +410,41 @@
     </div>
   </section>
 
-  <section>
-    <h2>Updates</h2>
+  <section
+    class="updates"
+    class:available={updates.pending}
+    class:flash={updateFlash}
+    bind:this={updateSection}
+  >
+    <div class="section-head">
+      <h2>Updates</h2>
+      {#if updateBadge}
+        <span class="update-badge">
+          <span class="update-badge-dot" aria-hidden="true"></span>{updateBadge}
+        </span>
+      {/if}
+    </div>
 
     <div class="row">
       <div class="label">
-        <span>Viby {update?.currentVersion ?? ''}</span>
+        <span>
+          {#if updates.pending && update?.version}
+            Viby {update.currentVersion} → {update.version}
+          {:else}
+            Viby {update?.currentVersion ?? ''}
+          {/if}
+        </span>
         <span class="hint">
           {update ? updateHint(update) : 'Reading the current version…'}
         </span>
       </div>
       <div class="actions">
-        <button class="ghost" onclick={updateAction.run} disabled={updateAction.disabled}>
+        <button
+          class="ghost"
+          class:primary={updates.pending}
+          onclick={updateAction.run}
+          disabled={updateAction.disabled}
+        >
           {updateAction.label}
         </button>
         {#if update?.phase === 'downloading'}
@@ -518,6 +617,80 @@
     margin: 0 0 8px;
   }
 
+  .updates {
+    scroll-margin: 18px;
+  }
+
+  /* Only an available update lifts the group out of the settings list. */
+  .updates.available {
+    padding: 14px 16px;
+    border: 1px solid var(--stroke-strong);
+    border-radius: 12px;
+    background: var(--glass);
+  }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 8px;
+  }
+
+  .section-head h2 {
+    margin: 0;
+  }
+
+  .update-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px 2px 7px;
+    border: 1px solid var(--stroke-strong);
+    border-radius: 999px;
+    background: var(--glass-active);
+    color: var(--text-dim);
+    font-size: 9.5px;
+    font-weight: 550;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .update-badge-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text);
+  }
+
+  .section-head + .row {
+    border-top: 0;
+    padding-top: 2px;
+  }
+
+  .updates.flash {
+    animation: update-flash 2.4s var(--ease);
+  }
+
+  @keyframes update-flash {
+    0%,
+    20% {
+      border-color: rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.075);
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.05);
+    }
+    100% {
+      border-color: var(--stroke-strong);
+      background: var(--glass);
+      box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .updates.flash {
+      animation: none;
+    }
+  }
+
   .row {
     display: flex;
     align-items: center;
@@ -633,6 +806,25 @@
   .ghost:hover:not(:disabled) {
     background: var(--glass-hover);
     color: var(--text);
+  }
+
+  .ghost.primary {
+    border-color: var(--text);
+    background: var(--text);
+    color: var(--bg);
+    font-weight: 560;
+  }
+
+  .ghost.primary:hover:not(:disabled) {
+    background: #fff;
+    border-color: #fff;
+    color: var(--bg);
+  }
+
+  .ghost.primary:disabled {
+    opacity: 0.5;
+    background: var(--text);
+    color: var(--bg);
   }
 
   .about {

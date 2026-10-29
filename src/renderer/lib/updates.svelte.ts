@@ -7,6 +7,8 @@ import { api } from './api'
  */
 class UpdateStore {
   state = $state<UpdateState | null>(null)
+  /** Nonzero when a settings click should reveal the update controls. */
+  focusRequest = $state(0)
 
   private wired = false
 
@@ -49,6 +51,16 @@ class UpdateStore {
     // The reply describes the pre-abort state; the download's own result (and
     // the broadcast) carries the settled one, so don't copy it over.
     await api.updates.cancel()
+  }
+
+  /** A settings click with the indicator showing should land on Updates. */
+  requestFocus(): void {
+    if (!this.pending) return
+    this.focusRequest += 1
+  }
+
+  clearFocus(nonce: number): void {
+    if (this.focusRequest === nonce) this.focusRequest = 0
   }
 
   async install(): Promise<void> {
