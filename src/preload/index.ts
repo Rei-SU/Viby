@@ -158,7 +158,13 @@ const api: VibyApi = {
       const handler = (_event: unknown, progress: DownloadProgress): void => callback(progress)
       ipcRenderer.on(CH.downloadsProgress, handler)
       return () => ipcRenderer.removeListener(CH.downloadsProgress, handler)
-    }
+    },
+    cancelCollection: (key: string) =>
+      ipcRenderer.invoke(CH.downloadsCancelCollection, key),
+    pause: (trackId: string) => ipcRenderer.invoke(CH.downloadsPause, trackId),
+    resume: (trackId: string) => ipcRenderer.invoke(CH.downloadsResume, trackId),
+    pauseCollection: (key: string) => ipcRenderer.invoke(CH.downloadsPauseCollection, key),
+    resumeCollection: (key: string) => ipcRenderer.invoke(CH.downloadsResumeCollection, key)
   },
   ytDlp: {
     info: () => ipcRenderer.invoke(CH.ytdlpInfo),

@@ -51,8 +51,9 @@ ones that touch main-process modules.
 | `lyrics` | LRCLIB synced/plain, lyrics.ovh backup, cache, miss |
 | `spotify` | Anonymous Spotify pathfinder: 200-track pagination, fields, non-playlist rejection |
 | `import` | Link detection, all four non-Spotify adapters, matcher scoring, YouTube exact path |
-| `downloads-store` | downloads index: references, shared-file survival, pruning, healing, orphan sweep, pinned lyrics, path safety |
-| `downloads-manager` | yt-dlp progress parsing (known/unknown totals) and transient-vs-permanent failure classification |
+| `downloads-store` | downloads index: references, shared-file survival, pruning, source-aware collection cancellation, healing, orphan sweep, pinned lyrics, path safety |
+| `downloads-manager` | yt-dlp progress parsing (known/unknown totals), transient-vs-permanent failure classification, audio-first download id choice, user pause/resume and restart persistence |
+| `download-jobs` | downloads panel grouping: collection coverage, shared jobs, loose songs, live progress and state ordering |
 | `download-groups` | Library download split: collection-owned vs loose songs, album order, offline artwork fallbacks |
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
 | `startup` | login-item payloads: dev no-op, Windows path/args, macOS bundle, unsupported platforms; defaults |
@@ -175,6 +176,7 @@ Find the row for what you changed; run what it lists.
 | `.github/workflows/release.yml`, `scripts/check-release-notes.mjs` | unit `release-notes` · inspect the draft release body on the next tag |
 | `src/main/json-store.ts` | unit `library` · e2e `library`, `resume` |
 | `src/main/downloads/**`, `src/main/network.ts` | unit `downloads-store`, `downloads-manager`, `network` · e2e `offline`, `playback` |
+| `src/renderer/lib/download-jobs.ts`, `DownloadPanel.svelte`, `SidePanel.svelte` | unit `download-jobs` · e2e `queue`, `lyrics` (shared panel shell) · visual check of the downloads panel |
 | `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `OfflineHome` | e2e `offline`, `playback`, `navigation` · unit `download-groups` |
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts` | unit `images` · e2e `offline`, `images` |

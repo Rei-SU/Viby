@@ -121,12 +121,12 @@ export class DownloadManager {
 
   constructor(
     private readonly store: DownloadsStore,
-    private readonly opts: DownloadManagerOptions
+    private readonly opts: DownloadManagerOptions & DownloadAudioOptions
   ) {}
 
   start(): void {
     for (const { id, job } of this.store.allJobs()) {
-      if (job.state === 'failed') continue
+      if (job.state === 'failed' || (job.state === 'paused' && job.pausedByUser)) continue
       if (this.store.has(id)) {
         this.store.deleteJob(id)
         continue
@@ -218,7 +218,7 @@ export class DownloadManager {
     this.stop(trackId, false)
     this.progress.delete(trackId)
     this.store.deleteJob(trackId)
-    rmSync(this.store.tmpDirFor(trackId), { recursive: true, force: true })
+    this.cleanTmp(trackId)
     this.publish()
   }
 
@@ -256,7 +256,7 @@ export class DownloadManager {
     }
 
     for (const { id, job } of this.store.allJobs()) {
-      if (job.state !== 'paused') continue
+      if (job.state !== 'paused' || job.pausedByUser) continue
       this.store.setJobState(id, 'queued')
       this.enqueue(id)
     }
@@ -322,6 +322,11 @@ export class DownloadManager {
       this.pump()
       return
     }
+    // A retry timer or an early resume can leave a paused id in the queue.
+    if (job.state === 'paused') {
+      this.pump()
+      return
+    }
     if (this.store.has(id)) {
       this.store.deleteJob(id)
       this.pump()
@@ -367,8 +372,29 @@ export class DownloadManager {
       const safe = this.store.safeId(id)
       tmpDir = this.store.tmpDirFor(id)
       mkdirSync(tmpDir, { recursive: true })
+
+      // A music-video row can point at an unavailable video even though the
+      // released audio exists. Use the same audio-first rule as playback; the
+      // store key remains the original row id.
+      let audioId: string | null = null
+      if (job.track.videoType && job.track.videoType !== 'audio' && this.opts.audioTrack) {
+        try {
+          audioId = (await this.opts.audioTrack(job.track.id, job.track.title, job.track.artist))?.id ?? null
+        } catch {
+          // The original id is still a valid fallback.
+        }
+        if (this.active?.cancelled) return
+        if (this.active?.paused) {
+          // A resume can land while the abort is still unwinding; keep it queued.
+          if (this.store.job(id)?.state === 'downloading') this.store.setJobState(id, 'paused')
+          return
+        }
+      }
+      const downloadId = downloadIdFor(job.track, audioId)
       const input =
-        job.track.sourceUrl?.trim() || `https://music.youtube.com/watch?v=${job.track.id}`
+        downloadId !== job.track.id
+          ? `https://music.youtube.com/watch?v=${downloadId}`
+          : job.track.sourceUrl?.trim() || `https://music.youtube.com/watch?v=${downloadId}`
       if (!isSafeYtDlpInput(input)) throw new Error('This track has an invalid download URL.')
       const format =
         job.quality === 'data-saver' ? 'bestaudio[abr<=64]/bestaudio/best' : 'bestaudio/best'
@@ -411,7 +437,8 @@ export class DownloadManager {
 
       if (this.active?.cancelled) return
       if (this.active?.paused) {
-        this.store.setJobState(id, 'paused')
+        // A resume can land while the abort is still unwinding; keep it queued.
+        if (this.store.job(id)?.state === 'downloading') this.store.setJobState(id, 'paused')
         return
       }
       if (result.timedOut) {
@@ -441,7 +468,8 @@ export class DownloadManager {
     } catch (err) {
       if (this.active?.cancelled) return
       if (this.active?.paused) {
-        this.store.setJobState(id, 'paused')
+        // A resume can land while the abort is still unwinding; keep it queued.
+        if (this.store.job(id)?.state === 'downloading') this.store.setJobState(id, 'paused')
         return
       }
 
@@ -674,4 +702,87 @@ export class DownloadManager {
     this.busy = busy
     this.opts.onBusy(busy)
   }
+
+  /**
+   * Cancel the remaining jobs owned by a collection. Completed downloads stay;
+   * a job shared with another collection keeps running.
+   */
+  cancelCollection(key: string): void {
+    const affected = this.store.cancelJobsForSource(key)
+    for (const id of affected) {
+      this.queue = this.queue.filter((queued) => queued !== id)
+      this.progress.delete(id)
+      if (this.active?.id === id) {
+        this.active.cancelled = true
+        this.active.controller.abort()
+      }
+      this.cleanTmp(id)
+    }
+    this.publish()
+  }
+
+  /** Windows can hold a partial file open; startup healing retries the cleanup. */
+  private cleanTmp(trackId: string): void {
+    try {
+      rmSync(this.store.tmpDirFor(trackId), { recursive: true, force: true })
+    } catch {
+      // Best effort; the next launch/heal sweeps orphaned tmp dirs.
+    }
+  }
+
+  /**
+   * Pause one job at the user's request. The staging directory and its
+   * `.part` file stay, so resuming continues where yt-dlp stopped.
+   */
+  pause(trackId: string): void {
+    const job = this.store.job(trackId)
+    if (!job || job.state === 'failed' || job.state === 'paused') return
+    this.queue = this.queue.filter((id) => id !== trackId)
+    this.progress.delete(trackId)
+    if (this.active?.id === trackId) {
+      this.active.paused = true
+      this.active.controller.abort()
+    }
+    this.store.setJobPause(trackId, true, true)
+    this.publish()
+  }
+
+  resume(trackId: string): void {
+    const job = this.store.job(trackId)
+    if (!job || job.state !== 'paused') return
+    this.store.setJobPause(trackId, false, false)
+    this.enqueue(trackId)
+    this.publish()
+    this.pump()
+  }
+
+  pauseCollection(key: string): void {
+    for (const { id, job } of this.store.allJobs()) {
+      if (job.sources.includes(key)) this.pause(id)
+    }
+  }
+
+  resumeCollection(key: string): void {
+    for (const { id, job } of this.store.allJobs()) {
+      if (job.state !== 'paused' || !job.sources.includes(key)) continue
+      this.resume(id)
+    }
+  }
+}
+
+/**
+ * Find the released audio version of a music video. Keeping the row's own id
+ * as the store key means collection coverage and the UI stay truthful, while
+ * yt-dlp downloads the audio release instead of the video soundtrack.
+ */
+type DownloadAudioOptions = {
+  audioTrack?: (videoId: string, title: string, artist: string) => Promise<{ id: string } | null>
+}
+
+/**
+ * A video row downloads its released audio when one is known. The returned id
+ * is only for yt-dlp; the job and entry keep the row's original id.
+ */
+export function downloadIdFor(track: Track, audioId?: string | null): string {
+  return track.videoType && track.videoType !== 'audio' && audioId ? audioId : track.id
 }

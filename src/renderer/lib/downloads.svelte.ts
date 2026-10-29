@@ -16,6 +16,7 @@ export type CollectionCounts = {
   done: number
   total: number
   active: number
+  paused: number
   failed: number
 }
 
@@ -95,18 +96,25 @@ class DownloadsStore {
     return this.downloaded(trackId) ? 'done' : 'idle'
   }
 
-  /** Coverage for a playlist/album, using what is actually on disk. */
-  countsFor(tracks: Track[]): CollectionCounts {
+  /**
+   * Coverage for a playlist/album, using what is actually on disk. Pending
+   * states can be scoped to one collection so a paused playlist job does not
+   * make an album header claim work it does not own.
+   */
+  countsFor(tracks: Track[], sourceKey?: string): CollectionCounts {
     let done = 0
     let active = 0
+    let paused = 0
     let failed = 0
     for (const track of tracks) {
       if (this.downloaded(track.id)) done += 1
       const job = this.jobs[track.id]
-      if (job && (job.state === 'queued' || job.state === 'downloading')) active += 1
-      if (job?.state === 'failed') failed += 1
+      if (!job || (sourceKey && !job.sources.includes(sourceKey))) continue
+      if (job.state === 'queued' || job.state === 'downloading') active += 1
+      if (job.state === 'paused') paused += 1
+      if (job.state === 'failed') failed += 1
     }
-    return { done, total: tracks.length, active, failed }
+    return { done, total: tracks.length, active, paused, failed }
   }
 
   async addTrack(track: Track): Promise<void> {
@@ -184,6 +192,30 @@ class DownloadsStore {
       ...this.jobs,
       [progress.trackId]: { ...current, ...progress }
     }
+  }
+
+  get pendingCount(): number {
+    return Object.keys(this.jobs).length
+  }
+
+  async cancelCollection(key: string): Promise<void> {
+    await this.mutate(() => api.downloads.cancelCollection(key))
+  }
+
+  async pause(trackId: string): Promise<void> {
+    await this.mutate(() => api.downloads.pause(trackId))
+  }
+
+  async resume(trackId: string): Promise<void> {
+    await this.mutate(() => api.downloads.resume(trackId))
+  }
+
+  async pauseCollection(key: string): Promise<void> {
+    await this.mutate(() => api.downloads.pauseCollection(key))
+  }
+
+  async resumeCollection(key: string): Promise<void> {
+    await this.mutate(() => api.downloads.resumeCollection(key))
   }
 }
 

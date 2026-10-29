@@ -90,14 +90,14 @@
       case 'done':
         return 'Downloaded — click to remove'
       case 'downloading':
-        return `Downloading ${downloadJob?.percent ?? 0}% — click to cancel`
+        return `Pause download — ${downloadJob?.percent ?? 0}%`
       case 'queued':
-        return 'Queued — click to cancel'
+        return 'Pause download'
       case 'paused':
-        return 'Paused — click to cancel'
+        return 'Resume download'
       case 'failed':
         return 'Download failed — click to retry'
-      default:
+      case 'idle':
         return 'Download'
     }
   })
@@ -215,8 +215,12 @@
       }
       return
     }
-    if (downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused') {
-      await downloads.cancel(item.id)
+    if (downloadState === 'downloading' || downloadState === 'queued') {
+      await downloads.pause(item.id)
+      return
+    }
+    if (downloadState === 'paused') {
+      await downloads.resume(item.id)
       return
     }
     if (downloadState === 'failed') {
@@ -340,7 +344,7 @@
           class="row-action dl"
           class:on={downloadState === 'done'}
           class:failed={downloadState === 'failed'}
-          class:busy={downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused'}
+          class:busy={downloadState === 'downloading' || downloadState === 'queued'}
           title={downloadTitle}
           aria-label={downloadTitle}
           onclick={(event) => {
@@ -348,8 +352,10 @@
             void toggleDownload()
           }}
         >
-          {#if downloadState === 'downloading' || downloadState === 'queued' || downloadState === 'paused'}
+          {#if downloadState === 'downloading' || downloadState === 'queued'}
             <span class="spin" aria-hidden="true"></span>
+          {:else if downloadState === 'paused'}
+            <Icon name="play" size={12} solid />
           {:else if downloadState === 'done'}
             <Icon name="check" size={15} />
           {:else}

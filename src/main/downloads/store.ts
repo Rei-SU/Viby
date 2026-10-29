@@ -36,6 +36,8 @@ export type DownloadJob = {
   error?: string
   /** Last known total from yt-dlp, used for the free-space guard on retries. */
   estimateBytes?: number
+  /** Explicit pause; startup and reconnects must not resume this job. */
+  pausedByUser?: boolean
 }
 
 type DownloadData = {
@@ -783,5 +785,39 @@ export class DownloadsStore {
       trackIds: [...collection.trackIds],
       artUrl: art ? mediaUrlFor(join(this.root, art)) : undefined
     }
+  }
+
+  /**
+   * Stop pending work owned by one collection without touching completed files.
+   * A job shared with another collection stays alive; the collection record is
+   * dropped only when nothing downloaded and nothing queued still references it.
+   */
+  cancelJobsForSource(key: string): string[] {
+    const affected: string[] = []
+    this.store.update((data) => {
+      for (const [id, job] of Object.entries(data.jobs)) {
+        if (!job.sources.includes(key)) continue
+        job.sources = job.sources.filter((source) => source !== key)
+        if (job.sources.length > 0) continue
+        delete data.jobs[id]
+        affected.push(id)
+      }
+
+      const stillReferenced =
+        Object.values(data.entries).some((entry) => entry.sources.includes(key)) ||
+        Object.values(data.jobs).some((job) => job.sources.includes(key))
+      if (!stillReferenced) delete data.collections[key]
+    })
+    return affected
+  }
+
+  /** Pause/resume a job, recording whether the user asked for it. */
+  setJobPause(trackId: string, paused: boolean, byUser: boolean): void {
+    this.store.update((data) => {
+      const job = data.jobs[trackId]
+      if (!job) return
+      job.state = paused ? 'paused' : 'queued'
+      job.pausedByUser = byUser
+    })
   }
 }

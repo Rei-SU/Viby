@@ -3,9 +3,11 @@
   import { lyrics } from '../lib/lyrics.svelte'
   import { player } from '../lib/player.svelte'
   import { history } from '../lib/history.svelte'
+  import { downloads } from '../lib/downloads.svelte'
   import LyricsPanel from './LyricsPanel.svelte'
   import QueuePanel from './QueuePanel.svelte'
   import HistoryPanel from './HistoryPanel.svelte'
+  import DownloadPanel from './DownloadPanel.svelte'
   import Icon from './Icon.svelte'
 
   /** The skeleton is part of opening the panel, even when the lyrics are cached. */
@@ -29,8 +31,19 @@
   const isQueue = $derived(sidePanel.mode === 'queue')
   const isHistory = $derived(sidePanel.mode === 'history')
   const isLyrics = $derived(sidePanel.mode === 'lyrics')
-  const modeLabel = $derived(isQueue ? 'Queue' : isHistory ? 'History' : 'Lyrics')
-  const count = $derived(isQueue ? player.queue.length : isHistory ? history.entries.length : 0)
+  const isDownloads = $derived(sidePanel.mode === 'downloads')
+  const modeLabel = $derived(
+    isQueue ? 'Queue' : isHistory ? 'History' : isDownloads ? 'Downloads' : 'Lyrics'
+  )
+  const count = $derived(
+    isQueue
+      ? player.queue.length
+      : isHistory
+        ? history.entries.length
+        : isDownloads
+          ? downloads.pendingCount
+          : 0
+  )
 </script>
 
 <aside
@@ -43,7 +56,7 @@
     <header>
       <span class="eyebrow">{modeLabel}</span>
 
-      {#if isQueue || isHistory}
+      {#if isQueue || isHistory || isDownloads}
         <span class="count">{count}</span>
       {:else if !showingLoading && lyrics.data?.kind === 'synced'}
         <span class="sync-badge synced" title="Lyrics follow the track">
@@ -81,6 +94,8 @@
         <QueuePanel />
       {:else if isHistory}
         <HistoryPanel />
+      {:else if isDownloads}
+        <DownloadPanel />
       {/if}
     </div>
   </div>

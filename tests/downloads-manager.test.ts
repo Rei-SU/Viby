@@ -5,7 +5,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DownloadManager, parseProgressLine, transient } from '../src/main/downloads/manager'
+import { DownloadManager, downloadIdFor, parseProgressLine, transient } from '../src/main/downloads/manager'
 import { DownloadsStore } from '../src/main/downloads/store'
 import type { Track } from '../src/shared/types'
 
@@ -54,6 +54,16 @@ console.log('\ntransient vs permanent failures:')
   check('unavailable is permanent', !transient('ERROR: Video unavailable'))
   check('bot check is permanent', !transient('ERROR: Sign in to confirm you are not a bot'))
   check('a network error about a missing video is permanent', !transient('network error: video not found'))
+}
+
+console.log('\naudio-first download target:')
+{
+  const base: Track = { id: 'v', title: 'Video', artist: 'Artist', durationSec: 170 }
+  const video: Track = { ...base, videoType: 'video' }
+  const audio: Track = { ...base, id: 'a', videoType: 'audio' }
+  check('a video row uses the known audio id', downloadIdFor(video, 'audio-id') === 'audio-id')
+  check('a video row falls back when no audio exists', downloadIdFor(video, null) === 'v')
+  check('an audio row ignores the alternate', downloadIdFor(audio, 'audio-id') === 'a')
 }
 
 console.log('\ncredit repair for downloads saved without an artist:')
@@ -116,6 +126,59 @@ console.log('\ncredit repair for downloads saved without an artist:')
   } finally {
     globalThis.fetch = realFetch
   }
+}
+
+console.log('\npause and resume:')
+{
+  const root = mkdtempSync(join(tmpdir(), 'viby-pause-'))
+  const store = new DownloadsStore(root)
+  const manager = new DownloadManager(store, {
+    // Offline keeps pump() from launching yt-dlp; state changes still apply.
+    isOffline: () => true,
+    onProgress: () => undefined,
+    onChanged: () => undefined,
+    onCompleted: () => undefined
+  })
+  const a: Track = { id: 'a', title: 'A', artist: 'Artist', durationSec: 100 }
+  const b: Track = { id: 'b', title: 'B', artist: 'Artist', durationSec: 100 }
+  const states = (): string => `${store.job('a')?.state},${store.job('b')?.state}`
+
+  manager.addTrack(a, 'best')
+  manager.addCollection(
+    { key: 'album:x', kind: 'album', title: 'X', trackIds: ['a', 'b'] },
+    [a, b],
+    'best'
+  )
+  check('both jobs queued', states() === 'queued,queued', states())
+
+  manager.pause('a')
+  check('pause marks the job paused', store.job('a')?.state === 'paused')
+  check('user pause is recorded', store.job('a')?.pausedByUser === true)
+  check('the other job is untouched', store.job('b')?.state === 'queued')
+
+  manager.resume('a')
+  check('resume queues the job', store.job('a')?.state === 'queued')
+  check('user pause is cleared', store.job('a')?.pausedByUser === false)
+
+  manager.pauseCollection('album:x')
+  check('the collection pauses', states() === 'paused,paused', states())
+  manager.resumeCollection('album:x')
+  check('the collection resumes', states() === 'queued,queued', states())
+
+  manager.pause('b')
+  new DownloadManager(store, {
+    isOffline: () => true,
+    onProgress: () => undefined,
+    onChanged: () => undefined,
+    onCompleted: () => undefined
+  }).start()
+  check(
+    'a user pause survives a restart',
+    store.job('b')?.state === 'paused' && store.job('b')?.pausedByUser === true
+  )
+  // start() parks every resumable job as paused before pumping; the flag is the
+  // difference between "will resume when online" and "stays paused".
+  check('a quit-time pause is still resumable', store.job('a')?.pausedByUser !== true)
 }
 
 console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`)

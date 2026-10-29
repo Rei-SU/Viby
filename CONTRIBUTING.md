@@ -8,6 +8,8 @@ reason in the PR.
 
 ## Before you start
 
+- Read [architecture.md](architecture.md) for the process model, module map, data
+  flows and the full function/symbol index.
 - Open an issue before starting a new feature, a refactor or a dependency change. It saves you from building something that doesn't fit.
 - Small bug fixes and documentation improvements can go straight to a pull request.
 - By contributing, you agree that your work is licensed under the project's Apache-2.0 license.

@@ -43,7 +43,7 @@
   const collectionKey = $derived(
     isLiked ? 'liked' : playlist ? `playlist:${playlist.id}` : null
   )
-  const dlCounts = $derived(downloads.countsFor(tracks))
+  const dlCounts = $derived(downloads.countsFor(tracks, collectionKey ?? undefined))
   const fullyDownloaded = $derived(dlCounts.total > 0 && dlCounts.done === dlCounts.total)
   const mark = $derived(markFor(dlCounts.done, dlCounts.total))
   const progress = $derived(dlCounts.total > 0 ? (dlCounts.done / dlCounts.total) * 100 : 0)
@@ -91,6 +91,14 @@
       if (window.confirm(`Remove “${title}” from downloads?`)) {
         await downloads.removeCollection(collectionKey)
       }
+      return
+    }
+    if (dlCounts.active > 0) {
+      await downloads.pauseCollection(collectionKey)
+      return
+    }
+    if (dlCounts.paused > 0) {
+      await downloads.resumeCollection(collectionKey)
       return
     }
 
@@ -189,18 +197,25 @@
         {#if collectionKey && tracks.length > 0}
           <button
             class="ghost"
-            class:on={fullyDownloaded}
-            title={offline && !fullyDownloaded
-              ? 'Connect to download'
-              : fullyDownloaded
-                ? 'Downloaded — click to remove'
-                : 'Download this collection'}
-            disabled={offline && !fullyDownloaded}
+            class:on={fullyDownloaded || dlCounts.active > 0 || dlCounts.paused > 0}
+            title={dlCounts.active > 0
+              ? `Pause remaining downloads (${dlCounts.done}/${dlCounts.total} downloaded)`
+              : dlCounts.paused > 0 && !offline
+                ? `Resume paused downloads (${dlCounts.done}/${dlCounts.total} downloaded)`
+                : offline && !fullyDownloaded
+                  ? 'Connect to download'
+                  : fullyDownloaded
+                    ? 'Downloaded — click to remove'
+                    : 'Download this collection'}
+            disabled={offline && !fullyDownloaded && dlCounts.active === 0}
             onclick={() => void downloadCollection()}
           >
             {#if dlCounts.active > 0}
-              <span class="spin" aria-hidden="true"></span>
-              <span>{dlCounts.done}/{dlCounts.total} downloading</span>
+              <Icon name="pause" size={13} solid />
+              <span>Pause download</span>
+            {:else if dlCounts.paused > 0 && !offline}
+              <Icon name="play" size={13} solid />
+              <span>Resume download</span>
             {:else if fullyDownloaded}
               <Icon name="check" size={14} />
               <span>Downloaded</span>
@@ -209,6 +224,16 @@
               <span>Download{dlCounts.done > 0 ? ` (${dlCounts.done}/${dlCounts.total})` : ''}</span>
             {/if}
           </button>
+          {#if dlCounts.active > 0 || dlCounts.paused > 0}
+            <button
+              class="cancel-download"
+              title="Cancel remaining downloads"
+              aria-label="Cancel remaining downloads"
+              onclick={() => collectionKey && void downloads.cancelCollection(collectionKey)}
+            >
+              <Icon name="close" size={13} />
+            </button>
+          {/if}
         {/if}
 
         {#if playlist}
@@ -409,19 +434,24 @@
     border-color: var(--stroke-strong);
   }
 
-  .spin {
-    width: 11px;
-    height: 11px;
-    border: 1.5px solid var(--stroke-strong);
-    border-top-color: var(--text);
-    border-radius: 50%;
-    animation: spin 700ms linear infinite;
+  .cancel-download {
+    display: inline-grid;
+    place-items: center;
+    width: 33px;
+    height: 33px;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    color: var(--text-dim);
+    transition:
+      border-color var(--speed) var(--ease),
+      color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
   }
 
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+  .cancel-download:hover {
+    border-color: var(--stroke-strong);
+    color: var(--text);
+    background: var(--glass-hover);
   }
 
   .delete-note {

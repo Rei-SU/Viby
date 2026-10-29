@@ -103,6 +103,11 @@ export const CH = {
   downloadsClear: 'downloads:clear',
   downloadsRetry: 'downloads:retry',
   downloadsCancel: 'downloads:cancel',
+  downloadsCancelCollection: 'downloads:cancel-collection',
+  downloadsPause: 'downloads:pause',
+  downloadsResume: 'downloads:resume',
+  downloadsPauseCollection: 'downloads:pause-collection',
+  downloadsResumeCollection: 'downloads:resume-collection',
   downloadsChanged: 'downloads:changed',
   downloadsProgress: 'downloads:progress',
 
@@ -284,6 +289,13 @@ export interface VibyApi {
     clear(): Promise<DownloadsSnapshot>
     retry(trackId: string): Promise<DownloadsSnapshot>
     cancel(trackId: string): Promise<DownloadsSnapshot>
+    /** Stop remaining jobs for a collection; completed songs are kept. */
+    cancelCollection(key: string): Promise<DownloadsSnapshot>
+    /** Pause a job, keeping its partial file for a later resume. */
+    pause(trackId: string): Promise<DownloadsSnapshot>
+    resume(trackId: string): Promise<DownloadsSnapshot>
+    pauseCollection(key: string): Promise<DownloadsSnapshot>
+    resumeCollection(key: string): Promise<DownloadsSnapshot>
     onChanged(callback: (snapshot: DownloadsSnapshot) => void): () => void
     onProgress(callback: (progress: DownloadProgress) => void): () => void
   }

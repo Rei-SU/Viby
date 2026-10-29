@@ -192,7 +192,7 @@
     collectionKind ? `${collectionKind}:${item.browseId ?? item.id}` : null
   )
   const downloadTracks = $derived(displaySongs.map(toTrack))
-  const dlCounts = $derived(downloads.countsFor(downloadTracks))
+  const dlCounts = $derived(downloads.countsFor(downloadTracks, collectionKey ?? undefined))
   const fullyDownloaded = $derived(dlCounts.total > 0 && dlCounts.done === dlCounts.total)
 
   async function downloadCollection(): Promise<void> {
@@ -201,6 +201,14 @@
       if (window.confirm(`Remove “${result?.header?.title ?? item.title}” from downloads?`)) {
         await downloads.removeCollection(collectionKey)
       }
+      return
+    }
+    if (dlCounts.active > 0) {
+      await downloads.pauseCollection(collectionKey)
+      return
+    }
+    if (dlCounts.paused > 0) {
+      await downloads.resumeCollection(collectionKey)
       return
     }
 
@@ -520,13 +528,22 @@
         {#if collectionKey && downloadTracks.length > 0}
           <button
             class="download-all"
-            class:on={fullyDownloaded}
-            title={fullyDownloaded ? 'Downloaded — click to remove' : 'Download this collection'}
+            class:on={fullyDownloaded || dlCounts.active > 0 || dlCounts.paused > 0}
+            title={dlCounts.active > 0
+              ? `Pause remaining downloads (${dlCounts.done}/${dlCounts.total} downloaded)`
+              : dlCounts.paused > 0
+                ? `Resume paused downloads (${dlCounts.done}/${dlCounts.total} downloaded)`
+                : fullyDownloaded
+                  ? 'Downloaded — click to remove'
+                  : 'Download this collection'}
             onclick={() => void downloadCollection()}
           >
             {#if dlCounts.active > 0}
-              <span class="spin" aria-hidden="true"></span>
-              <span>{dlCounts.done}/{dlCounts.total} downloading</span>
+              <Icon name="pause" size={13} solid />
+              <span>Pause download</span>
+            {:else if dlCounts.paused > 0}
+              <Icon name="play" size={13} solid />
+              <span>Resume download</span>
             {:else if fullyDownloaded}
               <Icon name="check" size={14} />
               <span>Downloaded</span>
@@ -535,6 +552,16 @@
               <span>Download{countsLabel(dlCounts.done, dlCounts.total)}</span>
             {/if}
           </button>
+          {#if dlCounts.active > 0 || dlCounts.paused > 0}
+            <button
+              class="cancel-download"
+              title="Cancel remaining downloads"
+              aria-label="Cancel remaining downloads"
+              onclick={() => collectionKey && void downloads.cancelCollection(collectionKey)}
+            >
+              <Icon name="close" size={13} />
+            </button>
+          {/if}
         {/if}
       </div>
     </header>
@@ -828,6 +855,28 @@
     border-color: var(--stroke-strong);
   }
 
+  .cancel-download {
+    display: inline-grid;
+    place-items: center;
+    width: 33px;
+    height: 33px;
+    margin: 14px 0 0 8px;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    color: var(--text-dim);
+    vertical-align: top;
+    transition:
+      border-color var(--speed) var(--ease),
+      color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .cancel-download:hover {
+    border-color: var(--stroke-strong);
+    color: var(--text);
+    background: var(--glass-hover);
+  }
+
   .save-album {
     display: inline-flex;
     align-items: center;
@@ -855,21 +904,6 @@
     color: var(--text);
     border-color: var(--stroke-strong);
     background: var(--glass-active);
-  }
-
-  .spin {
-    width: 11px;
-    height: 11px;
-    border: 1.5px solid var(--stroke-strong);
-    border-top-color: var(--text);
-    border-radius: 50%;
-    animation: spin 700ms linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   .shelf {

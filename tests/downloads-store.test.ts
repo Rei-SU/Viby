@@ -303,5 +303,49 @@ check(
 check('art dir empty after clear', readdirSync(reopened.artDir).length === 0)
 check('lyrics dir empty after clear', readdirSync(reopened.lyricsDir).length === 0)
 
+console.log('\ncancelling a collection keeps completed and shared work:')
+{
+  const cancelRoot = mkdtempSync(join(tmpdir(), 'viby-downloads-cancel-'))
+  const cancelStore = new DownloadsStore(cancelRoot)
+  cancelStore.addCollection({
+    key: 'album:c',
+    kind: 'album',
+    title: 'C',
+    trackIds: ['a', 'b', 'c']
+  })
+
+  const completed = makeFile(join(cancelRoot, 'tmp', 'a'), 'a.m4a')
+  cancelStore.put(track('a'), completed, 'm4a', ['album:c'], 'best')
+  cancelStore.enqueue(
+    [
+      { track: track('b'), source: 'album:c' },
+      { track: track('c'), source: 'album:c' },
+      { track: track('c'), source: 'playlist:p' }
+    ],
+    'best'
+  )
+
+  const affected = cancelStore.cancelJobsForSource('album:c')
+  check('album-only pending job cancelled', affected.join(',') === 'b', affected.join(','))
+  check('completed entry kept', cancelStore.entry('a') !== null)
+  check('collection kept while a completed entry remains', cancelStore.collection('album:c') !== null)
+  check(
+    'shared job keeps its other owner',
+    cancelStore.job('c')?.sources.join(',') === 'playlist:p',
+    cancelStore.job('c')?.sources.join(',')
+  )
+
+  cancelStore.addCollection({
+    key: 'album:empty',
+    kind: 'album',
+    title: 'Empty',
+    trackIds: ['d']
+  })
+  cancelStore.enqueue([{ track: track('d'), source: 'album:empty' }], 'best')
+  const emptyAffected = cancelStore.cancelJobsForSource('album:empty')
+  check('only queued job cancelled', emptyAffected.join(',') === 'd')
+  check('an empty collection record is removed', cancelStore.collection('album:empty') === null)
+}
+
 console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)

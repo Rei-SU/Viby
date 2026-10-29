@@ -27,6 +27,7 @@
   import Icon from './components/Icon.svelte'
   import { network } from './lib/network.svelte'
   import { updates } from './lib/updates.svelte'
+  import DownloadIndicator from './components/DownloadIndicator.svelte'
   import { downloads } from './lib/downloads.svelte'
   import { favorites } from './lib/favorites.svelte'
   import { savedAlbums } from './lib/saved-albums.svelte'
@@ -303,6 +304,8 @@
     </div>
 
     <div class="titlebar-right">
+      <DownloadIndicator />
+
       {#if network.localFirst}
         <div class="net-wrap">
           <button

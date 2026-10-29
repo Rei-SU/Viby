@@ -169,7 +169,10 @@ let importResolveController: AbortController | null = null
     },
     // Used once per downloaded album to repair credits saved before the album
     // header's artist was parsed.
-    catalogAlbum: async (browseId) => innertube.browse(browseId)
+    catalogAlbum: async (browseId) => innertube.browse(browseId),
+    // Music-video rows download their official audio release when it exists.
+    audioTrack: async (videoId, title, artist) =>
+      innertube.audioTrackFor(videoId, title, artist)
   })
   downloadsManager = manager
 
@@ -348,6 +351,40 @@ let importResolveController: AbortController | null = null
     manager.cancel(trackId)
     return snapshot()
   })
+
+  ipcMain.handle(
+    CH.downloadsCancelCollection,
+    (_e, key: unknown): Promise<DownloadsSnapshot> => {
+      if (typeof key === 'string') manager.cancelCollection(key)
+      return snapshot()
+    }
+  )
+
+  ipcMain.handle(CH.downloadsPause, (_e, trackId: unknown): Promise<DownloadsSnapshot> => {
+    if (typeof trackId === 'string') manager.pause(trackId)
+    return snapshot()
+  })
+
+  ipcMain.handle(CH.downloadsResume, (_e, trackId: unknown): Promise<DownloadsSnapshot> => {
+    if (typeof trackId === 'string') manager.resume(trackId)
+    return snapshot()
+  })
+
+  ipcMain.handle(
+    CH.downloadsPauseCollection,
+    (_e, key: unknown): Promise<DownloadsSnapshot> => {
+      if (typeof key === 'string') manager.pauseCollection(key)
+      return snapshot()
+    }
+  )
+
+  ipcMain.handle(
+    CH.downloadsResumeCollection,
+    (_e, key: unknown): Promise<DownloadsSnapshot> => {
+      if (typeof key === 'string') manager.resumeCollection(key)
+      return snapshot()
+    }
+  )
 
   ipcMain.handle(CH.lyricsGet, async (_e, req: LyricsRequest): Promise<Result<Lyrics>> => {
     try {
