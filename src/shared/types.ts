@@ -200,6 +200,12 @@ export type SubtitlePart = {
   artistId?: string
   albumId?: string
   /**
+   * Primary artist for a release part rebuilt from a saved track. Used to
+   * verify a name-only album link before opening it, so a shared title cannot
+   * send the click to another artist's release.
+   */
+  artistName?: string
+  /**
    * Which page this run opens when the source did not provide a browse id.
    * Saved tracks know that their artist and album are still clickable; the
    * lookup happens on click (see lib/artist.ts and lib/album.ts).

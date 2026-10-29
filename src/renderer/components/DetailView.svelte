@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, tick, untrack } from 'svelte'
   import type { BrowseResult, CatalogItem, SavedAlbum } from '@shared/types'
-  import { trackTitleKey } from '@shared/track-title'
+  import { pickTrackIndex } from '@shared/track-match'
   import { api } from '../lib/api'
   import { artwork } from '../lib/artwork.svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
@@ -298,13 +298,14 @@
     if (!focus || loading || !result) return
 
     const list = isArtist ? trackList : displaySongs
-    let index = list.findIndex((track) => track.id === focus.trackId)
-    if (index < 0) {
-      // A search result can point at the music video while the release lists
-      // the official audio; same song, different id. Match the title then.
-      const key = trackTitleKey(focus.title)
-      index = list.findIndex((track) => trackTitleKey(track.title) === key)
-    }
+    // A search result can point at the music video while the release lists the
+    // official audio. Match by title, using duration to choose between two
+    // versions and refusing a version that is clearly a different recording.
+    let index = pickTrackIndex(list, {
+      id: focus.trackId,
+      title: focus.title,
+      durationSec: focus.durationSec
+    })
     if (index < 0) {
       nav.clearFocus(focus.nonce)
       return

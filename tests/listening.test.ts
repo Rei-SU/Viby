@@ -117,6 +117,49 @@ check(
   JSON.stringify(row.parts)
 )
 check(
+  'the release carries the artist needed to verify a name-only link',
+  row.parts?.find((part) => part.albumId === 'one-id')?.artistName === 'Alpha',
+  JSON.stringify(row.parts)
+)
+
+const tagged = historyItem({
+  ...history[0],
+  artist: 'Song • ElGrandeToto',
+  artistId: 'UCtoto',
+  artistParts: [
+    { text: 'Song' },
+    { text: ' • ' },
+    { text: 'ElGrandeToto', artistId: 'UCtoto', entity: 'artist' }
+  ],
+  album: 'Caméléon',
+  albumId: undefined
+})
+check(
+  'a stored page-type tag is not another artist',
+  tagged.parts?.filter((part) => part.entity === 'artist').map((part) => part.text).join('|') ===
+    'ElGrandeToto',
+  JSON.stringify(tagged.parts)
+)
+check(
+  'an unlinked release still carries its artist context',
+  tagged.parts?.find((part) => part.entity === 'album')?.artistName === 'ElGrandeToto',
+  JSON.stringify(tagged.parts)
+)
+
+const taggedSummary = summarizeHistory(
+  [{ ...history[0], artist: 'Song • ElGrandeToto', artistId: 'UCtoto', artistParts: [
+    { text: 'Song' },
+    { text: ' • ' },
+    { text: 'ElGrandeToto', artistId: 'UCtoto', entity: 'artist' }
+  ], playedAt: NOW - 500 }],
+  NOW - WEEK
+)
+check(
+  'the page-type tag is not counted as a separate artist',
+  taggedSummary.artists.length === 1 && taggedSummary.artists[0]?.name === 'ElGrandeToto',
+  JSON.stringify(taggedSummary.artists)
+)
+check(
   'the row keeps the release identity for title navigation',
   row.album === 'One' && row.albumId === 'one-id' && row.releaseType === 'EP',
   JSON.stringify({ album: row.album, albumId: row.albumId, releaseType: row.releaseType })

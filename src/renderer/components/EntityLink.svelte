@@ -6,12 +6,15 @@
     kind,
     id,
     name,
-    thumbnail
+    thumbnail,
+    artist
   }: {
     kind: 'artist' | 'album'
     id?: string
     name: string
     thumbnail?: string
+    /** Verification context for name-only album links. */
+    artist?: string
   } = $props()
 
   function open(event: MouseEvent): void {
@@ -19,7 +22,7 @@
     // triggering playback or opening the parent page.
     event.stopPropagation()
     if (kind === 'artist') openArtist(id, name, thumbnail)
-    else openAlbum(id, name, thumbnail)
+    else openAlbum(id, name, thumbnail, artist)
   }
 </script>
 

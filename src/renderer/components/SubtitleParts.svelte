@@ -30,7 +30,7 @@
     {#if part.entity === 'artist' || part.artistId}
       <EntityLink kind="artist" id={part.artistId} name={part.text} />
     {:else if part.entity === 'album' || part.albumId}
-      <EntityLink kind="album" id={part.albumId} name={part.text} />
+      <EntityLink kind="album" id={part.albumId} name={part.text} artist={part.artistName} />
     {:else if linkPlainArtists && looksLikeArtist(part.text)}
       <EntityLink kind="artist" name={part.text} />
     {:else}

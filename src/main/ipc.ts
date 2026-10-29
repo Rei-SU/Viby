@@ -42,6 +42,7 @@ import { setTaskbarState } from './taskbar'
 import { changelogInfo } from './changelog'
 import { qualityCapKbps, setSettings, settings } from './settings'
 import { session } from './session'
+import { mergeTrackMetadata } from './track-metadata'
 import { cachedLyrics, getLyrics } from './lyrics'
 import { lib } from './library'
 import { AudioCache } from './cache/audio'
@@ -895,7 +896,7 @@ async function resolveForPlayback(
 
 function remember(track: Track): void {
   trackStore().update((d) => {
-    d[track.id] = track
+    d[track.id] = mergeTrackMetadata(d[track.id], track)
   })
 }
 

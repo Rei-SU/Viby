@@ -26,7 +26,12 @@ export type MoodRef = {
  * for search results that point at the video while the release holds the audio.
  * The nonce makes a repeated click re-run the scroll and highlight.
  */
-export type TrackFocus = { trackId: string; title: string; nonce: number }
+export type TrackFocus = {
+  trackId: string
+  title: string
+  durationSec?: number
+  nonce: number
+}
 
 type Snapshot = {
   view: View
@@ -99,9 +104,14 @@ class Navigator {
    * Open a release and reveal one of its songs. Clicking a title while already
    * on that release still scrolls, so the focus is set even without navigating.
    */
-  openReleaseAt(item: CatalogItem, trackId: string, title: string): void {
+  openReleaseAt(
+    item: CatalogItem,
+    trackId: string,
+    title: string,
+    durationSec?: number
+  ): void {
     this.open(item)
-    this.focus = { trackId, title, nonce: ++this.focusNonce }
+    this.focus = { trackId, title, durationSec, nonce: ++this.focusNonce }
   }
 
   /** Called by the page once it has scrolled; a stale page must not clear it. */

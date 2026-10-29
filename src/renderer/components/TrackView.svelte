@@ -5,6 +5,7 @@
   import { network } from '../lib/network.svelte'
   import { cacheRadio, cachedRadio } from '../lib/catalog-cache.svelte'
   import { openAlbum } from '../lib/album'
+  import { primaryArtistName } from '../lib/entity-lookup'
   import ArtistLinks from './ArtistLinks.svelte'
   import { trackToItem } from '../lib/track'
   import { formatDuration as fmt } from '../lib/format'
@@ -56,7 +57,7 @@
   }
 
   function openAlbumPage(): void {
-    if (track.album) openAlbum(track.albumId, track.album, track.thumbnail)
+    if (track.album) openAlbum(track.albumId, track.album, track.thumbnail, primaryArtistName(track))
   }
 </script>
 

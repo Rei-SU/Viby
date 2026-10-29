@@ -29,12 +29,31 @@ function isCounter(part: SubtitlePart): boolean {
   )
 }
 
+/**
+ * Search rows begin with their page-type label ("Song • Artist"), which is a
+ * tag, not a credit. Leaving it in produced an artist named "Song" with no id,
+ * so a click searched for a random artist called Song.
+ */
+const PAGE_TYPE_LABEL = /^(?:song|video|ep|album|single|playlist|podcast|profile|artist)$/i
+
 /** Just the artist credit run from a row's subtitle parts, separators included. */
 export function creditParts(parts: SubtitlePart[] | undefined): SubtitlePart[] | undefined {
   if (!parts?.length) return undefined
 
+  let start = 0
+  if (
+    parts.length >= 3 &&
+    PAGE_TYPE_LABEL.test(parts[0].text.trim()) &&
+    !parts[0].artistId &&
+    !parts[0].albumId &&
+    !parts[0].entity &&
+    isSeparator(parts[1])
+  ) {
+    start = 2
+  }
+
   const credit: SubtitlePart[] = []
-  for (const part of parts) {
+  for (const part of parts.slice(start)) {
     // Everything from the album on is not a credit.
     if (part.albumId || part.entity === 'album' || isCounter(part)) break
     // Copy: catalog rows can be Svelte state proxies, and structured clone
@@ -60,7 +79,10 @@ const SPLIT_RE =
   /\s*,\s*|\s+[&+]\s+|\s+(?:feat(?:uring)?|ft|with)(?=\.?\s|\.?$)\.?\s*|\s+[x×]\s+/gi
 
 export function splitArtistParts(name: string, artistId?: string): SubtitlePart[] {
-  const text = name.trim()
+  // Older store entries kept the row tag in the display string.
+  const text = name
+    .trim()
+    .replace(/^(?:song|video|ep|album|single|playlist|podcast|profile|artist)\s+[•·]\s+/i, '')
   if (!text || /^unknown artist$/i.test(text)) return []
 
   const names: string[] = []
@@ -91,7 +113,10 @@ export function splitArtistParts(name: string, artistId?: string): SubtitlePart[
 export function artistPartsFor(
   track: Pick<Track, 'artist' | 'artistId' | 'artistParts'>
 ): SubtitlePart[] {
-  if (track.artistParts?.length) return track.artistParts
+  // Stored parts from older builds can still contain a page-type label; clean
+  // them on read so history and downloads do not keep a link named "Song".
+  const stored = creditParts(track.artistParts)
+  if (stored?.length) return stored
   return splitArtistParts(track.artist, track.artistId)
 }
 

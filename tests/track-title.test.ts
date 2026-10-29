@@ -16,6 +16,10 @@ check('a 4K marker is not part of the title', same('Instant Crush [4K]', 'Instan
 check('case and extra spaces are ignored', same('  INSTANT   CRUSH  ', 'instant crush'))
 check('a live version stays a different recording', !same('Instant Crush (Live)', 'Instant Crush'))
 check('a remix stays a different recording', !same('Instant Crush (Remix)', 'Instant Crush'))
+check('a featuring credit is not a version', same('Instant Crush (feat. Julian Casablancas)', 'Instant Crush'))
+check('a trailing featuring credit is not a version', same('Instant Crush feat. Julian Casablancas', 'Instant Crush'))
+check('"with" stays part of the title', same('Dance with Me', 'Dance with Me') && !same('Dance with Me', 'Dance'))
+check('a live version with a feature is still live', same('Song (Live) (feat. X)', 'Song (Live)'))
 check('an acoustic version stays a different recording', !same('Instant Crush (Acoustic)', 'Instant Crush'))
 check('empty titles stay empty', trackTitleKey('') === '')
 

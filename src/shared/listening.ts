@@ -1,5 +1,5 @@
 import type { CatalogItem, HistoryEntry, SubtitlePart } from './types'
-import { artistNames, splitArtistParts } from './artist-credits'
+import { artistNames, artistPartsFor } from './artist-credits'
 
 export type ListeningArtist = {
   key: string
@@ -37,10 +37,9 @@ export function summarizeHistory(history: HistoryEntry[], since: number): Listen
 
   for (const entry of history) {
     if (entry.playedAt < since || entry.playedAt >= since + DAY_MS * 7) continue
-    const name =
-      artistNames(entry.artistParts ?? [])[0] ||
-      entry.artist.split(',')[0]?.trim() ||
-      'Unknown artist'
+    // Clean credits: older entries carry the row tag ("Song") as a part, which
+    // used to be counted as a separate artist in the weekly summary.
+    const name = artistNames(artistPartsFor(entry))[0] || 'Unknown artist'
     const key = `name:${name.toLowerCase()}`
     const duration = Number.isFinite(entry.durationSec) ? Math.max(0, entry.durationSec ?? 0) : 0
     const completion = Number.isFinite(entry.completion) ? Math.min(1, Math.max(0, entry.completion)) : 0
@@ -92,16 +91,23 @@ export function summarizeHistory(history: HistoryEntry[], since: number): Listen
  */
 export function historyItem(entry: HistoryEntry): CatalogItem {
   const artist = entry.artist.trim() || 'Unknown artist'
-  const credit = entry.artistParts?.length
-    ? entry.artistParts
-    : splitArtistParts(artist, entry.artistId)
+  // Clean stored credits: older entries kept the row's page-type tag ("Song")
+  // and rendered it as another artist link.
+  const credit = artistPartsFor(entry)
   const parts: SubtitlePart[] = [...credit]
+  const names = artistNames(credit)
   const album = entry.album?.trim()
   if (album) {
     if (parts.length > 0) parts.push({ text: ' · ' })
-    parts.push({ text: album, albumId: entry.albumId, entity: 'album' })
+    // The artist verifies a name-only album link, so a shared release title
+    // cannot send the click to another artist's page.
+    parts.push({
+      text: album,
+      albumId: entry.albumId,
+      entity: 'album',
+      artistName: names[0] ?? artist
+    })
   }
-  const names = artistNames(credit)
 
   return {
     id: entry.trackId,

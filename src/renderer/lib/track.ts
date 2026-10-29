@@ -27,12 +27,18 @@ export function trackToItem(track: Track): CatalogItem {
     : track.artist
       ? [{ text: track.artist }]
       : []
+  const artists = artistNames(credit)
   if (track.album) {
     if (parts.length > 0) parts.push({ text: ' · ' })
-    parts.push({ text: track.album, albumId: track.albumId, entity: 'album' })
+    // Carry the artist so a name-only release link can be verified instead of
+    // opening the first album with the same title.
+    parts.push({
+      text: track.album,
+      albumId: track.albumId,
+      entity: 'album',
+      artistName: artists[0] ?? track.artist
+    })
   }
-
-  const artists = artistNames(credit)
 
   return {
     id: track.id,

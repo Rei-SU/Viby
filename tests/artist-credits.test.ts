@@ -89,9 +89,18 @@ const structured: SubtitlePart[] = [
   { text: 'B', artistId: 'UCb', entity: 'artist' }
 ]
 const structuredTrack = { artist: 'Different Name', artistId: 'UCa', artistParts: structured }
-check('stored parts win over the display string', artistPartsFor(structuredTrack) === structured)
+check(
+  'stored parts win over the display string',
+  texts(artistPartsFor(structuredTrack)) === 'A & B' &&
+    artistPartsFor(structuredTrack)[0]?.artistId === 'UCa'
+)
 check('legacy track is split from its name', texts(artistPartsFor({ artist: 'Stormy, Manal', artistId: 'UCstormy' })) === 'Stormy, Manal')
 check('legacy single-artist track stays one link', artistPartsFor({ artist: 'Stormy' }).length === 1)
+check(
+  'a legacy display string drops the row tag',
+  artistNames(artistPartsFor({ artist: 'Song • ElGrandeToto', artistId: 'UCtoto' })).join('|') ===
+    'ElGrandeToto'
+)
 
 // ---- rendering order ------------------------------------------------------
 check('artistNames skips separators and connectors', artistNames(splitArtistParts('A feat. B')).join('|') === 'A|B')
@@ -129,6 +138,37 @@ check(
   JSON.stringify(snapshot)
 )
 check('plainTrack leaves the original alone', proxiedTrack.artistParts?.[0]?.text === 'Stormy')
+
+// ---- page-type labels are tags, not credits -------------------------------
+const searchRow: SubtitlePart[] = [
+  { text: 'Song' },
+  { text: ' • ' },
+  { text: 'ElGrandeToto', artistId: 'UCtoto', entity: 'artist' }
+]
+const searchCredit = creditParts(searchRow) ?? []
+check('the leading "Song" tag is not a credit', texts(searchCredit) === 'ElGrandeToto', texts(searchCredit))
+check('the artist keeps its id', searchCredit[0]?.artistId === 'UCtoto')
+check(
+  'artistNames never include the page-type tag',
+  artistNames(searchCredit).join('|') === 'ElGrandeToto',
+  artistNames(searchCredit).join('|')
+)
+
+const storedPolluted: Track = {
+  id: 'x',
+  title: 'Mghayer',
+  artist: 'Song • ElGrandeToto',
+  artistId: 'UCtoto',
+  artistParts: searchRow,
+  durationSec: 214
+}
+const sanitized = artistPartsFor(storedPolluted)
+check('stored credits are cleaned on read', artistNames(sanitized).join('|') === 'ElGrandeToto')
+check('a real artist named after a tag is still kept', creditParts([
+  { text: 'Song', artistId: 'UCsong', entity: 'artist' },
+  { text: ', ' },
+  { text: 'Manal', artistId: 'UCmanal', entity: 'artist' }
+])?.[0]?.artistId === 'UCsong')
 
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed`)
