@@ -12,6 +12,7 @@
   import { formatDuration as fmt } from '../lib/format'
   import { favorites } from '../lib/favorites.svelte'
   import Cover from './Cover.svelte'
+  import CollectionDownloadButton from './CollectionDownloadButton.svelte'
   import DownloadBadge from './DownloadBadge.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
@@ -44,7 +45,6 @@
     isLiked ? 'liked' : playlist ? `playlist:${playlist.id}` : null
   )
   const dlCounts = $derived(downloads.countsFor(tracks, collectionKey ?? undefined))
-  const fullyDownloaded = $derived(dlCounts.total > 0 && dlCounts.done === dlCounts.total)
   const mark = $derived(markFor(dlCounts.done, dlCounts.total))
   const progress = $derived(dlCounts.total > 0 ? (dlCounts.done / dlCounts.total) * 100 : 0)
 
@@ -83,38 +83,6 @@
 
   function playAll(): void {
     if (playableItems.length > 0) void player.playList(playableItems, 0)
-  }
-
-  async function downloadCollection(): Promise<void> {
-    if (!collectionKey) return
-    if (fullyDownloaded) {
-      if (window.confirm(`Remove “${title}” from downloads?`)) {
-        await downloads.removeCollection(collectionKey)
-      }
-      return
-    }
-    if (dlCounts.active > 0) {
-      await downloads.pauseCollection(collectionKey)
-      return
-    }
-    if (dlCounts.paused > 0) {
-      await downloads.resumeCollection(collectionKey)
-      return
-    }
-
-    for (const track of tracks) {
-      if (downloads.stateFor(track.id) === 'failed') await downloads.retry(track.id)
-    }
-    await downloads.addCollection(
-      {
-        key: collectionKey,
-        kind: isLiked ? 'liked' : 'playlist',
-        title,
-        thumbnail: cover,
-        trackIds: tracks.map((track) => track.id)
-      },
-      tracks
-    )
   }
 
   async function remove(item: CatalogItem): Promise<void> {
@@ -195,45 +163,15 @@
         </button>
 
         {#if collectionKey && tracks.length > 0}
-          <button
-            class="ghost"
-            class:on={fullyDownloaded || dlCounts.active > 0 || dlCounts.paused > 0}
-            title={dlCounts.active > 0
-              ? `Pause remaining downloads (${dlCounts.done}/${dlCounts.total} downloaded)`
-              : dlCounts.paused > 0 && !offline
-                ? `Resume paused downloads (${dlCounts.done}/${dlCounts.total} downloaded)`
-                : offline && !fullyDownloaded
-                  ? 'Connect to download'
-                  : fullyDownloaded
-                    ? 'Downloaded — click to remove'
-                    : 'Download this collection'}
-            disabled={offline && !fullyDownloaded && dlCounts.active === 0}
-            onclick={() => void downloadCollection()}
-          >
-            {#if dlCounts.active > 0}
-              <Icon name="pause" size={13} solid />
-              <span>Pause download</span>
-            {:else if dlCounts.paused > 0 && !offline}
-              <Icon name="play" size={13} solid />
-              <span>Resume download</span>
-            {:else if fullyDownloaded}
-              <Icon name="check" size={14} />
-              <span>Downloaded</span>
-            {:else}
-              <Icon name="download" size={14} />
-              <span>Download{dlCounts.done > 0 ? ` (${dlCounts.done}/${dlCounts.total})` : ''}</span>
-            {/if}
-          </button>
-          {#if dlCounts.active > 0 || dlCounts.paused > 0}
-            <button
-              class="cancel-download"
-              title="Cancel remaining downloads"
-              aria-label="Cancel remaining downloads"
-              onclick={() => collectionKey && void downloads.cancelCollection(collectionKey)}
-            >
-              <Icon name="close" size={13} />
-            </button>
-          {/if}
+          <CollectionDownloadButton
+            {collectionKey}
+            kind={isLiked ? 'liked' : 'playlist'}
+            {title}
+            cover={cover}
+            {tracks}
+            {offline}
+            variant="actions"
+          />
         {/if}
 
         {#if playlist}
@@ -429,30 +367,6 @@
     color: var(--text-faint);
   }
 
-  .ghost.on {
-    color: var(--text);
-    border-color: var(--stroke-strong);
-  }
-
-  .cancel-download {
-    display: inline-grid;
-    place-items: center;
-    width: 33px;
-    height: 33px;
-    border: 1px solid var(--stroke);
-    border-radius: 999px;
-    color: var(--text-dim);
-    transition:
-      border-color var(--speed) var(--ease),
-      color var(--speed) var(--ease),
-      background var(--speed) var(--ease);
-  }
-
-  .cancel-download:hover {
-    border-color: var(--stroke-strong);
-    color: var(--text);
-    background: var(--glass-hover);
-  }
 
   .delete-note {
     flex-basis: 100%;

@@ -6,7 +6,6 @@
   import { artwork } from '../lib/artwork.svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
-  import { downloads } from '../lib/downloads.svelte'
   import { savedAlbums } from '../lib/saved-albums.svelte'
   import { cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
   import { formatDuration as fmt } from '../lib/format'
@@ -15,6 +14,7 @@
   import TrackRow from './TrackRow.svelte'
   import MediaCard from './MediaCard.svelte'
   import EntityLink from './EntityLink.svelte'
+  import CollectionDownloadButton from './CollectionDownloadButton.svelte'
   import Icon from './Icon.svelte'
   import InlineAlert from './InlineAlert.svelte'
 
@@ -192,40 +192,6 @@
     collectionKind ? `${collectionKind}:${item.browseId ?? item.id}` : null
   )
   const downloadTracks = $derived(displaySongs.map(toTrack))
-  const dlCounts = $derived(downloads.countsFor(downloadTracks, collectionKey ?? undefined))
-  const fullyDownloaded = $derived(dlCounts.total > 0 && dlCounts.done === dlCounts.total)
-
-  async function downloadCollection(): Promise<void> {
-    if (!collectionKind || !collectionKey || downloadTracks.length === 0) return
-    if (fullyDownloaded) {
-      if (window.confirm(`Remove “${result?.header?.title ?? item.title}” from downloads?`)) {
-        await downloads.removeCollection(collectionKey)
-      }
-      return
-    }
-    if (dlCounts.active > 0) {
-      await downloads.pauseCollection(collectionKey)
-      return
-    }
-    if (dlCounts.paused > 0) {
-      await downloads.resumeCollection(collectionKey)
-      return
-    }
-
-    for (const track of downloadTracks) {
-      if (downloads.stateFor(track.id) === 'failed') await downloads.retry(track.id)
-    }
-    await downloads.addCollection(
-      {
-        key: collectionKey,
-        kind: collectionKind,
-        title: result?.header?.title ?? item.title,
-        thumbnail: art,
-        trackIds: downloadTracks.map((track) => track.id)
-      },
-      downloadTracks
-    )
-  }
 
   // ---- saved releases ------------------------------------------------------
 
@@ -425,9 +391,6 @@
     void player.playList(playable, Math.max(0, index))
   }
 
-  function countsLabel(done: number, total: number): string {
-    return done > 0 ? ` (${done}/${total})` : ''
-  }
 </script>
 
 <div class="view">
@@ -525,43 +488,14 @@
             <span>{albumSaved ? 'Saved' : 'Save'}</span>
           </button>
         {/if}
-        {#if collectionKey && downloadTracks.length > 0}
-          <button
-            class="download-all"
-            class:on={fullyDownloaded || dlCounts.active > 0 || dlCounts.paused > 0}
-            title={dlCounts.active > 0
-              ? `Pause remaining downloads (${dlCounts.done}/${dlCounts.total} downloaded)`
-              : dlCounts.paused > 0
-                ? `Resume paused downloads (${dlCounts.done}/${dlCounts.total} downloaded)`
-                : fullyDownloaded
-                  ? 'Downloaded — click to remove'
-                  : 'Download this collection'}
-            onclick={() => void downloadCollection()}
-          >
-            {#if dlCounts.active > 0}
-              <Icon name="pause" size={13} solid />
-              <span>Pause download</span>
-            {:else if dlCounts.paused > 0}
-              <Icon name="play" size={13} solid />
-              <span>Resume download</span>
-            {:else if fullyDownloaded}
-              <Icon name="check" size={14} />
-              <span>Downloaded</span>
-            {:else}
-              <Icon name="download" size={14} />
-              <span>Download{countsLabel(dlCounts.done, dlCounts.total)}</span>
-            {/if}
-          </button>
-          {#if dlCounts.active > 0 || dlCounts.paused > 0}
-            <button
-              class="cancel-download"
-              title="Cancel remaining downloads"
-              aria-label="Cancel remaining downloads"
-              onclick={() => collectionKey && void downloads.cancelCollection(collectionKey)}
-            >
-              <Icon name="close" size={13} />
-            </button>
-          {/if}
+        {#if collectionKey && collectionKind && downloadTracks.length > 0}
+          <CollectionDownloadButton
+            {collectionKey}
+            kind={collectionKind}
+            title={result?.header?.title ?? item.title}
+            cover={art}
+            tracks={downloadTracks}
+          />
         {/if}
       </div>
     </header>
@@ -827,55 +761,6 @@
     transform: translateY(-1px);
   }
 
-  .download-all {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin: 14px 0 0 8px;
-    padding: 8px 16px;
-    border: 1px solid var(--stroke);
-    border-radius: 999px;
-    color: var(--text-dim);
-    font-size: 12.5px;
-    font-weight: 500;
-    transition:
-      border-color var(--speed) var(--ease),
-      color var(--speed) var(--ease),
-      background var(--speed) var(--ease);
-  }
-
-  .download-all:hover {
-    border-color: var(--stroke-strong);
-    color: var(--text);
-    background: var(--glass-hover);
-  }
-
-  .download-all.on {
-    color: var(--text);
-    border-color: var(--stroke-strong);
-  }
-
-  .cancel-download {
-    display: inline-grid;
-    place-items: center;
-    width: 33px;
-    height: 33px;
-    margin: 14px 0 0 8px;
-    border: 1px solid var(--stroke);
-    border-radius: 999px;
-    color: var(--text-dim);
-    vertical-align: top;
-    transition:
-      border-color var(--speed) var(--ease),
-      color var(--speed) var(--ease),
-      background var(--speed) var(--ease);
-  }
-
-  .cancel-download:hover {
-    border-color: var(--stroke-strong);
-    color: var(--text);
-    background: var(--glass-hover);
-  }
 
   .save-album {
     display: inline-flex;
