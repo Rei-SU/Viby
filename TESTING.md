@@ -49,6 +49,7 @@ ones that touch main-process modules.
 | `artist-shelves` | prints an artist page's real shelf structure (diagnostic) |
 | `library` | favourites, saved releases and playlists CRUD, persistence, self-healing |
 | `lyrics` | LRCLIB synced/plain, lyrics.ovh backup, cache, miss |
+| `lyrics-sync` | synced line selection at timestamp boundaries, duplicates and past the end |
 | `spotify` | Anonymous Spotify pathfinder: 200-track pagination, fields, non-playlist rejection |
 | `import` | Link detection, all four non-Spotify adapters, matcher scoring, YouTube exact path |
 | `downloads-store` | downloads index: references, shared-file survival, pruning, source-aware collection cancellation, healing, orphan sweep, pinned lyrics, path safety |
@@ -62,6 +63,7 @@ ones that touch main-process modules.
 | `track-title` | recording identity: official video/audio/lyric/4K markers ignored, live/remix/acoustic kept distinct, case and spacing normalised |
 | `pixel-scramble` | dot-matrix boot: random digits, fixed colon, left-to-right lock order and the final landed value |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
+| `main-guards` | private-address blocking (IPv4/IPv6/mapped) and image extension selection |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
 | `discord` | Discord Rich Presence: IPC frame codec, pipe discovery, activity mapping (art fallbacks, truncation, timestamps), rate limiter, and the client against a fake Discord socket |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
@@ -165,7 +167,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/ytdlp/**` | unit `resolver` (incl. the data-saver ceiling) · e2e `playback` |
 | `src/main/innertube/**` | unit `innertube`, `catalog`, `thumbs` · e2e `images`, `navigation`, `home` |
 | `src/main/lyrics.ts` | unit `lyrics` · e2e `lyrics` |
-| `src/main/import/**` | unit `import`, `spotify` · e2e `import` |
+| `src/main/import/**` | unit `import`, `spotify`, `main-guards` · e2e `import` |
 | `src/renderer/components/ImportView.svelte` | e2e `import` |
 | `src/main/library.ts` | unit `library` · e2e `library` · behaviour |
 | `src/main/session.ts` | e2e `resume` |
@@ -179,7 +181,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/download-jobs.ts`, `DownloadPanel.svelte`, `SidePanel.svelte` | unit `download-jobs` · e2e `queue`, `lyrics` (shared panel shell) · visual check of the downloads panel |
 | `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `OfflineHome` | e2e `offline`, `playback`, `navigation` · unit `download-groups` |
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
-| `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts` | unit `images` · e2e `offline`, `images` |
+| `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts`, `private-address.ts`, `image-extension.ts` | unit `images`, `main-guards` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
@@ -187,11 +189,11 @@ Find the row for what you changed; run what it lists.
 | `src/shared/version.ts`, `src/main/version.ts` | unit `version`, `updates`, `changelog` |
 | `src/renderer/lib/nav.svelte.ts`, `src/renderer/lib/release.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title` |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts`, `release-focus` |
-| `src/renderer/lib/lyrics.svelte.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` |
+| `src/renderer/lib/lyrics.svelte.ts`, `lyrics-sync.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` · unit `lyrics-sync` |
 | `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change`, `release-focus` · behaviour (reorder) |
 | `src/renderer/lib/history.svelte.ts`, `HistoryPanel`, `favorites.svelte.ts` | unit `listening` · e2e `home`, `queue` · behaviour |
 | `src/renderer/components/MoodGrid.svelte`, `MoodView.svelte`, `src/renderer/lib/moods.svelte.ts` | unit `innertube` · e2e `home`, `navigation`, `carousel` |
-| `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker` | e2e `library` · behaviour |
+| `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker`, `CollectionDownloadButton` | e2e `library` · behaviour · visual check of download/pause/resume/cancel on an album and a playlist page |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts` | unit `artist-credits`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
 | `src/shared/track-title.ts`, title navigation metadata | unit `track-title`, `innertube`, `listening` · e2e `release-focus` |

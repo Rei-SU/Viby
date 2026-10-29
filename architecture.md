@@ -405,8 +405,10 @@ can be disabled in Settings.
 ### 4.16 Performance invariants
 
 - One `<audio>` element; Chromium’s decoder is the only decode path.
-- Player clock/media-session updates are throttled to 1 Hz; the renderer does not
-  poll.
+- Player bar/media-session clock updates are throttled to 1 Hz; the renderer does
+  not poll. Synced lyrics sample the audio element clock (`player.currentTime`)
+  per animation frame, so highlighting keeps sub-second accuracy without making
+  every other surface re-render four times a second.
 - Audio cache 1 GB default (LRU), art cache 256 MB (LRU), both bounded. Downloads
   are user-owned and never auto-evicted.
 - `yt-dlp` concurrency capped; prefetch limited; renderer stays dumb.
@@ -476,7 +478,7 @@ through `nav`, never through callback chains.
 |---|---|
 | Shell | `PlayerBar`, `SidePanel`, `QueuePanel`, `LyricsPanel`, `HistoryPanel`, `DownloadPanel`, `Rail`, `SearchBar`, `PlaylistPicker`, `QueueDropBar`, `ChangelogDialog` |
 | Views | `HomeView`, `OfflineHome`, `SearchView`, `LibraryView`, `CollectionView`, `DownloadCollectionView`, `DetailView`, `TrackView`, `MoodView`, `ImportView`, `SettingsView` |
-| Rows/cards | `TrackRow`, `MediaCard`, `Cover`, `DownloadBadge`, `EntityLink`, `ArtistLinks`, `SubtitleParts` |
+| Rows/cards | `TrackRow`, `MediaCard`, `Cover`, `DownloadBadge`, `CollectionDownloadButton`, `EntityLink`, `ArtistLinks`, `SubtitleParts` |
 | Home extras | `ListeningDashboard`, `PixelClock`, `MoodGrid` |
 | Primitives | `Icon`, `InlineAlert` |
 
@@ -497,6 +499,8 @@ playing equalizer all live there.
   `sourceId` keeps the originating row highlighted;
 - session persistence (throttled, exact saves on pause/seek/end/quit);
 - `mediaSession` metadata/actions/position;
+- a throttled reactive clock for the bar and OS UI, plus an exact `currentTime`
+  getter the synced lyrics panel samples each frame;
 - Windows taskbar control mirroring;
 - autoplay radio extension and next-track prefetch.
 
@@ -722,6 +726,8 @@ Date-stamped; see [PLAN.md](PLAN.md) and [TESTING.md](TESTING.md) for details.
 - **Downloads snapshots** are rebuilt in full and startup healing is synchronous;
   delta events and cached indexes are future work.
 - **Catalog→Track mapping** is duplicated between the renderer and import matcher.
+- **`registerIpc` is one ~900-line function** registering every channel; splitting it
+  by domain is mechanical wiring work rather than a behavioural change.
 - **Coverage gaps** remain around media range/traversal, updater-native, image
   cache redirects and full download-manager state transitions.
 
@@ -736,7 +742,7 @@ This section is the complete file-level symbol index: every named function, clas
 method, constructor, getter and named arrow in the source, with its line and a
 one-line role.
 
-**Coverage:** 1,064 rows across 135 source files, generated from the code on
+**Coverage:** 1,063 rows across 139 source files, generated from the code on
 2026-10-28. Constructors, getters and the preload `window.viby` object arrows are
 included even where a basic AST pass would miss them.
 
@@ -785,6 +791,14 @@ Reads the release notes baked into the build and filters them to the running ver
 | 27 | isEntry | function | Type guard for a stored changelog entry and its sections. |
 | 39 | load | function | Reads and validates `resources/changelog.json` once, caching the entries. |
 | 52 | changelogInfo | function | Returns entries not newer than the app version plus the first-run flag. |
+
+#### src/main/image-extension.ts
+
+Container extension for a fetched image, shared by the artwork cache and downloads.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 2 | extensionFor | function | Maps an image content type, else a URL suffix, to jpg/png/webp/gif. |
 
 #### src/main/index.ts
 
@@ -930,6 +944,14 @@ Connectivity monitor that distinguishes offline, unreachable and online using li
 | 286 | NetworkMonitor.set | method | Stores a new state and emits only when status, forced flag or detail changed. |
 | 295 | NetworkMonitor.emit | method | Fans out a state snapshot to every registered listener. |
 
+#### src/main/private-address.ts
+
+SSRF guard shared by artwork fetching and import redirects; one copy so the two boundaries cannot drift.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 8 | isPrivateAddress | function | Detects loopback, link-local, CGNAT and private IPv4/IPv6, recursing into mapped IPv4. |
+
 #### src/main/session.ts
 
 Playback session persistence: the last track, queue position and timestamp, restored on launch.
@@ -1021,24 +1043,22 @@ Content-addressed artwork cache with SSRF guards, serving saved-library covers o
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 25 | extensionFor | function | Maps an image content type, else a URL suffix, to jpg/png/webp/gif. |
-| 35 | isRemote | function | True for http(s) URLs, meaning anything not already local. |
-| 39 | isPrivateAddress | function | Detects loopback, link-local, CGNAT and private IPv4/IPv6, recursing into mapped IPv4. |
-| 74 | assertSafeRemoteImageUrl | function | Validates scheme, host and DNS answers, throwing when an image URL could reach a private host. |
-| 97 | fetchSafeRemoteImage | function | Fetches an image across up to six redirects, re-validating every hop against the SSRF guard. |
-| 121 | guardedFetch | arrow | Default fetch implementation delegating to `fetchSafeRemoteImage`, injected into ImageCache. |
-| 131 | ImageCache | class | Pins library artwork to disk with content-addressed names and a 256 MB cap. |
-| 134 | ImageCache.constructor | method | Stores the fetch implementation (guarded by default) and creates the cache directory. |
-| 142 | ImageCache.path | method | Getter returning the artwork cache directory. |
-| 147 | ImageCache.nameFor | method | SHA-1 hashes the URL into `<hash>.<ext>` for content addressing. |
-| 152 | ImageCache.localUrl | method | Returns a media URL when any extension variant of the image exists on disk. |
-| 162 | ImageCache.localMany | method | Maps many remote URLs to the local copies that exist. |
-| 171 | ImageCache.cache | method | Downloads, validates and atomically writes one image, then optionally enforces the cap. |
-| 211 | ImageCache.cacheMany | method | Dedupes up to 250 URLs, caches with fixed worker concurrency, enforces the cap once. |
-| 232 | ImageCache.stats | method | Sums file sizes and counts entries currently on disk. |
-| 246 | ImageCache.clear | method | Removes the whole directory (tolerating Windows locks) and recreates it. |
-| 256 | ImageCache.files | method | Private readdir helper that hides in-flight `.part` files. |
-| 265 | ImageCache.enforceCap | method | Deletes oldest files by mtime until the cache is back under its byte cap. |
+| 27 | isRemote | function | True for http(s) URLs, meaning anything not already local. |
+| 35 | assertSafeRemoteImageUrl | function | Validates scheme, host and DNS answers, throwing when an image URL could reach a private host. |
+| 58 | fetchSafeRemoteImage | function | Fetches an image across up to six redirects, re-validating every hop against the SSRF guard. |
+| 82 | guardedFetch | arrow | Default fetch implementation delegating to `fetchSafeRemoteImage`, injected into ImageCache. |
+| 92 | ImageCache | class | Pins library artwork to disk with content-addressed names and a 256 MB cap. |
+| 95 | ImageCache.constructor | method | Stores the fetch implementation (guarded by default) and creates the cache directory. |
+| 103 | ImageCache.path | method | Getter returning the artwork cache directory. |
+| 108 | ImageCache.nameFor | method | SHA-1 hashes the URL into `<hash>.<ext>` for content addressing. |
+| 113 | ImageCache.localUrl | method | Returns a media URL when any extension variant of the image exists on disk. |
+| 123 | ImageCache.localMany | method | Maps many remote URLs to the local copies that exist. |
+| 132 | ImageCache.cache | method | Downloads, validates and atomically writes one image, then optionally enforces the cap. |
+| 172 | ImageCache.cacheMany | method | Dedupes up to 250 URLs, caches with fixed worker concurrency, enforces the cap once. |
+| 193 | ImageCache.stats | method | Sums file sizes and counts entries currently on disk. |
+| 207 | ImageCache.clear | method | Removes the whole directory (tolerating Windows locks) and recreates it. |
+| 217 | ImageCache.files | method | Private readdir helper that hides in-flight `.part` files. |
+| 226 | ImageCache.enforceCap | method | Deletes oldest files by mtime until the cache is back under its byte cap. |
 
 #### src/main/cache/policy.ts
 
@@ -1054,8 +1074,7 @@ Caches cover art next to downloaded audio so offline views keep their artwork.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 9 | extensionFor | function | Maps image content type or URL suffix to jpg/png/webp/gif. |
-| 23 | fetchArt | function | Returns an existing hashed art name or downloads, validates and atomically writes it; never throws. |
+| 14 | fetchArt | function | Returns an existing hashed art name or downloads, validates and atomically writes it; never throws. |
 
 #### src/main/downloads/manager.ts
 
@@ -1390,13 +1409,12 @@ Single user-facing error type for the whole import pipeline.
 Guarded HTTP helpers: SSRF checks, retries, bounded bodies, JSON/text wrappers.
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 12 | sleep | function | Promise-based delay used by retry and paging back-off. |
-| 27 | isPrivateAddress | function | Classifies IPv4/IPv6 literals (incl. mapped) as loopback/link-local/private. |
-| 59 | assertPublicHttpUrl | function | Resolves the host and throws `ImportError` for private, local or unresolvable targets. |
-| 83 | httpGet | function | Retries up to 3 times on 408/425/429/5xx with back-off and per-request timeout. |
-| 118 | fetchGuarded | function | Re-validates every redirect hop (max 5) before fetching; used by `httpGet`. |
-| 156 | getText | function | GETs and reads a size-bounded text body, mapping oversize/HTTP errors to `ImportError`. |
-| 169 | getJson | function | GETs and parses bounded JSON, mapping failures to `ImportError`. |
+| 13 | sleep | function | Promise-based delay used by retry and paging back-off. |
+| 29 | assertPublicHttpUrl | function | Resolves the host and throws `ImportError` for private, local or unresolvable targets. |
+| 53 | httpGet | function | Retries up to 3 times on 408/425/429/5xx with back-off and per-request timeout. |
+| 88 | fetchGuarded | function | Re-validates every redirect hop (max 5) before fetching; used by `httpGet`. |
+| 126 | getText | function | GETs and reads a size-bounded text body, mapping oversize/HTTP errors to `ImportError`. |
+| 139 | getJson | function | GETs and parses bounded JSON, mapping failures to `ImportError`. |
 
 #### src/main/import/index.ts
 Public façade that detects the service then dispatches to the matching adapter.
@@ -1787,6 +1805,14 @@ Builds the unified Library grid from playlists, saved albums and downloads.
 | 38 | collectionArt | function | Picks collection art, then first entry art, then a track thumbnail. |
 | 55 | buildLibraryItems | function | Merges liked songs, playlists, saved albums and collections into library tiles. |
 
+#### src/renderer/lib/lyrics-sync.ts
+
+Pure line lookup for the synced lyrics panel.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 8 | lineIndexAt | function | Returns the last lyric line whose timestamp has been reached, or -1. |
+
 #### src/renderer/lib/lyrics.svelte.ts
 Session-cached lyrics state for the player button and the lyrics panel.
 
@@ -1917,6 +1943,7 @@ The app-wide audio player: one element, queue, playback state and OS media integ
 | 1146 | Player.localArtwork | method | Reads a cached cover via main and memoizes an 8-entry data URL cache. |
 | 1166 | Player.syncPlaybackState | method | Sets the media session playback state to playing or paused. |
 | 1171 | Player.syncPositionState | method | Publishes duration, rate and clamped position to the media session. |
+| 1186 | Player.currentTime | getter | Exact audio element clock for lyric sync; the reactive position stays throttled. |
 
 #### src/renderer/lib/playlist-picker.svelte.ts
 Anchored add-to-playlist popover state shared by every track row.
@@ -2071,6 +2098,15 @@ Modal "What's new" sheet listing release notes with a focus trap and Escape dism
 | 21 | sectionLabels | function | Returns true when an entry has multiple sections, so section titles render. |
 | 25 | onKeydown | function | Window handler: Escape dismisses the dialog, Tab wraps focus inside the sheet. |
 
+#### src/renderer/components/CollectionDownloadButton.svelte
+
+Shared album/playlist download control: download, pause, resume and cancel in one place.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 43 | toggle | function | Removes when complete, pauses while active, resumes when paused, retries failures, else enqueues the collection. |
+| 75 | cancel | function | Cancels the collection's remaining jobs. |
+
 #### src/renderer/components/CollectionView.svelte
 
 Liked-songs or playlist page with hero, download/rename/delete controls and a paged track list.
@@ -2079,11 +2115,10 @@ Liked-songs or playlist page with hero, download/rename/delete controls and a pa
 |---:|---|---|---|
 | 80 | loadLiked | function | Fetches favourite tracks into local state. |
 | 84 | playAll | function | Plays the offline-available items from the first one. |
-| 88 | downloadCollection | function | Toggles the collection download: removes when complete, pauses while active, resumes when paused, retries failures, else enqueues. |
-| 120 | remove | function | Removes a row: unfavourites and reloads, or removes the track from the playlist. |
-| 132 | startRename | function | Seeds the draft with the playlist name and enters rename mode. |
-| 138 | commitRename | function | Prevents submit, renames the playlist, leaves rename mode. |
-| 145 | deletePlaylist | function | Deletes the playlist, then navigates back and clears forward history. |
+| 88 | remove | function | Removes a row: unfavourites and reloads, or removes the track from the playlist. |
+| 100 | startRename | function | Seeds the draft with the playlist name and enters rename mode. |
+| 106 | commitRename | function | Prevents submit, renames the playlist, leaves rename mode. |
+| 113 | deletePlaylist | function | Deletes the playlist, then navigates back and clears forward history. |
 
 #### src/renderer/components/Cover.svelte
 
@@ -2100,14 +2135,12 @@ Album, artist or playlist catalogue page with cached browse, shelves, downloads 
 | 67 | shelfLabel | function | Maps raw shelf titles to display labels, passing unknown titles through. |
 | 91 | bannerFailed | function | Records a failed banner URL and marks the artwork broken in the artwork store. |
 | 163 | withDefaults | function | Clones a row, filling fallback artist, page release metadata and header artwork. |
-| 198 | downloadCollection | function | Toggles the album/playlist download: removes when complete, pauses while active, resumes when paused, retries failures, else enqueues. |
-| 238 | albumSnapshot | function | Builds the SavedAlbum record (title, artist, art, year, track count) for saving. |
-| 253 | toggleAlbumSave | function | Saves or unsaves the album snapshot, swallowing local write errors. |
-| 292 | load | function | Browses a catalogue id, guards stale requests, caches the result and prefetches songs. |
-| 315 | retry | function | Re-runs the browse after a failure with a fresh request token. |
-| 397 | playAll | function | Plays the page track list (top songs on artist pages) from the start. |
-| 402 | activate | function | Plays a card when playable, else navigates; album-from-artist keeps the artist credit. |
-| 428 | countsLabel | function | Returns a ` (done/total)` suffix, empty when nothing is downloaded. |
+| 204 | albumSnapshot | function | Builds the SavedAlbum record (title, artist, art, year, track count) for saving. |
+| 219 | toggleAlbumSave | function | Saves or unsaves the album snapshot, swallowing local write errors. |
+| 258 | load | function | Browses a catalogue id, guards stale requests, caches the result and prefetches songs. |
+| 281 | retry | function | Re-runs the browse after a failure with a fresh request token. |
+| 363 | playAll | function | Plays the page track list (top songs on artist pages) from the start. |
+| 368 | activate | function | Plays a card when playable, else navigates; album-from-artist keeps the artist credit. |
 
 #### src/renderer/components/DownloadBadge.svelte
 
@@ -2232,7 +2265,7 @@ Synced lyrics panel that centres and seeks the active line.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 63 | seek | function | Seeks the player to a clicked lyric line's timestamp. |
+| 81 | seek | function | Seeks the player to a clicked lyric line's timestamp. |
 
 #### src/renderer/components/MediaCard.svelte
 
