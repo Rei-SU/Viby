@@ -252,6 +252,23 @@ album costs zero resolver calls; prefetch warms the next/hovered tracks.
 
 The renderer never sees raw InnerTube JSON, only shared catalog types.
 
+**Entity identity.** Catalog rows carry artist and release page ids. A track
+rebuilt from history, downloads or a resolver may know only a name, and release
+titles are not unique across artists. Name-only links therefore verify a search
+result against the title *and* the credited artist (`entity-lookup.ts`); an
+unverified name opens the matching search results instead of the first hit.
+`tracks.json` merges catalog-first (`track-metadata.ts`), so resolver metadata
+can add a duration or artwork but never erase the ids a link needs.
+
+**Song-title clicks are album-first.** A track's tagged album or EP opens at the
+song. When the tag is a single, or the row is a search result with no release,
+`release.ts` searches albums by the cleaned song title and artist, skips singles,
+browses the candidates and keeps only one whose track list contains the same
+recording. The matched row is scrolled into view and flashed. `pickTrackIndex`
+prefers the exact row id, then a version-aware title key, then duration within
+8 seconds, so a duplicate title cannot light up the wrong recording. A song with
+no album behind it opens the song page.
+
 ### 4.5 Resolver (`src/main/ytdlp/`)
 
 - `binary.ts` provisions and updates the resolver. A bundled zipapp + vendored
@@ -367,6 +384,10 @@ than `file://`, keeping `webSecurity` on. The handler:
   tag message is baked into `resources/changelog.json` for the in-app What’s New
   sheet.
 
+The settings icon carries a dot while an update is pending. Opening Settings from
+that icon scrolls to the Updates section and flashes its card, which shows the
+version transition, a status badge and one solid action.
+
 ### 4.14 Discord Rich Presence (`src/main/discord/`)
 
 Zero-dependency local IPC client:
@@ -377,14 +398,17 @@ Zero-dependency local IPC client:
 | `paths.ts` | `discord-ipc-0..9` discovery on Windows/macOS |
 | `client.ts` | handshake, READY, ping/pong, pending request matching |
 | `activity.ts` | activity payload: Listening type, title/artist, links, artwork, vinyl badge, **Get Viby** button |
-| `rate-limit.ts` | 5 updates / 20s with 4s spacing |
-| `presence.ts` | connection lifecycle, coalescing, reconnect backoff, pause/stop clear |
+| `rate-limit.ts` | 5 updates / 20s; sends inside the cap are immediate |
+| `presence.ts` | connection lifecycle, 250ms coalescing, reconnect backoff, pause/stop clear |
 | `index.ts` | public app ID, dev-only socket/badge overrides |
 
 The renderer sends a plain `PresenceSnapshot` only on meaningful changes or a
-detected seek; main projects the position from `updatedAt`. The client ID is
-public; no Discord token or account is involved. Presence is on by default and
-can be disabled in Settings.
+detected seek; main projects the position from `updatedAt`. A track change
+pauses the old audio while the next one resolves, but that transient stop is
+not published: Discord keeps the previous card until the new track actually
+starts, then switches immediately (only a user pause, stop or failure clears
+it). The client ID is public; no Discord token or account is involved. Presence
+is on by default and can be disabled in Settings.
 
 ### 4.15 Security model
 
@@ -742,7 +766,7 @@ This section is the complete file-level symbol index: every named function, clas
 method, constructor, getter and named arrow in the source, with its line and a
 one-line role.
 
-**Coverage:** 1,063 rows across 139 source files, generated from the code on
+**Coverage:** 1,079 rows across 143 source files, generated from the code on
 2026-10-28. Constructors, getters and the preload `window.viby` object arrows are
 included even where a basic AST pass would miss them.
 
@@ -814,26 +838,26 @@ The single IPC surface: registers every channel and implements the playback reso
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 83 | downloadStore | function | Lazily creates the downloads store rooted at `userData/downloads`. |
-| 88 | audioCache | function | Constructs an AudioCache bound to the current cache-cap setting. |
-| 93 | cacheInstance | function | Returns the lazily created shared audio cache instance. |
-| 99 | imageCache | function | Returns the lazily created shared artwork cache instance. |
-| 106 | trackStore | function | Lazily opens `tracks.json`, the metadata map for known tracks. |
-| 111 | registerIpc | function | Wires all IPC handlers for catalog, player, library, downloads, settings and updates. |
-| 112 | ok | arrow | Wraps a successful payload in a `Result`. |
-| 113 | fail | arrow | Converts a thrown value into a failed `Result`. |
-| 117 | offline | arrow | Returns an offline failure `Result`, or null when online. |
-| 137 | broadcast | arrow | Sends a payload on a channel to every live window. |
-| 213 | autoCheck | arrow | Runs a quiet update check when auto-check is enabled and the app is online. |
-| 222 | stopPlaybackBlocker | arrow | Releases the display-sleep blocker if one is held. |
-| 302 | snapshot | arrow | Returns the current downloads snapshot from the manager. |
-| 592 | historyEntries | arrow | Loads history and backfills missing metadata from the track store. |
-| 804 | resolveForPlayback | function | Resolves a request to a stream via download, cache, network, or SABR disk fallback. |
-| 896 | remember | function | Persists a track's metadata into the track store. |
-| 907 | localStream | function | Builds `StreamInfo` for a local file, deriving average bitrate from size and duration. |
-| 935 | kickOffBackgroundCache | function | Opportunistically downloads a cache-worthy track so the next play is local. |
-| 978 | mediaFileFor | function | Maps a media URL to a real path, only if it stays inside cache or downloads. |
-| 1011 | handleMediaProtocol | function | Serves `viby-media` requests with byte-range support (200/206/416). |
+| 84 | downloadStore | function | Lazily creates the downloads store rooted at `userData/downloads`. |
+| 89 | audioCache | function | Constructs an AudioCache bound to the current cache-cap setting. |
+| 94 | cacheInstance | function | Returns the lazily created shared audio cache instance. |
+| 100 | imageCache | function | Returns the lazily created shared artwork cache instance. |
+| 107 | trackStore | function | Lazily opens `tracks.json`, the metadata map for known tracks. |
+| 112 | registerIpc | function | Wires all IPC handlers for catalog, player, library, downloads, settings and updates. |
+| 113 | ok | arrow | Wraps a successful payload in a `Result`. |
+| 114 | fail | arrow | Converts a thrown value into a failed `Result`. |
+| 118 | offline | arrow | Returns an offline failure `Result`, or null when online. |
+| 138 | broadcast | arrow | Sends a payload on a channel to every live window. |
+| 214 | autoCheck | arrow | Runs a quiet update check when auto-check is enabled and the app is online. |
+| 223 | stopPlaybackBlocker | arrow | Releases the display-sleep blocker if one is held. |
+| 303 | snapshot | arrow | Returns the current downloads snapshot from the manager. |
+| 593 | historyEntries | arrow | Loads history and backfills missing metadata from the track store. |
+| 805 | resolveForPlayback | function | Resolves a request to a stream via download, cache, network, or SABR disk fallback. |
+| 897 | remember | function | Merges track metadata into the store, keeping catalog identity over resolver data. |
+| 908 | localStream | function | Builds `StreamInfo` for a local file, deriving average bitrate from size and duration. |
+| 936 | kickOffBackgroundCache | function | Opportunistically downloads a cache-worthy track so the next play is local. |
+| 979 | mediaFileFor | function | Maps a media URL to a real path, only if it stays inside cache or downloads. |
+| 1012 | handleMediaProtocol | function | Serves `viby-media` requests with byte-range support (200/206/416). |
 
 #### src/main/json-store.ts
 
@@ -997,6 +1021,14 @@ Windows thumbnail-toolbar controls (previous/play-pause/next) that mirror the pl
 | 87 | applyTaskbar | function | Draws the toolbar for the current state, deferring until the window is shown. |
 | 125 | setTaskbarState | function | Stores the latest player state and redraws the toolbar. |
 | 133 | initTaskbar | function | Subscribes to theme updates so icons reload for light/dark taskbars. |
+
+#### src/main/track-metadata.ts
+
+Catalog-first merge for the remembered track store.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 10 | mergeTrackMetadata | function | Keeps catalog identity and ids, filling only fields the resolver knows and the catalog did not. |
 
 #### src/main/windows.ts
 
@@ -1612,28 +1644,28 @@ Enumerates candidate Discord IPC socket paths for the current platform.
 Connection manager: coalesces snapshots, throttles sends, retries with back-off.
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 34 | DiscordPresence | class | Holds the client, latest snapshot, retry state and rate limiter. |
-| 46 | DiscordPresence.constructor | method | Resolves the clock and constructs the 5-per-20s rate limiter. |
-| 55 | DiscordPresence.setEnabled | method | Enabling connects immediately; disabling shuts down the client and timers. |
-| 66 | DiscordPresence.update | method | Stores the newest valid snapshot and schedules a send. |
-| 74 | DiscordPresence.stop | method | Disables presence and tears down the connection. |
-| 79 | DiscordPresence.connect | method | Creates/opens a client (injectable factory) and resets retry/limit state on success. |
-| 112 | DiscordPresence.handleClose | method | Drops the client and schedules a retry when still enabled. |
-| 121 | DiscordPresence.scheduleRetry | method | Schedules a reconnect using escalating delays (30s..5m). |
-| 133 | DiscordPresence.schedule | method | Defers a flush by the limiter's delay, or flushes immediately. |
-| 147 | DiscordPresence.flush | method | Builds the activity, skips duplicates, records the send and handles failures. |
-| 169 | DiscordPresence.shutdown | method | Clears timers, resets state/limiter and closes the client. |
+| 36 | DiscordPresence | class | Holds the client, latest snapshot, retry state and rate limiter. |
+| 48 | DiscordPresence.constructor | method | Resolves the clock and constructs the 5-per-20s rate limiter. |
+| 57 | DiscordPresence.setEnabled | method | Enabling connects immediately; disabling shuts down the client and timers. |
+| 68 | DiscordPresence.update | method | Stores the newest valid snapshot and schedules a send. |
+| 76 | DiscordPresence.stop | method | Disables presence and tears down the connection. |
+| 81 | DiscordPresence.connect | method | Creates/opens a client (injectable factory) and resets retry/limit state on success. |
+| 114 | DiscordPresence.handleClose | method | Drops the client and schedules a retry when still enabled. |
+| 123 | DiscordPresence.scheduleRetry | method | Schedules a reconnect using escalating delays (30s..5m). |
+| 135 | DiscordPresence.schedule | method | Waits for the coalescing window or limiter, then flushes the latest snapshot. |
+| 151 | DiscordPresence.flush | method | Builds the activity, skips duplicates, records the send and handles failures. |
+| 173 | DiscordPresence.shutdown | method | Clears timers, resets state/limiter and closes the client. |
 
 #### src/main/discord/rate-limit.ts
-Sliding-window limiter that both caps and spaces activity updates.
+Sliding-window limiter for Discord's activity update cap.
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 6 | UpdateRateLimiter | class | Tracks send timestamps within a window. |
-| 9 | UpdateRateLimiter.constructor | method | Stores limit, window and clock (defaults 5 / 20s / Date.now). |
-| 16 | UpdateRateLimiter.delay | method | Returns ms until the next allowed send, enforcing even spacing when under the cap. |
-| 27 | UpdateRateLimiter.record | method | Prunes the window and records a send timestamp. |
-| 33 | UpdateRateLimiter.reset | method | Clears all recorded timestamps. |
-| 37 | UpdateRateLimiter.prune | method | Drops timestamps older than the window. |
+| 7 | UpdateRateLimiter | class | Tracks send timestamps within a window. |
+| 10 | UpdateRateLimiter.constructor | method | Stores limit, window and clock (defaults 5 / 20s / Date.now). |
+| 17 | UpdateRateLimiter.delay | method | Returns 0 under the cap, or ms until the oldest send leaves the window. |
+| 24 | UpdateRateLimiter.record | method | Prunes the window and records a send timestamp. |
+| 30 | UpdateRateLimiter.reset | method | Clears all recorded timestamps. |
+| 34 | UpdateRateLimiter.prune | method | Drops timestamps older than the window. |
 
 ### 12.4 Renderer — stores and helpers
 
@@ -1644,8 +1676,8 @@ Navigation helper that opens an album page even when the caller has no browse id
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 11 | openAlbum | function | Navigates straight to the album when an id exists, else resolves the name. |
-| 19 | lookup | function | Searches albums by name and opens the first result carrying a browse id. |
+| 14 | openAlbum | function | Navigates straight to the album when an id exists, else resolves with artist context. |
+| 27 | lookup | function | Requires the release title and credited artist to match; otherwise shows album search results. |
 
 #### src/renderer/lib/api.ts
 Single access point for the preload bridge exposed on `window.viby`.
@@ -1660,9 +1692,8 @@ Opens artist pages from links that may arrive without a browse id.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 11 | openArtist | function | Navigates directly when given an id, otherwise resolves the name asynchronously. |
-| 19 | lookup | function | Searches artists, prefers an exact normalized name match, then opens the page. |
-| 38 | normalize | function | Lowercases and strips punctuation so fuzzy artist results can be compared exactly. |
+| 14 | openArtist | function | Navigates directly when given an id, otherwise resolves the full name asynchronously. |
+| 22 | lookup | function | Opens only an exact artist-name match; otherwise shows artist search results, never a guess. |
 
 #### src/renderer/lib/artwork.svelte.ts
 Renderer-side artwork cache that swaps remote URLs for local `viby-media://` copies.
@@ -1760,6 +1791,25 @@ Renderer mirror of the main-process download index and job progress.
 | 213 | DownloadsStore.pauseCollection | method | Pauses a collection's remaining jobs. |
 | 217 | DownloadsStore.resumeCollection | method | Resumes a collection's paused jobs. |
 
+#### src/renderer/lib/entity-lookup.ts
+
+Verified matching for name-only artist and release links.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 14 | normalizeEntityName | function | Accent-, case- and punctuation-insensitive identity text. |
+| 47 | pickArtist | function | Returns only an exact artist-name match, or null. |
+| 62 | pickAlbum | function | Matches a release by title and credited artist; refuses to guess without both. |
+| 88 | primaryArtistName | function | First credited artist of a track, skipping page-type tags. |
+
+#### src/renderer/lib/entity-search.ts
+
+Safe destination for an unverified entity link: the matching search results.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 10 | showEntitySearch | function | Navigates to search with the entity filter and the clicked name. |
+
 #### src/renderer/lib/favorites.svelte.ts
 Liked-song ids mirrored in the renderer for every heart control.
 
@@ -1837,26 +1887,26 @@ Single navigation store with browser-style back and forward stacks.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 47 | Navigator | class | Holds the current view, page references and back/forward history stacks. |
-| 65 | Navigator.canGoBack | method | Reports whether a back entry exists. |
-| 69 | Navigator.canGoForward | method | Reports whether a forward entry exists. |
-| 73 | Navigator.revision | method | Exposes the counter bumped on each real navigation. |
-| 77 | Navigator.go | method | Switches top-level view, clearing detail state and recording history. |
-| 88 | Navigator.open | method | Opens a catalog detail page and clears track/collection/mood state. |
-| 102 | Navigator.openReleaseAt | method | Opens a release and sets a focus target for scrolling and highlighting. |
-| 108 | Navigator.clearFocus | method | Clears focus only when the nonce matches the active one. |
-| 113 | Navigator.openMood | method | Opens a mood page unless that same page is already showing. |
-| 122 | Navigator.openArtist | method | Builds an artist catalog item and opens its detail page. |
-| 135 | Navigator.openTrack | method | Opens the song page with a copied track snapshot. |
-| 146 | Navigator.openCollection | method | Opens a liked, playlist or download collection, skipping duplicates. |
-| 161 | Navigator.back | method | Pops the back stack, pushes current onto forward and restores the entry. |
-| 168 | Navigator.forward | method | Pops the forward stack, pushes current onto back and restores the entry. |
-| 176 | Navigator.clearForward | method | Empties the forward stack after the page it points at is deleted. |
-| 180 | Navigator.record | method | Pushes a snapshot, clears forward/focus and bumps the revision. |
-| 187 | Navigator.pushBack | method | Pushes a snapshot onto the back stack, capped at 40 entries. |
-| 192 | Navigator.pushForward | method | Pushes a snapshot onto the forward stack, capped at 40 entries. |
-| 197 | Navigator.snapshot | method | Captures the current view and page references. |
-| 207 | Navigator.restore | method | Applies a snapshot, clears focus and bumps the revision. |
+| 52 | Navigator | class | Holds the current view, page references and back/forward history stacks. |
+| 70 | Navigator.canGoBack | method | Reports whether a back entry exists. |
+| 74 | Navigator.canGoForward | method | Reports whether a forward entry exists. |
+| 78 | Navigator.revision | method | Exposes the counter bumped on each real navigation. |
+| 82 | Navigator.go | method | Switches top-level view, clearing detail state and recording history. |
+| 93 | Navigator.open | method | Opens a catalog detail page and clears track/collection/mood state. |
+| 107 | Navigator.openReleaseAt | method | Opens a release and sets a focus target for scrolling and highlighting. |
+| 118 | Navigator.clearFocus | method | Clears focus only when the nonce matches the active one. |
+| 123 | Navigator.openMood | method | Opens a mood page unless that same page is already showing. |
+| 132 | Navigator.openArtist | method | Builds an artist catalog item and opens its detail page. |
+| 145 | Navigator.openTrack | method | Opens the song page with a copied track snapshot. |
+| 156 | Navigator.openCollection | method | Opens a liked, playlist or download collection, skipping duplicates. |
+| 171 | Navigator.back | method | Pops the back stack, pushes current onto forward and restores the entry. |
+| 178 | Navigator.forward | method | Pops the forward stack, pushes current onto back and restores the entry. |
+| 186 | Navigator.clearForward | method | Empties the forward stack after the page it points at is deleted. |
+| 190 | Navigator.record | method | Pushes a snapshot, clears forward/focus and bumps the revision. |
+| 197 | Navigator.pushBack | method | Pushes a snapshot onto the back stack, capped at 40 entries. |
+| 202 | Navigator.pushForward | method | Pushes a snapshot onto the forward stack, capped at 40 entries. |
+| 207 | Navigator.snapshot | method | Captures the current view and page references. |
+| 217 | Navigator.restore | method | Applies a snapshot, clears focus and bumps the revision. |
 
 #### src/renderer/lib/network.svelte.ts
 Connectivity state mirrored from the main-process probe.
@@ -1995,12 +2045,17 @@ Decides what clicking a song title does: open its release, or the song page.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 18 | isSingle | function | True when a release type is "single", case-insensitively. |
-| 24 | browse | function | Returns a cached browse result or fetches and caches one. |
-| 33 | lookup | function | Searches albums by name and returns the first result with a browse id. |
-| 42 | openTrackTarget | function | Resolves a track's release and navigates to the release or song page. |
-| 51 | stale | arrow | True when a newer click or navigation superseded this request. |
-| 121 | openTrackFromItem | function | Opens the release/song target for a song catalog item, ignoring other kinds. |
+| 24 | isSingle | function | True when a release type is "single", case-insensitively. |
+| 33 | browse | function | Returns a cached browse result or fetches and caches one. |
+| 42 | songRows | function | Playable rows from a browse result. |
+| 46 | releaseItem | function | Builds the release page item from its browse header. |
+| 59 | lookup | function | Finds a release whose title and credited artist both match; never takes a same-name hit. |
+| 69 | taggedRelease | function | Loads the release a track points at, by id or verified name, with its rows. |
+| 95 | discoverAlbum | function | Searches albums by cleaned song title and artist and keeps only one that contains the recording. |
+| 139 | openInRelease | function | Opens the release and focuses the exact matched row when it is known. |
+| 169 | stale | arrow | True when a newer click or navigation superseded this request. |
+| 160 | openTrackTarget | function | Album-first: opens the release at the song, or the song page when no album owns it. |
+| 193 | openTrackFromItem | function | Opens the release/song target for a song catalog item, ignoring other kinds. |
 
 #### src/renderer/lib/saved-albums.svelte.ts
 Releases saved to the library, mirrored for the release page and Library grid.
@@ -2070,13 +2125,15 @@ Update state mirrored from the main-process updater.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 8 | UpdateStore | class | Holds the update state and one-time wiring flag. |
-| 14 | UpdateStore.pending | method | True for available, ready or manual updates the user has not skipped. |
-| 20 | UpdateStore.init | method | Subscribes to changes, then reads the initial state if no broadcast won. |
-| 35 | UpdateStore.check | method | Asks main to check for updates and stores the result. |
-| 39 | UpdateStore.download | method | Starts the download, tolerating the app quitting before the reply. |
-| 48 | UpdateStore.cancel | method | Cancels the download without copying the pre-abort reply. |
-| 54 | UpdateStore.install | method | Installs the update, tolerating the app quitting before the reply. |
+| 8 | UpdateStore | class | Holds the update state, focus request and one-time wiring flag. |
+| 16 | UpdateStore.pending | method | True for available, ready or manual updates the user has not skipped. |
+| 22 | UpdateStore.init | method | Subscribes to changes, then reads the initial state if no broadcast won. |
+| 37 | UpdateStore.check | method | Asks main to check for updates and stores the result. |
+| 41 | UpdateStore.download | method | Starts the download, tolerating the app quitting before the reply. |
+| 50 | UpdateStore.cancel | method | Cancels the download without copying the pre-abort reply. |
+| 57 | UpdateStore.requestFocus | method | Asks Settings to reveal the update card when one is pending. |
+| 62 | UpdateStore.clearFocus | method | Clears a handled focus request if its nonce still matches. |
+| 66 | UpdateStore.install | method | Installs the update, tolerating the app quitting before the reply. |
 
 ### 12.5 Renderer — components
 
@@ -2139,8 +2196,8 @@ Album, artist or playlist catalogue page with cached browse, shelves, downloads 
 | 219 | toggleAlbumSave | function | Saves or unsaves the album snapshot, swallowing local write errors. |
 | 258 | load | function | Browses a catalogue id, guards stale requests, caches the result and prefetches songs. |
 | 281 | retry | function | Re-runs the browse after a failure with a fresh request token. |
-| 363 | playAll | function | Plays the page track list (top songs on artist pages) from the start. |
-| 368 | activate | function | Plays a card when playable, else navigates; album-from-artist keeps the artist credit. |
+| 364 | playAll | function | Plays the page track list (top songs on artist pages) from the start. |
+| 369 | activate | function | Plays a card when playable, else navigates; album-from-artist keeps the artist credit. |
 
 #### src/renderer/components/DownloadBadge.svelte
 
@@ -2187,7 +2244,7 @@ Inline artist or album name button that navigates without bubbling the click.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 17 | open | function | Stops propagation and opens the artist or album page for the linked name. |
+| 20 | open | function | Stops propagation and opens the artist or album page for the linked name. |
 
 #### src/renderer/components/HistoryPanel.svelte
 
@@ -2431,25 +2488,26 @@ Full search results page with filter tabs, a hero result and card grids.
 
 #### src/renderer/components/SettingsView.svelte
 
-Settings page: cache stats, offline toggle, yt-dlp resolver and update actions.
+Settings page: cache stats, offline toggle, yt-dlp resolver and a highlighted update card.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 32 | load | function | Loads settings and cache stats, applies them to the player, inits downloads and the resolver. |
-| 41 | loadResolver | function | Fetches yt-dlp info with busy and error state. |
-| 55 | updateResolver | function | Triggers a yt-dlp update and stores the returned info. |
-| 69 | patch | function | Writes partial settings, re-applies them to the player and refreshes cache stats. |
-| 76 | toggleOffline | function | Flips network mode between offline and auto, then reloads settings. |
-| 82 | clearCache | function | Clears the cache and forgets artwork mappings so covers re-resolve. |
-| 93 | checkUpdates | function | Delegates to `updates.check`. |
-| 97 | downloadUpdate | function | Delegates to `updates.download`. |
-| 101 | cancelDownload | function | Delegates to `updates.cancel`. |
-| 105 | installUpdate | function | Delegates to `updates.install`. |
-| 109 | skipUpdate | function | Stores the skipped version, then re-checks for updates. |
-| 116 | clearSkipped | function | Clears the skipped version, then re-checks for updates. |
-| 124 | actionFor | function | Maps an update phase to the button label, disabled flag and handler. |
-| 145 | updateHint | function | Returns explanatory text for each update phase. |
-| 170 | size | function | Formats bytes as GB with one decimal or as MB, returning an em dash for null. |
+| 43 | revealUpdateSection | function | Scrolls the update card into view, re-asserting briefly while settings rows settle. |
+| 108 | load | function | Loads settings and cache stats, applies them to the player, inits downloads and the resolver. |
+| 117 | loadResolver | function | Fetches yt-dlp info with busy and error state. |
+| 131 | updateResolver | function | Triggers a yt-dlp update and stores the returned info. |
+| 145 | patch | function | Writes partial settings, re-applies them to the player and refreshes cache stats. |
+| 152 | toggleOffline | function | Flips network mode between offline and auto, then reloads settings. |
+| 158 | clearCache | function | Clears the cache and forgets artwork mappings so covers re-resolve. |
+| 169 | checkUpdates | function | Delegates to `updates.check`. |
+| 173 | downloadUpdate | function | Delegates to `updates.download`. |
+| 177 | cancelDownload | function | Delegates to `updates.cancel`. |
+| 181 | installUpdate | function | Delegates to `updates.install`. |
+| 185 | skipUpdate | function | Stores the skipped version, then re-checks for updates. |
+| 192 | clearSkipped | function | Clears the skipped version, then re-checks for updates. |
+| 200 | actionFor | function | Maps an update phase to the button label, disabled flag and handler. |
+| 221 | updateHint | function | Returns explanatory text for each update phase. |
+| 246 | size | function | Formats bytes as GB with one decimal or as MB, returning an em dash for null. |
 
 #### src/renderer/components/SidePanel.svelte
 
@@ -2486,9 +2544,9 @@ Single saved-track page with related radio tracks.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 49 | asItem | function | Converts the saved track into a catalogue item. |
-| 53 | togglePlay | function | Toggles playback when current, otherwise plays this track alone. |
-| 58 | openAlbumPage | function | Opens the album page when the track carries album info. |
+| 50 | asItem | function | Converts the saved track into a catalogue item. |
+| 54 | togglePlay | function | Toggles playback when current, otherwise plays this track alone. |
+| 59 | openAlbumPage | function | Opens the album page when the track carries album info. |
 
 ### 12.6 Shared, preload and scripts
 
@@ -2501,10 +2559,10 @@ Turns structured subtitle runs or a combined credit string into per-artist linka
 | 14 | isSeparator | function | Detects punctuation-only credit fragments such as " • " or ", " that carry no id. |
 | 19 | isArtistName | function | Rejects separators and connector words (feat, ft, with, vs, and, x) from credit runs. |
 | 25 | isCounter | function | Private guard that filters out play/view counters and durations from credits. |
-| 33 | creditParts | function | Copies subtitle parts up to the album/counter boundary, trims edge separators, returns undefined when no name remains. |
-| 62 | splitArtistParts | function | Conservatively splits a combined credit string into parts, giving the stored id to the first name only. |
-| 91 | artistPartsFor | function | Returns a track's structured artist parts, falling back to splitArtistParts on its display string. |
-| 99 | artistNames | function | Maps credit parts to trimmed artist names for callers that need a plain list. |
+| 40 | creditParts | function | Copies subtitle parts up to the album/counter boundary, drops a leading page-type tag and trims separators. |
+| 81 | splitArtistParts | function | Conservatively splits a combined credit string, drops a legacy row tag and gives the stored id to the first name. |
+| 113 | artistPartsFor | function | Returns sanitized structured credits, falling back to splitArtistParts on the display string. |
+| 124 | artistNames | function | Maps credit parts to trimmed artist names for callers that need a plain list. |
 
 #### src/shared/changelog.ts
 
@@ -2529,7 +2587,16 @@ Aggregates local history into a seven-day listening summary and converts entries
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
 | 29 | summarizeHistory | function | Rolls history entries into per-day and per-artist totals, weighted by duration times completion. |
-| 93 | historyItem | function | Rebuilds a CatalogItem from a history entry, reusing credit parts and appending an album link. |
+| 92 | historyItem | function | Rebuilds a CatalogItem from a history entry with sanitized credits and an album link carrying its artist. |
+
+#### src/shared/track-match.ts
+
+Release-row matching for song-title clicks.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 23 | releaseSearchTitle | function | Drops parenthetical qualifiers for the album-discovery query only. |
+| 36 | pickTrackIndex | function | Exact id, then title key, then duration; refuses a clearly different recording. |
 
 #### src/shared/track-title.ts
 

@@ -59,13 +59,16 @@ ones that touch main-process modules.
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
 | `startup` | login-item payloads: dev no-op, Windows path/args, macOS bundle, unsupported platforms; defaults |
 | `listening` | seven-day summaries, duration weighting, duplicate history, history rows and their artist/release links |
-| `artist-credits` | credit parsing: the leading artist run, separator trimming, conservative splitting of combined names, structured credits winning over the fallback |
-| `track-title` | recording identity: official video/audio/lyric/4K markers ignored, live/remix/acoustic kept distinct, case and spacing normalised |
+| `artist-credits` | credit parsing: the leading artist run, page-type tags, separator trimming, conservative splitting of combined names, structured credits winning over the fallback |
+| `entity-lookup` | name-only link identity: accent-insensitive names, exact artist matches, release title plus credited artist, polluted credits |
+| `track-metadata` | catalog-first metadata merge: ids survive resolver records, gaps fill, album pairs stay consistent |
+| `track-title` | recording identity: official video/audio/lyric/4K and featuring markers ignored, live/remix/acoustic kept distinct, case and spacing normalised |
+| `track-match` | release-row matching: ids, featuring-insensitive titles, duplicate titles by duration, version mismatch refused, discovery query titles |
 | `pixel-scramble` | dot-matrix boot: random digits, fixed colon, left-to-right lock order and the final landed value |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `main-guards` | private-address blocking (IPv4/IPv6/mapped) and image extension selection |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
-| `discord` | Discord Rich Presence: IPC frame codec, pipe discovery, activity mapping (art fallbacks, truncation, timestamps), rate limiter, and the client against a fake Discord socket |
+| `discord` | Discord Rich Presence: IPC frame codec, pipe discovery, activity mapping (art fallbacks, truncation, timestamps), immediate sends under the update cap, and the client against a fake Discord socket |
 | `version` | SemVer ordering for update checks: prereleases, `v` prefix, build metadata, invalid tags |
 | `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks, cancel, skipped versions, Ed25519 manifest verification, signed-hash hand-off |
 | `release-notes` | release-notes lint: allowed sections, empty/missing/duplicate sections, internal jargon, CRLF |
@@ -172,7 +175,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/library.ts` | unit `library` · e2e `library` · behaviour |
 | `src/main/session.ts` | e2e `resume` |
 | `src/main/cache/**`, `src/main/media.ts`, `viby-media://` handler | e2e `playback`, `resume` |
-| `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | unit `startup` · e2e `settings`, `playback` (volume restore) · behaviour |
+| `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | unit `startup` · e2e `settings`, `playback` (volume restore) · behaviour · visual check: marked settings icon opens the update card, scrolled and flashed |
 | `src/main/startup.ts`, `src/main/index.ts`, `src/main/windows.ts` | unit `startup` · e2e `settings` |
 | `src/main/updater*.ts`, `release-feed.ts`, `update-manifest.ts`, `src/renderer/lib/updates.svelte.ts` | unit `version`, `updates` · manual update smoke test (Windows) |
 | `.github/workflows/release.yml`, `scripts/check-release-notes.mjs` | unit `release-notes` · inspect the draft release body on the next tag |
@@ -187,7 +190,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
 | `src/main/changelog.ts`, `src/renderer/lib/changelog.svelte.ts`, `ChangelogDialog`, `scripts/build-changelog.mjs` | unit `changelog`, `release-notes` · e2e `changelog`, `settings` |
 | `src/shared/version.ts`, `src/main/version.ts` | unit `version`, `updates`, `changelog` |
-| `src/renderer/lib/nav.svelte.ts`, `src/renderer/lib/release.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title` |
+| `src/renderer/lib/nav.svelte.ts`, `release.ts`, `album.ts`, `artist.ts`, `entity-lookup.ts`, `src/shared/track-match.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title`, `track-match`, `entity-lookup` · visual check: search and history titles open the album, scroll to the row and flash it |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts`, `release-focus` |
 | `src/renderer/lib/lyrics.svelte.ts`, `lyrics-sync.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` · unit `lyrics-sync` |
 | `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change`, `release-focus` · behaviour (reorder) |
@@ -195,7 +198,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/components/MoodGrid.svelte`, `MoodView.svelte`, `src/renderer/lib/moods.svelte.ts` | unit `innertube` · e2e `home`, `navigation`, `carousel` |
 | `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker`, `CollectionDownloadButton` | e2e `library` · behaviour · visual check of download/pause/resume/cancel on an album and a playlist page |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
-| `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts` | unit `artist-credits`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
+| `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts`, `src/main/track-metadata.ts` | unit `artist-credits`, `entity-lookup`, `track-metadata`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
 | `src/shared/track-title.ts`, title navigation metadata | unit `track-title`, `innertube`, `listening` · e2e `release-focus` |
 | `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts`, `release-focus`, `queue` · visual check |
 | `src/renderer/lib/track-drag.svelte.ts`, `toast.svelte.ts`, `QueueDropBar` | e2e `queue` · native drag via CDP `Input.setInterceptDrags` |
@@ -208,7 +211,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |
 | `src/renderer/App.svelte` | all e2e (layout, routes, panels) |
-| `src/main/discord/**` | unit `discord` · manual Discord check (Listening label, album art, Get Viby button, pause clears) |
+| `src/main/discord/**`, `App.svelte` presence effect | unit `discord` · manual Discord check (Listening label, album art, Get Viby button, pause clears, switching tracks never blanks the card) |
 | `src/renderer/styles/global.css` | visual check · e2e `images` as a sanity pass |
 | `src/shared/**`, `src/preload/**`, `src/renderer/lib/api.ts` | **everything** (contract) |
 | `electron.vite.config.ts`, `package.json`, `electron-builder.yml` | build + launch smoke test; e2e `images` |
