@@ -100,10 +100,8 @@ console.log('\nactivity mapping:')
     check('small image is the vinyl badge', act.assets?.small_image === DISCORD_BADGE_URL)
     check('small text is the quality', act.assets?.small_text === 'Playing · AAC 130k')
     check(
-      'buttons are Get Viby and YouTube Music',
-      act.buttons?.length === 2 &&
-        act.buttons[0].label === 'Get Viby' &&
-        act.buttons[1].label === 'Listen on YouTube Music'
+      'one Get Viby button',
+      act.buttons?.length === 1 && act.buttons[0].label === 'Get Viby'
     )
   }
 

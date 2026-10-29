@@ -130,9 +130,6 @@ export function buildActivity(
         }
       : undefined
 
-  const buttons: { label: string; url: string }[] = [{ label: 'Get Viby', url: GET_VIBY_URL }]
-  if (trackUrl) buttons.push({ label: 'Listen on YouTube Music', url: trackUrl })
-
   return {
     name: ACTIVITY_NAME,
     type: ACTIVITY_TYPE_LISTENING,
@@ -144,6 +141,6 @@ export function buildActivity(
     status_display_type: STATUS_DISPLAY_STATE,
     timestamps,
     assets,
-    buttons
+    buttons: [{ label: 'Get Viby', url: GET_VIBY_URL }]
   }
 }
