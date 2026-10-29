@@ -1,5 +1,6 @@
 <script lang="ts">
   import { lyrics } from '../lib/lyrics.svelte'
+  import { lineIndexAt } from '../lib/lyrics-sync'
   import { player } from '../lib/player.svelte'
 
   let {
@@ -16,17 +17,34 @@
   let firstPosition = true
 
   const lines = $derived(lyrics.data?.kind === 'synced' ? (lyrics.data.lines ?? []) : [])
+  /** Light a line slightly early to cover render latency. */
+  const LEAD_SECONDS = 0.12
 
   /** Index of the line that is playing right now. */
-  const activeIndex = $derived.by(() => {
-    if (lines.length === 0) return -1
-    const time = player.position + 0.12
-    let index = -1
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].time <= time) index = i
-      else break
+  let activeIndex = $state(-1)
+
+  // The reactive player position is throttled to 1 Hz for the player bar, which
+  // let lyric lines light up as much as a second late. Sample the audio element
+  // clock every frame instead, touching state only when the line changes.
+  $effect(() => {
+    const current = lines
+    if (current.length === 0) {
+      activeIndex = -1
+      return
     }
-    return index
+    if (!player.playing) {
+      activeIndex = lineIndexAt(current, player.position + LEAD_SECONDS)
+      return
+    }
+
+    let frame = 0
+    const tick = (): void => {
+      const next = lineIndexAt(current, player.currentTime + LEAD_SECONDS)
+      if (next !== activeIndex) activeIndex = next
+      frame = requestAnimationFrame(tick)
+    }
+    tick()
+    return () => cancelAnimationFrame(frame)
   })
 
   // Keep the current line centred. A fresh mount (opening the panel) jumps so

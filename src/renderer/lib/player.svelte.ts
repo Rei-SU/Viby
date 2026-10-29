@@ -111,8 +111,8 @@ class Player {
    * Chromium fires `timeupdate` about four times a second. Updating the progress
    * bar, clock and OS media session that often makes the glass dock re-composite
    * on every tick; on this Intel Mac that alone costs ~4% of a core. A whole-second
-   * clock is enough for the UI, so update at most once per second. Seeks, pauses
-   * and track changes still update immediately.
+   * clock is enough for the player bar and OS UI, so update at most once per
+   * second. Seeks, pauses and track changes still update immediately.
    */
   private lastPositionUpdateAt = 0
   /** Local artwork converted to a data URL, keyed by its viby-media URL. */
@@ -204,8 +204,9 @@ class Player {
    * Mirror the element clock into the UI and the OS media session.
    *
    * `timeupdate` fires roughly four times a second, but a whole-second clock is
-   * all the player bar, lyrics and Now Playing need. Forcing skips the throttle
-   * for user-visible moments (play, pause, seek, track change).
+   * enough for the player bar and Now Playing; lyrics sample the element clock
+   * directly. Forcing skips the throttle for user-visible moments (play, pause,
+   * seek, track change).
    */
   private updatePosition(force = false, saveNow = false): void {
     if (!this.loadedId) return
@@ -1179,6 +1180,11 @@ class Player {
     } catch {
       // Some platforms reject position updates mid-seek; harmless.
     }
+  }
+
+  /** Exact element clock for lyric sync; `position` is intentionally throttled. */
+  get currentTime(): number {
+    return this.loadedId ? audio.currentTime : this.position
   }
 }
 
