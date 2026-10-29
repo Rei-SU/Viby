@@ -7,6 +7,7 @@
   import { openAlbum } from '../lib/album'
   import ArtistLinks from './ArtistLinks.svelte'
   import { trackToItem } from '../lib/track'
+  import { formatDuration as fmt } from '../lib/format'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
   import Icon from './Icon.svelte'
@@ -56,13 +57,6 @@
 
   function openAlbumPage(): void {
     if (track.album) openAlbum(track.albumId, track.album, track.thumbnail)
-  }
-
-  function fmt(seconds: number): string {
-    if (!seconds) return ''
-    const m = Math.floor(seconds / 60)
-    const s = Math.floor(seconds % 60)
-    return `${m}:${s.toString().padStart(2, '0')}`
   }
 </script>
 

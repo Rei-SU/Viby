@@ -11,10 +11,10 @@ import {
   collectionOwnedIds,
   entryArt,
   entryToItem,
-  formatDuration,
   formatSize,
   standaloneEntries
 } from '../src/renderer/lib/download-groups'
+import { formatDuration } from '../src/renderer/lib/format'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = ''): void {
@@ -144,6 +144,10 @@ check('gigabytes', formatSize(2.5 * 1024 ** 3) === '2.5 GB', formatSize(2.5 * 10
 check('zero', formatSize(0) === '0 MB')
 check('short duration', formatDuration(125) === '2:05', formatDuration(125))
 check('long duration', formatDuration(3725) === '1:02:05', formatDuration(3725))
+check('zero uses the default', formatDuration(0) === '0:00', formatDuration(0))
+check('a surface can use a dash', formatDuration(0, '—') === '—', formatDuration(0, '—'))
+check('rounds into the next minute', formatDuration(59.6) === '1:00', formatDuration(59.6))
+check('rounds into the next hour', formatDuration(3599.6) === '1:00:00', formatDuration(3599.6))
 
 console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)

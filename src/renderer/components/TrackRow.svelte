@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CatalogItem } from '@shared/types'
+  import { onDestroy } from 'svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import { playlistPicker } from '../lib/playlist-picker.svelte'
@@ -8,6 +9,7 @@
   import { network } from '../lib/network.svelte'
   import { openTrackFromItem } from '../lib/release'
   import { TRACK_DRAG_TYPE, trackDrag } from '../lib/track-drag.svelte'
+  import { formatDuration as fmt } from '../lib/format'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
   import SubtitleParts from './SubtitleParts.svelte'
@@ -114,6 +116,8 @@
     }
   }
 
+  onDestroy(hoverEnd)
+
   function activate(): void {
     if (canPlay) {
       void player.playList(context ?? [item], contextIndex ?? index ?? 0)
@@ -192,13 +196,6 @@
 
   function dragEnd(): void {
     trackDrag.end()
-  }
-
-  function fmt(seconds?: number): string {
-    if (!seconds) return ''
-    const m = Math.floor(seconds / 60)
-    const s = Math.floor(seconds % 60)
-    return `${m}:${s.toString().padStart(2, '0')}`
   }
 
   async function toggleFavorite(): Promise<void> {
@@ -310,7 +307,7 @@
       </span>
     </span>
 
-    <span class="dur tabular">{fmt(item.durationSec)}</span>
+    <span class="dur tabular">{fmt(item.durationSec, '')}</span>
   </div>
 
   {#if meta}

@@ -9,6 +9,7 @@
   import { artwork } from '../lib/artwork.svelte'
   import { markFor } from '../lib/library-items'
   import { trackToItem } from '../lib/track'
+  import { formatDuration as fmt } from '../lib/format'
   import { favorites } from '../lib/favorites.svelte'
   import Cover from './Cover.svelte'
   import DownloadBadge from './DownloadBadge.svelte'
@@ -21,6 +22,9 @@
   let renaming = $state(false)
   let nameDraft = $state('')
   let confirming = $state(false)
+  // Match DetailView: useful rows first, without mounting a huge playlist.
+  const PAGE = 120
+  let shown = $state(PAGE)
 
   const isLiked = $derived(ref.kind === 'liked')
   const playlist = $derived(ref.kind === 'playlist' ? playlists.byId(ref.id) : null)
@@ -28,8 +32,9 @@
   const title = $derived(isLiked ? 'Liked songs' : (playlist?.name ?? 'Playlist'))
   const cover = $derived(tracks.find((track) => track.thumbnail)?.thumbnail)
   const coverSrc = $derived(artwork.src(cover))
-  const items = $derived(
-    tracks.map((track) => ({
+  const allItems = $derived(tracks.map((track) => trackToItem(track)))
+  const visibleItems = $derived(
+    tracks.slice(0, shown).map((track) => ({
       ...trackToItem(track),
       thumbnail: artwork.src(track.thumbnail ?? cover)
     }))
@@ -49,11 +54,17 @@
     tracks.filter((track) => !offline || downloadedIds.has(track.id)).length
   )
   const playableItems = $derived(
-    items.filter((item) => !offline || downloadedIds.has(item.id))
+    allItems.filter((item) => !offline || downloadedIds.has(item.id))
   )
   const playIndex = $derived(
     new Map(playableItems.map((item, index) => [item.id, index]))
   )
+
+  // A different playlist starts at the first page again.
+  $effect(() => {
+    collectionKey
+    shown = PAGE
+  })
 
   $effect(() => {
     if (isLiked) void loadLiked()
@@ -63,7 +74,7 @@
   // Cache every image this page can show, not just the hero. Rows only reveal
   // their art once it is safe to paint offline.
   $effect(() => {
-    artwork.warm([cover, ...tracks.map((track) => track.thumbnail)], true)
+    artwork.warm([cover, ...tracks.slice(0, shown).map((track) => track.thumbnail)], true)
   })
 
   async function loadLiked(): Promise<void> {
@@ -128,12 +139,6 @@
     await playlists.remove(playlist.id)
     nav.back()
     nav.clearForward()
-  }
-
-  function fmt(seconds: number): string {
-    const m = Math.floor(seconds / 60)
-    const s = Math.floor(seconds % 60)
-    return `${m}:${s.toString().padStart(2, '0')}`
   }
 </script>
 
@@ -233,7 +238,7 @@
     </p>
   {:else}
     <ol class="tracks">
-      {#each items as item, i (item.id)}
+      {#each visibleItems as item, i (item.id)}
         <TrackRow
           {item}
           context={playableItems}
@@ -246,6 +251,11 @@
         />
       {/each}
     </ol>
+    {#if tracks.length > shown}
+      <button class="more" onclick={() => (shown += PAGE)}>
+        Show {tracks.length - shown} more
+      </button>
+    {/if}
   {/if}
 </div>
 
@@ -462,6 +472,23 @@
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+
+  .more {
+    align-self: flex-start;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    padding: 8px 16px;
+    color: var(--text-dim);
+    font-size: 12px;
+    transition:
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
+  }
+
+  .more:hover {
+    background: var(--glass-hover);
+    color: var(--text);
   }
 
   .placeholder {

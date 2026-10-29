@@ -19,6 +19,8 @@ class ArtworkStore {
   private failed = new Set<string>()
   private queue: string[] = []
   private flushing = false
+  /** Bumped by forget(); results from an older cache must never be merged back. */
+  private generation = 0
 
   /** Outer art is local immediately; saved-library art is warmed in the queue. */
   src(url: string | undefined): string | undefined {
@@ -55,6 +57,7 @@ class ArtworkStore {
    * `viby-media://` links.
    */
   forget(): void {
+    this.generation += 1
     this.local = {}
     this.known.clear()
     this.failed.clear()
@@ -91,11 +94,15 @@ class ArtworkStore {
   private async flush(): Promise<void> {
     if (this.flushing) return
     this.flushing = true
+    const generation = this.generation
     try {
       while (this.queue.length > 0) {
         const batch = this.queue.splice(0, 8)
         try {
           const resolved = await api.images.cache(batch)
+          // Clear cache ran while this batch was in flight; those URLs no
+          // longer point at files on disk.
+          if (generation !== this.generation) continue
           if (Object.keys(resolved).length > 0) {
             for (const [url, local] of Object.entries(resolved)) this.known.add(url)
             this.local = { ...this.local, ...resolved }
@@ -103,6 +110,7 @@ class ArtworkStore {
         } catch {
           // Treat transport errors like an offline miss and retry later.
         }
+        if (generation !== this.generation) continue
         for (const url of batch) {
           this.pending.delete(url)
           if (!this.known.has(url)) this.failed.add(url)
@@ -110,6 +118,8 @@ class ArtworkStore {
       }
     } finally {
       this.flushing = false
+      // An enqueue can land while the final batch is awaiting; do not strand it.
+      if (this.queue.length > 0) void this.flush()
     }
   }
 }

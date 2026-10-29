@@ -6,9 +6,9 @@
   import {
     collectionEntries,
     collectionItems,
-    formatDuration,
     formatSize
   } from '../lib/download-groups'
+  import { formatDuration } from '../lib/format'
   import { markFor } from '../lib/library-items'
   import Cover from './Cover.svelte'
   import DownloadBadge from './DownloadBadge.svelte'

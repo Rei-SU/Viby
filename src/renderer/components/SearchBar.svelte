@@ -6,6 +6,7 @@
   import { searchState } from '../lib/search.svelte'
   import { network } from '../lib/network.svelte'
   import { openArtist } from '../lib/artist'
+  import { formatDuration as fmt } from '../lib/format'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
   import SubtitleParts from './SubtitleParts.svelte'
@@ -503,13 +504,6 @@
     recents = []
     saveRecents()
     input?.focus()
-  }
-
-  function fmt(seconds?: number): string {
-    if (!seconds) return ''
-    const minutes = Math.floor(seconds / 60)
-    const rest = Math.floor(seconds % 60)
-    return `${minutes}:${rest.toString().padStart(2, '0')}`
   }
 </script>
 

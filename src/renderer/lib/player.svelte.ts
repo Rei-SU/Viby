@@ -99,6 +99,7 @@ class Player {
   private recoverToken = 0
   private timer: ReturnType<typeof setInterval> | null = null
   private settingsTimer: ReturnType<typeof setTimeout> | null = null
+  private pendingSettings: Partial<Settings> = {}
   private prefetched = new Set<string>()
   private radioPreparing = false
   private recoverTrackId: string | null = null
@@ -522,7 +523,9 @@ class Player {
   toggleMute(): void {
     audio.muted = !audio.muted
     this.muted = audio.muted
-    void api.settings.set({ muted: this.muted })
+    // Merge with a pending volume write; an immediate separate write could be
+    // followed by the stale timer restoring the old muted value.
+    this.persistSettings({ muted: this.muted })
   }
 
   toggleShuffle(): void {
@@ -616,10 +619,13 @@ class Player {
   }
 
   private persistSettings(patch: Partial<Settings>): void {
+    this.pendingSettings = { ...this.pendingSettings, ...patch }
     if (this.settingsTimer) clearTimeout(this.settingsTimer)
     this.settingsTimer = setTimeout(() => {
+      const next = this.pendingSettings
+      this.pendingSettings = {}
       this.settingsTimer = null
-      void api.settings.set(patch)
+      void api.settings.set(next)
     }, 300)
   }
 
@@ -644,8 +650,9 @@ class Player {
     }
 
     if (this.prefetched.has(next.id)) return
-    this.prefetched.add(next.id)
-    void api.player.resolve({ input: next.id })
+    // Use the prefetch channel: a resolve here would overwrite main's loaded
+    // track id and weaken cache/download protection for the current song.
+    this.prefetch(next.id)
   }
 
   /** Fetch the radio queue ahead of time and warm its first track. */

@@ -66,17 +66,13 @@
     void loadFavorites()
   })
 
-  // Keep every cover and row thumbnail for the saved library on disk. Opening a
-  // playlist offline should never be a page of placeholders.
+  // Warm the covers of what this view actually shows. Warming every saved
+  // playlist's tracks queued thousands of images the user never saw.
   $effect(() => {
-    artwork.warm(
-      [
-        ...items.map((item) => item.art),
-        ...favorites.map((track) => track.thumbnail),
-        ...playlists.items.flatMap((playlist) => playlist.tracks.map((track) => track.thumbnail))
-      ],
-      true
-    )
+    artwork.warm([
+      ...items.map((item) => item.art),
+      ...favorites.map((track) => track.thumbnail)
+    ])
   })
 
   async function loadFavorites(): Promise<void> {

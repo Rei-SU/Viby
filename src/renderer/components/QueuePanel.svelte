@@ -8,13 +8,7 @@
   import ArtistLinks from './ArtistLinks.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
-
-  function fmt(seconds: number): string {
-    if (!Number.isFinite(seconds) || seconds <= 0) return '—'
-    const m = Math.floor(seconds / 60)
-    const s = Math.floor(seconds % 60)
-    return `${m}:${s.toString().padStart(2, '0')}`
-  }
+  import { formatDuration } from '../lib/format'
 
   type RowRect = { top: number; bottom: number }
   type Drag = {
@@ -325,7 +319,7 @@
               downloads.stateFor(track.id) === 'queued'}
               <span class="dl busy" title="Downloading…"><Icon name="download" size={11} /></span>
             {/if}
-            <span class="len tabular">{fmt(track.durationSec)}</span>
+            <span class="len tabular">{formatDuration(track.durationSec, '—')}</span>
           </div>
 
           <button

@@ -9,6 +9,7 @@
   import { downloads } from '../lib/downloads.svelte'
   import { savedAlbums } from '../lib/saved-albums.svelte'
   import { cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
+  import { formatDuration as fmt } from '../lib/format'
   import Rail from './Rail.svelte'
   import Cover from './Cover.svelte'
   import TrackRow from './TrackRow.svelte'
@@ -414,12 +415,6 @@
     const playable = items.filter(isPlayable)
     const index = playable.findIndex((i) => i.id === target.id)
     void player.playList(playable, Math.max(0, index))
-  }
-
-  function fmt(seconds: number): string {
-    const m = Math.floor(seconds / 60)
-    const s = Math.floor(seconds % 60)
-    return `${m}:${s.toString().padStart(2, '0')}`
   }
 
   function countsLabel(done: number, total: number): string {

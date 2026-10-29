@@ -11,6 +11,7 @@
   import { nav } from '../lib/nav.svelte'
   import { playlists } from '../lib/playlists.svelte'
   import { plainTrack } from '../lib/track'
+  import { formatDuration } from '../lib/format'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
   import InlineAlert from './InlineAlert.svelte'
@@ -169,12 +170,6 @@
     }
   }
 
-  function duration(seconds?: number): string {
-    if (!seconds || seconds <= 0) return '—'
-    const minutes = Math.floor(seconds / 60)
-    return `${minutes}:${String(Math.round(seconds % 60)).padStart(2, '0')}`
-  }
-
   function artistsOf(track: ImportMatch['source']): string {
     return track.artists.join(', ') || 'Unknown artist'
   }
@@ -288,7 +283,7 @@
             <span class="title truncate">{row.match.source.title}</span>
             <span class="meta truncate">
               {artistsOf(row.match.source)}
-              {row.match.source.durationSec ? ` · ${duration(row.match.source.durationSec)}` : ''}
+              {row.match.source.durationSec ? ` · ${formatDuration(row.match.source.durationSec, '—')}` : ''}
             </span>
           </div>
 
@@ -302,7 +297,7 @@
                 {#each row.match.candidates as candidate (candidate.id)}
                   <option value={candidate.id}>
                     {candidate.title} — {candidate.artist}{candidate.durationSec
-                      ? ` (${duration(candidate.durationSec)})`
+                      ? ` (${formatDuration(candidate.durationSec, '—')})`
                       : ''}
                   </option>
                 {/each}

@@ -19,6 +19,7 @@
 
   let summary = $state<ListeningSummary | null>(null)
   let summaryRequest = 0
+  let lastRecentLoad = 0
 
   // The card is a snapshot of what you have been playing, so repeats collapse;
   // the panel is the full play log and keeps every entry.
@@ -61,6 +62,11 @@
   }
 
   async function loadRecent(): Promise<void> {
+    // A song change should refresh the card, but rapid skips must not trigger a
+    // full history read and weekly summary every time.
+    const now = Date.now()
+    if (now - lastRecentLoad < 10_000) return
+    lastRecentLoad = now
     const request = ++summaryRequest
     try {
       const [, weekly] = await Promise.all([history.load(true), api.history.summary()])
