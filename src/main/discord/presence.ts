@@ -21,6 +21,8 @@ export type DiscordPresenceOptions = {
   retryDelays?: number[]
   updateLimit?: number
   updateWindowMs?: number
+  /** Merge rapid state changes into one send; 0 sends on the next tick. */
+  coalesceMs?: number
   /** Animated badge URL; tests and dev runs can point it at a reachable copy. */
   badgeUrl?: string
 }
@@ -132,7 +134,9 @@ export class DiscordPresence {
 
   private schedule(): void {
     if (!this.enabled || !this.client?.isReady || this.sendTimer) return
-    const wait = this.limiter.delay()
+    // A short window merges the metadata/quality updates of one track change;
+    // the limiter's window wait takes over when the budget is exhausted.
+    const wait = Math.max(this.options.coalesceMs ?? 250, this.limiter.delay())
     if (wait > 0) {
       this.sendTimer = setTimeout(() => {
         this.sendTimer = null

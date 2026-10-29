@@ -211,18 +211,17 @@ console.log('\nrate limiter:')
   const limiter = new UpdateRateLimiter(5, 20_000, () => t)
   check('first send is immediate', limiter.delay() === 0)
   limiter.record()
-  check('next send waits one slot', limiter.delay() === 4_000)
+  check('a send inside the cap is still immediate', limiter.delay() === 0)
 
   for (let i = 0; i < 4; i++) {
-    t += 4_000
+    t += 1_000
     limiter.record()
   }
-  check('fifth send fills the window', limiter.delay() === 4_000, String(limiter.delay()))
-  t += 4_000
-  limiter.record()
-  check('sixth send waits for the window', limiter.delay() === 4_000, String(limiter.delay()))
-  t = 24_000
+  check('the sixth send waits for the window', limiter.delay() === 16_000, String(limiter.delay()))
+  t = 20_000
   check('window frees the earliest slot', limiter.delay() === 0, String(limiter.delay()))
+  limiter.record()
+  check('the next send waits again at the cap', limiter.delay() === 1_000, String(limiter.delay()))
   limiter.reset()
   check('reset clears the budget', limiter.delay() === 0)
 }
@@ -358,6 +357,7 @@ console.log('\npresence manager:')
     },
     now: () => nowMs,
     updateLimit: 100,
+    coalesceMs: 0,
     retryDelays: [100_000]
   })
 

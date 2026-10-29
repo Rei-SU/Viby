@@ -220,9 +220,15 @@
   $effect(() => {
     const track = player.current
     const playing = player.playing
+    const busy = player.busy
     const position = player.position
     const duration = player.duration
     const quality = qualityLabel(player.stream)
+    // Switching tracks pauses the old audio while the next one resolves. Do not
+    // publish that transient stop: it cleared the Discord card for the resolve
+    // gap. The previous track stays up until the new one actually plays (or a
+    // genuine pause/failure sends the clear).
+    if (busy) return
     const key = `${track?.id ?? ''}|${playing}|${Math.round(duration)}|${quality ?? ''}`
     const now = Date.now()
     const expected = playing ? lastSentPosition + (now - lastSentAt) / 1000 : lastSentPosition

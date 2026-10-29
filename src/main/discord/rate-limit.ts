@@ -1,7 +1,8 @@
 /**
- * Discord allows 5 activity updates per 20 seconds. The limiter both caps the
- * window and spaces sends out, so a burst of skips cannot exhaust the budget
- * and leave the final track waiting.
+ * Discord allows 5 activity updates per 20 seconds. Only the cap is enforced;
+ * sends inside it are immediate. Forcing even spacing on top of the cap made
+ * every track change wait up to four seconds for no benefit — a short
+ * coalescing window in the presence manager already merges bursts.
  */
 export class UpdateRateLimiter {
   private sentAt: number[] = []
@@ -16,11 +17,7 @@ export class UpdateRateLimiter {
   delay(): number {
     const now = this.now()
     this.prune(now)
-    if (this.sentAt.length < this.limit) {
-      const last = this.sentAt[this.sentAt.length - 1]
-      const spacing = this.windowMs / this.limit
-      return last === undefined ? 0 : Math.max(0, last + spacing - now)
-    }
+    if (this.sentAt.length < this.limit) return 0
     return Math.max(0, this.sentAt[0] + this.windowMs - now)
   }
 
