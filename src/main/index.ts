@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, dialog, protocol } from 'electron'
+import { app, dialog, protocol, session } from 'electron'
 import { MEDIA_SCHEME } from './media'
 import { handleMediaProtocol, registerIpc } from './ipc'
 import { installMenu } from './menu'
@@ -80,6 +80,28 @@ if (!gotLock) {
     stopDiscord()
   })
 
+  /**
+   * The renderer never makes network requests; everything goes through IPC.
+   * Development needs the Vite WebSocket, but the packaged app can keep the
+   * whole renderer offline. This is defense in depth for any future XSS.
+   */
+  function installProductionCsp(): void {
+    if (!app.isPackaged) return
+    const csp =
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data: https: viby-media:; " +
+      "media-src 'self' blob: https: viby-media:; connect-src 'self'; " +
+      "font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-src 'none'"
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [csp]
+        }
+      })
+    })
+  }
+
   app.on('second-instance', () => {
     if (app.isReady()) showMainWindow()
   })
@@ -94,6 +116,7 @@ if (!gotLock) {
       }
 
       installMenu()
+      installProductionCsp()
 
       // Touch settings once so defaults are written on first launch.
       const current = settings().get()

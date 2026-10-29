@@ -1,5 +1,9 @@
 import { isIP } from 'node:net'
 import { lookup } from 'node:dns/promises'
+import {
+  OversizedBodyError,
+  readBoundedText
+} from '../bounded-body'
 import { ImportError } from './errors'
 
 export const BROWSER_UA =
@@ -16,7 +20,7 @@ type RequestOptions = {
   redirect?: 'follow' | 'manual' | 'error'
 }
 
-const MAX_RESPONSE_BYTES = 20 * 1024 * 1024
+const MAX_REDIRECTS = 5
 const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504])
 const MAX_ATTEMPTS = 3
 
@@ -84,15 +88,7 @@ export async function httpGet(url: string, opts: RequestOptions = {}): Promise<R
     const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout
 
     try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': BROWSER_UA,
-          'Accept-Language': 'en',
-          ...opts.headers
-        },
-        redirect: opts.redirect,
-        signal
-      })
+      const res = await fetchGuarded(url, opts, signal)
       if (RETRY_STATUS.has(res.status) && attempt < MAX_ATTEMPTS - 1) {
         try {
           await res.body?.cancel()
@@ -104,6 +100,8 @@ export async function httpGet(url: string, opts: RequestOptions = {}): Promise<R
       }
       return res
     } catch (error) {
+      // A rejected URL is a policy decision, not a transient network failure.
+      if (error instanceof ImportError) throw error
       lastError = error
       if (opts.signal?.aborted) throw error
       if (attempt === MAX_ATTEMPTS - 1) throw error
@@ -113,30 +111,75 @@ export async function httpGet(url: string, opts: RequestOptions = {}): Promise<R
   throw lastError ?? new ImportError('The service did not respond')
 }
 
-function ensureBounded(res: Response): void {
-  const declared = Number(res.headers.get('content-length') ?? 0)
-  if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
-    throw new ImportError('The service returned an unexpectedly large response')
+/**
+ * Every hop is re-checked before it is fetched: a public URL must not be able
+ * to redirect the main process into loopback or a private network.
+ */
+async function fetchGuarded(
+  url: string,
+  opts: RequestOptions,
+  signal: AbortSignal
+): Promise<Response> {
+  let current = url
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertPublicHttpUrl(current)
+    const res = await fetch(current, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        'Accept-Language': 'en',
+        ...opts.headers
+      },
+      redirect:
+        opts.redirect === 'manual' || opts.redirect === 'error' ? opts.redirect : 'manual',
+      signal
+    })
+    if (opts.redirect === 'manual' || opts.redirect === 'error') return res
+    if (res.status < 300 || res.status >= 400) return res
+
+    const location = res.headers.get('location')
+    try {
+      await res.body?.cancel()
+    } catch {
+      // The redirect body is irrelevant.
+    }
+    if (!location) return res
+
+    const next = new URL(location, current)
+    if (next.protocol !== 'https:' && next.protocol !== 'http:') {
+      throw new ImportError('That link redirected somewhere unsupported')
+    }
+    current = next.toString()
   }
+  throw new ImportError('That link redirected too many times')
 }
 
 export async function getText(url: string, opts: RequestOptions = {}): Promise<string> {
   const res = await httpGet(url, opts)
   if (!res.ok) throw new ImportError(`The service returned HTTP ${res.status}`)
-  ensureBounded(res)
-  const text = await res.text()
-  if (text.length > MAX_RESPONSE_BYTES) {
-    throw new ImportError('The service returned an unexpectedly large response')
+  try {
+    return await readBoundedText(res)
+  } catch (error) {
+    if (error instanceof OversizedBodyError) {
+      throw new ImportError('The service returned an unexpectedly large response')
+    }
+    throw error
   }
-  return text
 }
 
 export async function getJson<T>(url: string, opts: RequestOptions = {}): Promise<T> {
   const res = await httpGet(url, opts)
   if (!res.ok) throw new ImportError(`The service returned HTTP ${res.status}`)
-  ensureBounded(res)
+  let text: string
   try {
-    return (await res.json()) as T
+    text = await readBoundedText(res)
+  } catch (error) {
+    if (error instanceof OversizedBodyError) {
+      throw new ImportError('The service returned an unexpectedly large response')
+    }
+    throw error
+  }
+  try {
+    return JSON.parse(text) as T
   } catch {
     throw new ImportError('The service returned an unreadable response')
   }

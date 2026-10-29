@@ -77,7 +77,7 @@ export class DownloadsStore {
       this.store.loadFailed || existsSync(recoveryMarkerFor(indexFile))
 
     const data = this.store.get()
-    if (
+    const invalidShape =
       !data.entries ||
       typeof data.entries !== 'object' ||
       Array.isArray(data.entries) ||
@@ -87,22 +87,33 @@ export class DownloadsStore {
       !data.jobs ||
       typeof data.jobs !== 'object' ||
       Array.isArray(data.jobs)
-    ) {
-      this.store.update((next) => {
-        if (!next.entries || typeof next.entries !== 'object' || Array.isArray(next.entries)) {
-          next.entries = {}
-        }
-        if (
-          !next.collections ||
-          typeof next.collections !== 'object' ||
-          Array.isArray(next.collections)
-        ) {
-          next.collections = {}
-        }
-        if (!next.jobs || typeof next.jobs !== 'object' || Array.isArray(next.jobs)) {
-          next.jobs = {}
-        }
-      })
+
+    if (invalidShape) {
+      // A parseable index with the wrong shape is still suspicious. Pause the
+      // orphan sweep instead of treating every audio file as unreferenced and
+      // deleting it. Reset only the in-memory copy; leave the file for review.
+      this.recoveryNeeded = true
+      try {
+        writeFileSync(
+          recoveryMarkerFor(indexFile),
+          JSON.stringify({ at: Date.now(), file: indexFile })
+        )
+      } catch {
+        // The in-memory flag still protects this run.
+      }
+      if (!data.entries || typeof data.entries !== 'object' || Array.isArray(data.entries)) {
+        data.entries = {}
+      }
+      if (
+        !data.collections ||
+        typeof data.collections !== 'object' ||
+        Array.isArray(data.collections)
+      ) {
+        data.collections = {}
+      }
+      if (!data.jobs || typeof data.jobs !== 'object' || Array.isArray(data.jobs)) {
+        data.jobs = {}
+      }
     }
 
     if (!this.recoveryNeeded) this.heal()
@@ -480,20 +491,6 @@ export class DownloadsStore {
     })
     rmSync(this.tmpDirFor(track.id), { recursive: true, force: true })
     return this.decorateEntry(entry)
-  }
-
-  removeSource(trackId: string, source: string, keepFile = false): void {
-    this.store.update((data) => {
-      const entry = data.entries[trackId]
-      if (!entry) return
-      entry.sources = entry.sources.filter((value) => value !== source)
-      if (entry.sources.length === 0) {
-        this.unlinkEntry(trackId, entry, keepFile)
-        delete data.entries[trackId]
-      }
-    })
-    this.sweepArt()
-    this.sweepLyrics()
   }
 
   removeTrack(trackId: string, keepFile = false): void {

@@ -39,6 +39,26 @@ function makeFileAt(path: string, bytes = 1024): string {
 
 const store = new DownloadsStore(root)
 
+console.log('valid JSON with a wrong-shaped index does not delete audio:')
+{
+  const badRoot = mkdtempSync(join(tmpdir(), 'viby-downloads-bad-'))
+  const audioDir = join(badRoot, 'audio')
+  mkdirSync(audioDir, { recursive: true })
+  const audio = join(audioDir, 'a.m4a')
+  writeFileSync(audio, Buffer.from('keep me'))
+  writeFileSync(
+    join(badRoot, 'index.json'),
+    JSON.stringify({ entries: [], collections: {}, jobs: {} })
+  )
+
+  new DownloadsStore(badRoot)
+  check('the audio file survives', existsSync(audio))
+  check(
+    'a recovery marker is written',
+    existsSync(join(badRoot, 'index.json.recovery-needed'))
+  )
+}
+
 console.log('enqueue:')
 const added = store.enqueue(
   [

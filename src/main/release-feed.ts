@@ -1,6 +1,7 @@
 import { UpdateIntegrityError, type ReleaseInfo } from './updater'
 import { verifyManifest } from './update-manifest'
 import { UPDATE_PUBLIC_KEY } from './update-key'
+import { readBoundedJson } from './bounded-body'
 
 const LATEST_RELEASE = 'https://api.github.com/repos/Rei-SU/Viby/releases/latest'
 const MANIFEST_ASSET = 'update-manifest.json'
@@ -111,7 +112,7 @@ async function fetchJson(url: string): Promise<unknown> {
   if (!response.ok) throw new Error(`GitHub returned ${response.status}.`)
 
   try {
-    return await response.json()
+    return await readBoundedJson<unknown>(response, 1024 * 1024)
   } catch {
     throw new Error('GitHub returned an unexpected response.')
   }

@@ -1,4 +1,4 @@
-import { createReadStream, rmSync, statSync } from 'node:fs'
+import { createReadStream, realpathSync, rmSync, statSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
@@ -67,11 +67,12 @@ import { setDiscordEnabled, updateDiscordPresence } from './discord'
 const resolver = new Resolver()
 const inflightDownloads = new Set<string>()
 const backgroundDownloadControllers = new Set<AbortController>()
+/** Artwork read back for the media session is tiny; never base64 a track or index. */
+const MAX_DATA_URL_BYTES = 6 * 1024 * 1024
 let blockerId: number | null = null
 let downloadBlockerId: number | null = null
-/** The track the <audio> element is currently on, for download-safety checks. */
-let playingTrackId: string | null = null
-let lastResolvedId: string | null = null
+/** The track the <audio> element has loaded; paused still counts as in use. */
+let loadedTrackId: string | null = null
 let activeResolve: AbortController | null = null
 /** All in-flight hover prefetches share one controller so a real click can cancel them. */
 let prefetchAbort: AbortController | null = null
@@ -145,7 +146,7 @@ let importResolveController: AbortController | null = null
     // `unreachable` (captive portal/DNS failure) as unavailable so we do not
     // spend retries and power on jobs that cannot finish.
     isOffline: () => networkMonitor.isLocalFirst(),
-    isPlaying: (trackId) => playingTrackId === trackId,
+    isPlaying: (trackId) => loadedTrackId === trackId,
     onProgress: (progress: DownloadProgress) => broadcast(CH.downloadsProgress, progress),
     onChanged: () => {
       void manager.snapshot().then((snapshot) => broadcast(CH.downloadsChanged, snapshot))
@@ -162,7 +163,7 @@ let importResolveController: AbortController | null = null
     onCompleted: (trackId) => {
       // The explicit download supersedes the invisible cache copy — unless that
       // copy is the file currently playing, which must survive until eviction.
-      if (playingTrackId !== trackId) cacheInstance().remove(trackId)
+      if (loadedTrackId !== trackId) cacheInstance().remove(trackId)
       const entry = downloadsStore.entry(trackId)
       if (entry) remember(entry.track)
     },
@@ -251,11 +252,14 @@ let importResolveController: AbortController | null = null
   })
 
   ipcMain.handle(CH.settingsSet, (_e, patch: Partial<Settings>): Settings => {
-    const previous = settings().get().audioQuality
+    const previous = settings().get()
     const next = setSettings(patch)
 
-    // A smaller cap must take effect immediately, not on next launch.
-    cacheInstance().evict(playingTrackId ?? undefined)
+    // Evict only when the cap changes; volume/mute/shuffle writes must not
+    // delete cached audio as a side effect.
+    if (patch.cacheCapBytes !== undefined || next.audioQuality !== previous.audioQuality) {
+      cacheInstance().evict(loadedTrackId ?? undefined)
+    }
 
     // The offline switch may have been changed through the generic settings API.
     if (patch.offlineMode !== undefined) networkMonitor.applySettings()
@@ -272,7 +276,7 @@ let importResolveController: AbortController | null = null
 
     // Stream URLs were resolved for the old quality ceiling; drop them so the
     // next play honours the new setting instead of reusing a stale bitrate.
-    if (next.audioQuality !== previous) resolver.clearUrlCache()
+    if (next.audioQuality !== previous.audioQuality) resolver.clearUrlCache()
 
     if (patch.discordPresence !== undefined) setDiscordEnabled(next.discordPresence)
 
@@ -392,7 +396,7 @@ let importResolveController: AbortController | null = null
     activeResolve = controller
     try {
       const result = await resolveForPlayback(req, controller.signal)
-      lastResolvedId = result.track.id
+      loadedTrackId = result.track.id
       return ok(result)
     } catch (err) {
       return fail(err)
@@ -412,8 +416,8 @@ let importResolveController: AbortController | null = null
    * competes with real playback, and at most two warm-ups at a time.
    */
   const prefetching = new Set<string>()
-  ipcMain.on(CH.playerPrefetch, (_e, input: string) => {
-    const value = input?.trim()
+  ipcMain.on(CH.playerPrefetch, (_e, input: unknown) => {
+    const value = typeof input === 'string' ? input.trim() : ''
     if (!value || activeResolve || networkMonitor.isOffline()) return
     if (prefetching.has(value) || prefetching.size >= 2) return
     const directId = Resolver.extractId(value)
@@ -524,7 +528,6 @@ let importResolveController: AbortController | null = null
   )
 
   ipcMain.on(CH.playerState, (_e, playing: boolean) => {
-    playingTrackId = playing ? lastResolvedId : null
     if (playing && blockerId === null) {
       blockerId = powerSaveBlocker.start('prevent-display-sleep')
     } else if (!playing && blockerId !== null) {
@@ -594,32 +597,39 @@ let importResolveController: AbortController | null = null
   // ---- playlists (PLAN §5.4) ----------------------------------------------
   ipcMain.handle(CH.libraryPlaylists, (): Playlist[] => lib().playlists())
 
-  ipcMain.handle(CH.libraryPlaylistCreate, (_e, name: string): Playlist =>
-    lib().createPlaylist(name)
+  ipcMain.handle(CH.libraryPlaylistCreate, (_e, name: unknown): Playlist =>
+    lib().createPlaylist(typeof name === 'string' ? name.slice(0, 120) : '')
   )
 
-  ipcMain.handle(CH.libraryPlaylistRename, (_e, id: string, name: string): Playlist | null =>
-    lib().renamePlaylist(id, name)
+  ipcMain.handle(CH.libraryPlaylistRename, (_e, id: unknown, name: unknown): Playlist | null =>
+    typeof id === 'string'
+      ? lib().renamePlaylist(id, typeof name === 'string' ? name.slice(0, 120) : '')
+      : null
   )
 
-  ipcMain.handle(CH.libraryPlaylistDelete, (_e, id: string): void => {
+  ipcMain.handle(CH.libraryPlaylistDelete, (_e, id: unknown): void => {
+    if (typeof id !== 'string') return
     lib().deletePlaylist(id)
     // Delete the download references, not the files another source still owns.
     downloadsManager?.removeCollection(`playlist:${id}`)
   })
 
-  ipcMain.handle(CH.libraryPlaylistAdd, (_e, id: string, track: Track): Playlist | null => {
+  ipcMain.handle(CH.libraryPlaylistAdd, (_e, id: unknown, track: Track): Playlist | null => {
+    if (typeof id !== 'string') return null
     const playlist = lib().addToPlaylist(id, track)
     if (playlist) downloadsManager?.syncCollection(`playlist:${id}`, playlist.tracks.map((t) => t.id))
     return playlist
   })
 
-  ipcMain.handle(CH.libraryPlaylistRemove, (_e, id: string, trackId: string): Playlist | null => {
-    const playlist = lib().removeFromPlaylist(id, trackId)
-    if (playlist) {
-      downloadsManager?.pruneCollection(`playlist:${id}`, playlist.tracks.map((t) => t.id))
-    }
-    return playlist
+  ipcMain.handle(
+    CH.libraryPlaylistRemove,
+    (_e, id: unknown, trackId: unknown): Playlist | null => {
+      if (typeof id !== 'string' || typeof trackId !== 'string') return null
+      const playlist = lib().removeFromPlaylist(id, trackId)
+      if (playlist) {
+        downloadsManager?.pruneCollection(`playlist:${id}`, playlist.tracks.map((t) => t.id))
+      }
+      return playlist
   })
 
   ipcMain.handle(CH.libraryAlbums, (): SavedAlbum[] => lib().albums())
@@ -691,7 +701,7 @@ let importResolveController: AbortController | null = null
   ipcMain.handle(CH.cacheClear, () => {
     // Keep the track loaded in the player; deleting its file breaks seeking and
     // can make the unlink fail on Windows.
-    cacheInstance().clear(playingTrackId ?? undefined)
+    cacheInstance().clear(loadedTrackId ?? undefined)
     // Artwork is cache too, even though the Settings line reports audio only.
     imageCache().clear()
     return cacheInstance().stats()
@@ -715,7 +725,11 @@ let importResolveController: AbortController | null = null
       if (typeof src !== 'string') return null
       const file = mediaFileFor(src)
       if (!file) return null
+      const extension = file.split('.').pop()?.toLowerCase()
+      if (!extension || !['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension)) return null
       try {
+        const info = await stat(file)
+        if (!info.isFile() || info.size === 0 || info.size > MAX_DATA_URL_BYTES) return null
         const bytes = await readFile(file)
         const type = mimeForPath(file)
         return { src: `data:${type};base64,${bytes.toString('base64')}`, type }
@@ -825,7 +839,7 @@ async function resolveForPlayback(
         downloaded.id,
         downloaded.file,
         downloaded.ext,
-        playingTrackId ?? undefined
+        loadedTrackId ?? undefined
       )
     } finally {
       // The audio file was moved into the cache; the temp directory itself is
@@ -908,7 +922,7 @@ function kickOffBackgroundCache(track: Track, input: string): void {
         if (downloadStore().has(downloaded.id) || downloadStore().job(downloaded.id)) {
           return
         }
-        store.put(downloaded.id, downloaded.file, downloaded.ext, playingTrackId ?? undefined)
+        store.put(downloaded.id, downloaded.file, downloaded.ext, loadedTrackId ?? undefined)
       } finally {
         rmSync(downloaded.dir, { recursive: true, force: true })
       }
@@ -931,10 +945,29 @@ function mediaFileFor(url: string): string | null {
   } catch {
     return null
   }
-  const file = resolve(requested)
+
   const userData = app.getPath('userData')
-  const allowed = [join(userData, 'cache'), join(userData, 'downloads')]
-  return allowed.some((root) => file === root || file.startsWith(root + sep)) ? file : null
+  const roots = [join(userData, 'cache'), join(userData, 'downloads')]
+  let file: string
+  try {
+    // Resolve symlinks/junctions before the containment check: a link inside
+    // the cache must not serve a file elsewhere on disk.
+    file = realpathSync(resolve(requested))
+  } catch {
+    return null
+  }
+
+  return roots.some((root) => {
+    let realRoot: string
+    try {
+      realRoot = realpathSync(root)
+    } catch {
+      realRoot = resolve(root)
+    }
+    return file === realRoot || file.startsWith(realRoot + sep)
+  })
+    ? file
+    : null
 }
 
 /** Serve cached audio over the privileged scheme registered in index.ts. */

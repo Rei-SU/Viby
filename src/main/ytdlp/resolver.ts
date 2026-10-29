@@ -86,6 +86,16 @@ export class Resolver {
     if (!file) return
     try {
       const now = Date.now()
+      // Drop expired entries from the in-memory map too; the disk copy was
+      // already bounded, but a long session kept every resolved URL forever.
+      for (const [key, entry] of this.urlCache) {
+        if (entry.expiresAt <= now) this.urlCache.delete(key)
+      }
+      while (this.urlCache.size > URL_CACHE_LIMIT) {
+        const oldest = this.urlCache.keys().next().value
+        if (oldest === undefined) break
+        this.urlCache.delete(oldest)
+      }
       const entries = [...this.urlCache.entries()]
         .filter(([, entry]) => entry.expiresAt > now)
         .sort((a, b) => b[1].expiresAt - a[1].expiresAt)

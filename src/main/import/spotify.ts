@@ -1,4 +1,5 @@
 import type { ImportSource, ImportTrack } from '@shared/types'
+import { readBoundedJson, readBoundedText } from '../bounded-body'
 
 /**
  * Spotify playlists without the Web API.
@@ -71,6 +72,8 @@ type PathfinderTrack = {
 type PathfinderPage = {
   playlist?: { name?: string; totalCount?: number }
   items?: PathfinderTrack[]
+  /** Raw item slots returned, including local files/episodes that are dropped. */
+  rawCount?: number
   total?: number
 }
 
@@ -129,7 +132,7 @@ async function bootstrap(id: string, signal?: AbortSignal): Promise<EmbedBootstr
     throw new SpotifyImportError('This Spotify playlist is private, unavailable, or does not exist')
   }
 
-  const next = parseNextData(await res.text()) as {
+  const next = parseNextData(await readBoundedText(res, 10 * 1024 * 1024)) as {
     props?: {
       pageProps?: {
         state?: {
@@ -247,7 +250,7 @@ async function fetchPage(
     throw new SpotifyImportError(`Spotify returned HTTP ${res.status}`)
   }
 
-  const payload = (await res.json()) as {
+  const payload = (await readBoundedJson(res, 20 * 1024 * 1024)) as {
     data?: {
       playlistV2?: {
         name?: string
@@ -269,14 +272,15 @@ async function fetchPage(
   if (payload.errors) throw new SpotifyImportError('Spotify rejected the playlist query')
 
   const playlist = payload.data?.playlistV2
-  const items = Array.isArray(playlist?.content?.items) ? playlist.content.items : []
+  const rawItems = Array.isArray(playlist?.content?.items) ? playlist.content.items : []
   return {
     playlist: {
       name: playlist?.name,
       totalCount: playlist?.content?.totalCount
     },
+    rawCount: rawItems.length,
     total: playlist?.content?.totalCount,
-    items: items
+    items: rawItems
       .map((item) => item.itemV2?.data ?? item.itemV3?.data)
       .filter((track): track is PathfinderTrack => Boolean(track))
   }
@@ -329,8 +333,12 @@ export async function resolveSpotifyPlaylist(
           .filter((track): track is ImportTrack => Boolean(track))
         tracks.push(...pageTracks)
 
-        if ((page.items?.length ?? 0) === 0) break
-        offset += page.items?.length ?? 0
+        // Advance by the number of slots the server returned, not the number
+        // that survived normalisation: local files and episodes still occupy
+        // an offset, and skipping them would overlap the next page.
+        const returned = page.rawCount ?? page.items?.length ?? 0
+        if (returned === 0) break
+        offset += returned
         if (total > 0 && offset >= total) break
         if (tracks.length >= MAX_TRACKS) break
       }

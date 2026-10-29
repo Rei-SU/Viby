@@ -250,6 +250,14 @@ export class NetworkMonitor {
       }
     })().finally(() => {
       this.probing = null
+      // A stale probe was invalidated by a newer switch or event. If that
+      // newer check was forced while the old probe was still in flight, its
+      // request was folded into forcePending; start it now instead of waiting
+      // for the next poll.
+      if (gen !== this.generation && this.forcePending) {
+        this.forcePending = false
+        void this.check(true)
+      }
     })
 
     return this.probing

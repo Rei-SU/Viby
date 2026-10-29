@@ -220,5 +220,38 @@ console.log('\nan in-flight probe cannot overwrite a newer manual switch:')
   )
 }
 
+console.log('\na switch back online starts a fresh probe when the old one was invalidated:')
+{
+  let forced = false
+  let probes = 0
+  const resolvers: Array<(reachable: boolean) => void> = []
+  const monitor = new NetworkMonitor(
+    deps({
+      forcedOffline: () => forced,
+      probe: () =>
+        new Promise<boolean>((resolve) => {
+          probes += 1
+          resolvers.push(resolve)
+        })
+    })
+  )
+
+  const first = monitor.refresh(true)
+  forced = true
+  monitor.applySettings()
+  forced = false
+  monitor.applySettings()
+  check('still offline while the old probe is in flight', monitor.get().status === 'offline')
+
+  resolvers[0](true)
+  await first
+  await sleep(0)
+  check('a fresh probe starts immediately', probes === 2, String(probes))
+
+  resolvers[1](true)
+  await sleep(20)
+  check('the fresh probe brings the app online', monitor.get().status === 'online', monitor.get().status)
+}
+
 console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)

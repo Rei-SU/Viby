@@ -34,6 +34,11 @@ export const DEFAULT_SETTINGS: Settings = {
 const MIN_CACHE_BYTES = 64 * 1024 * 1024
 const MAX_CACHE_BYTES = 64 * ONE_GB
 
+/** settings.json is user-editable; only a real boolean may change a flag. */
+function asBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
+}
+
 /** Validate only the keys present in a patch; settings.json may be user-edited. */
 function sanitizePatch(patch: Partial<Settings> | null | undefined): Partial<Settings> {
   const input = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {}
@@ -54,28 +59,42 @@ function sanitizePatch(patch: Partial<Settings> | null | undefined): Partial<Set
     const value = Number(input.volume)
     clean.volume = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : DEFAULT_SETTINGS.volume
   }
-  if (input.muted !== undefined) clean.muted = Boolean(input.muted)
-  if (input.shuffle !== undefined) clean.shuffle = Boolean(input.shuffle)
+  if (input.muted !== undefined) clean.muted = asBoolean(input.muted, DEFAULT_SETTINGS.muted)
+  if (input.shuffle !== undefined) {
+    clean.shuffle = asBoolean(input.shuffle, DEFAULT_SETTINGS.shuffle)
+  }
   if (input.repeat !== undefined) {
     clean.repeat =
       input.repeat === 'all' || input.repeat === 'one' || input.repeat === 'off'
         ? input.repeat
         : DEFAULT_SETTINGS.repeat
   }
-  if (input.autoplay !== undefined) clean.autoplay = Boolean(input.autoplay)
-  if (input.backgroundPlayback !== undefined) {
-    clean.backgroundPlayback = Boolean(input.backgroundPlayback)
+  if (input.autoplay !== undefined) {
+    clean.autoplay = asBoolean(input.autoplay, DEFAULT_SETTINGS.autoplay)
   }
-  if (input.launchAtLogin !== undefined) clean.launchAtLogin = Boolean(input.launchAtLogin)
-  if (input.launchMinimized !== undefined) clean.launchMinimized = Boolean(input.launchMinimized)
+  if (input.backgroundPlayback !== undefined) {
+    clean.backgroundPlayback = asBoolean(
+      input.backgroundPlayback,
+      DEFAULT_SETTINGS.backgroundPlayback
+    )
+  }
+  if (input.launchAtLogin !== undefined) {
+    clean.launchAtLogin = asBoolean(input.launchAtLogin, DEFAULT_SETTINGS.launchAtLogin)
+  }
+  if (input.launchMinimized !== undefined) {
+    clean.launchMinimized = asBoolean(input.launchMinimized, DEFAULT_SETTINGS.launchMinimized)
+  }
   if (input.offlineMode !== undefined) {
     clean.offlineMode = input.offlineMode === 'offline' ? 'offline' : 'auto'
   }
   if (input.autoUpdateCheck !== undefined) {
-    clean.autoUpdateCheck = Boolean(input.autoUpdateCheck)
+    clean.autoUpdateCheck = asBoolean(input.autoUpdateCheck, DEFAULT_SETTINGS.autoUpdateCheck)
   }
   if (input.discordPresence !== undefined) {
-    clean.discordPresence = Boolean(input.discordPresence)
+    clean.discordPresence = asBoolean(
+      input.discordPresence,
+      DEFAULT_SETTINGS.discordPresence
+    )
   }
   if (input.skippedUpdateVersion !== undefined) {
     clean.skippedUpdateVersion =

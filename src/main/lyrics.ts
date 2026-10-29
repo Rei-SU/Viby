@@ -1,4 +1,5 @@
 import { JsonStore, userDataFile } from './json-store'
+import { readBoundedJson } from './bounded-body'
 import type { Lyrics, LyricsLine } from '@shared/types'
 
 /**
@@ -143,7 +144,7 @@ async function ovhLookup(
     if (res.status === 404) return { lyrics: null, transient: false }
     if (!res.ok) return { lyrics: null, transient: true }
 
-    const data = (await res.json()) as { lyrics?: string }
+    const data = await readBoundedJson<{ lyrics?: string }>(res, 2 * 1024 * 1024)
     const text = data.lyrics?.replace(/\r\n/g, '\n').trim()
     if (!text) return { lyrics: null, transient: false }
 
@@ -174,7 +175,7 @@ async function request(path: string, params: Record<string, string>): Promise<Re
     // 404/400 are definitive "not found"; 429 and 5xx are transient.
     if (res.status === 404 || res.status === 400) return { data: null, transient: false }
     if (!res.ok) return { data: null, transient: true }
-    return { data: await res.json(), transient: false }
+    return { data: await readBoundedJson<unknown>(res, 2 * 1024 * 1024), transient: false }
   } catch {
     // Offline, timeout, DNS failure, or malformed JSON. Do not cache this as a
     // permanent miss; the renderer can offer a retry instead.

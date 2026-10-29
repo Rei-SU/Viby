@@ -168,9 +168,13 @@ export function createWindow(options: { startMinimized?: boolean } = {}): Browse
   })
 
   // Nothing in Viby needs camera, microphone, notifications or geolocation.
+  // Deny both the permission request and the synchronous check APIs so feature
+  // detection cannot report a capability the app will never be granted.
   win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => {
     callback(false)
   })
+  win.webContents.session.setPermissionCheckHandler(() => false)
+  win.webContents.session.setDevicePermissionHandler(() => false)
 
   if (!app.isPackaged && devUrl) {
     win.loadURL(devUrl)

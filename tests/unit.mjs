@@ -33,6 +33,7 @@ const suites = {
   network: { file: 'network.test.ts', electron: true },
   version: { file: 'version.test.ts' },
   discord: { file: 'discord.test.ts' },
+  'bounded-body': { file: 'bounded-body.test.ts' },
   updates: { file: 'updates.test.ts' },
   'release-notes': { file: 'release-notes.test.ts' },
   changelog: { file: 'changelog.test.ts' }

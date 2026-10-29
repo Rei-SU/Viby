@@ -16,7 +16,7 @@ import { runStreamed } from '../ytdlp/exec'
 import { isSafeYtDlpInput } from '../ytdlp/resolver'
 import { forgetLyrics, getLyrics } from '../lyrics'
 import { fetchArt } from './art'
-import type { DownloadJob, DownloadsStore } from './store'
+import type { DownloadsStore } from './store'
 
 const MIN_FREE_BYTES = 500 * 1024 * 1024
 const DEFAULT_ESTIMATE_BYTES = 12 * 1024 * 1024
@@ -95,7 +95,7 @@ function errorLine(stderr: string, code: number): string {
 /** Retryable network hiccups, as opposed to a track that will never download. */
 export function transient(message: string): boolean {
   return (
-    /timed? ?out|network|connection|temporar|socket|http 5\d\d|unable to download|fragment/i.test(
+    /timed? ?out|network|connection|temporar|socket|http(?: error)? 5\d\d|unable to download|fragment/i.test(
       message
     ) && !/unavailable|private|sign in|bot|unsupported|not found|does not exist/i.test(message)
   )
@@ -428,8 +428,12 @@ export class DownloadManager {
 
       const ext = file.split('.').pop()?.toLowerCase() ?? 'm4a'
       const art = await this.artFor(job.track)
+      // The user may have removed or cancelled the job while the cover was
+      // being fetched; do not resurrect it after that decision.
+      if (this.active?.cancelled) return
       const current = this.store.job(id)
-      this.store.put(job.track, file, ext, current?.sources ?? job.sources, job.quality, art ?? undefined)
+      if (!current) return
+      this.store.put(job.track, file, ext, current.sources, job.quality, art ?? undefined)
       this.progress.delete(id)
       this.opts.onCompleted(id)
       void this.storeLyrics(job.track)
@@ -671,5 +675,3 @@ export class DownloadManager {
     this.opts.onBusy(busy)
   }
 }
-
-export type { DownloadJob }

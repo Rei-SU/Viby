@@ -168,7 +168,7 @@ export class ImageCache {
     return found
   }
 
-  async cache(url: string | undefined): Promise<string | undefined> {
+  async cache(url: string | undefined, enforceCap = true): Promise<string | undefined> {
     if (!url) return undefined
     const local = this.localUrl(url)
     if (local) return local
@@ -199,7 +199,7 @@ export class ImageCache {
           throw err
         }
       }
-      this.enforceCap()
+      if (enforceCap) this.enforceCap()
       return mediaUrlFor(dest)
     } catch {
       // Artwork is decoration; a failure just leaves the remote URL in place.
@@ -218,11 +218,14 @@ export class ImageCache {
     const workers = Array.from({ length: Math.min(concurrency, todo.length) }, async () => {
       while (next < todo.length) {
         const url = todo[next++]
-        const local = await this.cache(url)
+        const local = await this.cache(url, false)
         if (local) found[url] = local
       }
     })
     await Promise.all(workers)
+    // One directory scan per batch, not one per image. Skip it entirely when
+    // every URL was already cached.
+    if (todo.length > 0) this.enforceCap()
     return found
   }
 

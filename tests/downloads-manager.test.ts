@@ -49,6 +49,7 @@ console.log('\ntransient vs permanent failures:')
 {
   check('timeout retries', transient('ERROR: socket timeout'))
   check('network error retries', transient('unable to download video data: HTTP Error 503'))
+  check('bare 5xx retries', transient('ERROR: HTTP Error 502: Bad Gateway'))
   check('private video is permanent', !transient('ERROR: Private video. Sign in if you have access'))
   check('unavailable is permanent', !transient('ERROR: Video unavailable'))
   check('bot check is permanent', !transient('ERROR: Sign in to confirm you are not a bot'))
