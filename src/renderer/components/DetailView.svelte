@@ -3,14 +3,16 @@
   import type { BrowseResult, CatalogItem, SavedAlbum } from '@shared/types'
   import { withFallbackArtist } from '@shared/entity-identity'
   import { artistReleaseGroups } from '../lib/artist-releases'
+  import { createArtistQueue } from '../lib/artist-queue'
   import { pickTrackIndex } from '@shared/track-match'
   import { trackTitleKey } from '@shared/track-title'
   import { api } from '../lib/api'
   import { artwork } from '../lib/artwork.svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
+  import { network } from '../lib/network.svelte'
   import { savedAlbums } from '../lib/saved-albums.svelte'
-  import { cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
+  import { browseCached, cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
   import { formatDuration as fmt } from '../lib/format'
   import Rail from './Rail.svelte'
   import Cover from './Cover.svelte'
@@ -409,8 +411,34 @@
     }
   })
 
+  async function loadReleaseTracks(id: string): Promise<BrowseResult | null> {
+    return browseCached(id)
+  }
+
+  /**
+   * Play all means "this artist", not "the ten rows currently visible": start
+   * with the full popular list, then let the discography load release by
+   * release. The queue only falls back to radio once the artist is exhausted.
+   * The collapsed Show more state deliberately does not limit the queue.
+   */
   function playAll(): void {
-    void player.playList(isArtist ? visibleTopSongs : displaySongs, 0)
+    if (!isArtist) {
+      void player.playList(displaySongs, 0)
+      return
+    }
+    if (artistTopSongs.length === 0) return
+
+    const artist = pageArtistFallback
+    const more = artist
+      ? createArtistQueue({
+          artist,
+          releases: releases.all,
+          popular: artistTopSongs,
+          loadRelease: loadReleaseTracks,
+          isOffline: () => network.localFirst
+        })
+      : undefined
+    void player.playList(artistTopSongs, 0, more)
   }
 
   /** A discography card either plays (song/video) or opens a page (album/playlist/artist). */

@@ -1,6 +1,7 @@
 import type {
   CatalogItem,
   PlaybackSession,
+  PlaybackTail,
   Repeat,
   Settings,
   StreamInfo,
@@ -8,8 +9,10 @@ import type {
 } from '@shared/types'
 import { api } from './api'
 import { network } from './network.svelte'
-import { cacheRadio, cachedRadio } from './catalog-cache.svelte'
+import { browseCached, cacheRadio, cachedRadio } from './catalog-cache.svelte'
 import { sourceAction } from './player-source'
+import { createArtistQueue } from './artist-queue'
+import { queueWindow, restoreQueue } from './queue-session'
 import { artistPartsFor, creditParts } from '@shared/artist-credits'
 import { plainParts, plainTrack } from './track'
 
@@ -28,6 +31,24 @@ audio.preload = 'auto'
 
 /** The resolver reports user-initiated aborts with this exact message. */
 const CANCELLED = 'Cancelled.'
+
+/** Start loading the next artist batch when the queue falls this close to the end. */
+const QUEUE_PREFETCH_AHEAD = 4
+/** Load a couple of batches up front so the queue panel is not empty. */
+const QUEUE_PRIME_BATCHES = 2
+
+/**
+ * A lazy tail for a queue. The artist page starts with its popular songs and
+ * asks this for release tracks as playback approaches the end; radio only runs
+ * after it reports that nothing is left.
+ */
+export type QueueContinuation = {
+  next: () => Promise<CatalogItem[] | null>
+  hasMore: () => boolean
+  cancel: () => void
+  /** Serializable state so a restored queue can keep loading after launch. */
+  persist?: () => PlaybackTail | null
+}
 
 export function isPlayable(item: CatalogItem): boolean {
   return item.kind === 'song' && !!item.id
@@ -102,6 +123,9 @@ class Player {
   private pendingSettings: Partial<Settings> = {}
   private prefetched = new Set<string>()
   private radioPreparing = false
+  private queueMore: QueueContinuation | null = null
+  private queueMoreLoading: Promise<boolean> | null = null
+  private queueMoreRun = 0
   private recoverTrackId: string | null = null
   private recoverAttempts = 0
   /** Set on launch: where to resume once the restored track is actually loaded. */
@@ -167,21 +191,49 @@ class Player {
       const saved = await api.session.get()
       if (!saved?.track) return
 
-      const queue = saved.queue?.length > 0 ? saved.queue : [saved.track]
-      const index = Math.min(Math.max(0, saved.index), queue.length - 1)
-      const track = queue[index] ?? saved.track
+      const restored = restoreQueue(saved)
+      const track = restored.queue[restored.index] ?? saved.track
 
-      this.queue = queue
-      this.index = index
+      this.queue = restored.queue
+      this.index = restored.index
       this.current = track
       this.duration = track.durationSec ?? 0
       const position = Math.max(0, saved.position ?? 0)
       this.position = this.duration > 0 ? Math.min(position, this.duration) : position
       this.pendingResume = { id: track.id, position: this.position }
       this.syncMetadata()
+      // Resume the artist discography tail without fetching anything yet; the
+      // first prefill happens when playback approaches the restored end.
+      if (saved.tail) this.restoreTail(saved.tail)
     } catch {
       // No session, or unreadable: start fresh.
     }
+  }
+
+  /** Rebuild a lazy tail from the compact descriptor saved with the session. */
+  private restoreTail(tail: PlaybackTail): void {
+    if (tail.kind !== 'artist' || tail.releaseIds.length === 0) return
+    // Only ids are needed; the source loads tracks from each release.
+    const releases = tail.releaseIds.map((id) => ({
+      kind: 'Album',
+      item: { id, browseId: id, kind: 'album' as const, title: '', subtitle: '' }
+    }))
+    // Tracks in the restored window are already queued; seed the dedupe with
+    // them so resuming does not append the same recordings again.
+    const popular = this.queue.map((track) => ({
+      id: track.id,
+      kind: 'song' as const,
+      title: track.title,
+      subtitle: track.artist,
+      durationSec: track.durationSec
+    }))
+    this.queueMore = createArtistQueue({
+      artist: tail.artist,
+      releases,
+      popular,
+      loadRelease: browseCached,
+      isOffline: () => network.localFirst
+    })
   }
 
   private persistSession(immediate = false): void {
@@ -189,11 +241,16 @@ class Player {
     if (!immediate && now - this.lastSaveAt < 3000) return
     this.lastSaveAt = now
 
+    // A long artist queue cannot be saved whole; keep the current track plus a
+    // healthy upcoming window, and record where that window starts.
+    const window = queueWindow(this.queue, this.index)
     const snapshot: PlaybackSession = {
       // State proxies cannot cross IPC; send plain copies (see plainTrack).
       track: this.current ? plainTrack(this.current) : null,
-      queue: this.queue.slice(0, 100).map(plainTrack),
+      queue: window.queue.map(plainTrack),
       index: this.index,
+      queueStart: window.queueStart,
+      tail: this.queueMore?.persist?.() ?? undefined,
       position: this.position,
       updatedAt: now
     }
@@ -281,15 +338,23 @@ class Player {
   // ---- queue -------------------------------------------------------------
 
   /** Play a list of catalog items, starting at `startIndex`. */
-  async playList(items: CatalogItem[], startIndex = 0): Promise<void> {
+  async playList(
+    items: CatalogItem[],
+    startIndex = 0,
+    more?: QueueContinuation
+  ): Promise<void> {
     const tracks = items.filter(isPlayable).map(toTrack)
     if (tracks.length === 0) return
+    // A new explicit play replaces the old queue and its lazy tail.
+    this.cancelQueueMore()
+    this.queueMore = more ?? null
     this.queue = tracks
     this.index = Math.max(0, Math.min(startIndex, tracks.length - 1))
     // A deliberate play action gets a fresh automatic-recovery budget.
     this.recoverTrackId = this.queue[this.index]?.id ?? null
     this.recoverAttempts = 0
     await this.start(true)
+    if (this.queueMore) void this.primeQueueMore()
   }
 
   /** Play one item, replacing the queue. */
@@ -342,6 +407,7 @@ class Player {
 
   /** Import path: a pasted link with no catalog metadata behind it. */
   async play(input: string): Promise<void> {
+    this.cancelQueueMore()
     const token = ++this.playToken
     this.busy = true
     this.error = null
@@ -546,6 +612,7 @@ class Player {
   }
 
   clearQueue(): void {
+    this.cancelQueueMore()
     this.playToken += 1
     api.player.cancel()
     audio.pause()
@@ -619,6 +686,88 @@ class Player {
     }
   }
 
+  /** Drop the lazy tail: a new explicit play or a cleared queue owns the deck. */
+  private cancelQueueMore(): void {
+    this.queueMoreRun += 1
+    this.queueMore?.cancel()
+    this.queueMore = null
+    this.queueMoreLoading = null
+  }
+
+  /** Fill a little of the tail immediately so the queue panel is not just popular rows. */
+  private async primeQueueMore(): Promise<void> {
+    for (let i = 0; i < QUEUE_PRIME_BATCHES; i++) {
+      if (!this.queueMore) return
+      const before = this.queue.length
+      const added = await this.fillQueueFromMore()
+      if (!added || this.queue.length === before) return
+    }
+  }
+
+  /**
+   * Keep a few tracks ahead of the playhead. Loading one release can add many
+   * tracks, so this only runs when the queue is nearly exhausted.
+   */
+  private prefillQueue(): void {
+    const more = this.queueMore
+    if (!more || !more.hasMore() || this.queueMoreLoading) return
+    // Shuffle has no reliable "near the end" position, so grow the pool one
+    // batch per track instead of letting a small random set repeat forever.
+    if (!this.shuffle && this.queue.length - this.index - 1 > QUEUE_PREFETCH_AHEAD) return
+    void this.fillQueueFromMore()
+  }
+
+  /**
+   * Append one batch from the lazy tail. Empty batches are skipped; the tail is
+   * dropped when it reports exhaustion, so the caller can fall back to radio.
+   */
+  private fillQueueFromMore(): Promise<boolean> {
+    const more = this.queueMore
+    if (!more) return Promise.resolve(false)
+    if (this.queueMoreLoading) return this.queueMoreLoading
+
+    const run = this.queueMoreRun
+    const job = (async (): Promise<boolean> => {
+      let empties = 0
+      while (this.queueMore === more && this.queueMoreRun === run) {
+        let batch: CatalogItem[] | null
+        try {
+          batch = await more.next()
+        } catch {
+          batch = null
+        }
+        if (this.queueMore !== more || this.queueMoreRun !== run) return false
+        if (!batch) {
+          this.queueMore = null
+          return false
+        }
+
+        const known = new Set(this.queue.map((track) => track.id))
+        const fresh = batch.filter((item) => isPlayable(item) && !known.has(item.id))
+        if (fresh.length === 0) {
+          // A tail that keeps returning duplicates would wedge the player.
+          if (++empties > 20) {
+            this.queueMore = null
+            return false
+          }
+          continue
+        }
+        this.queue = [...this.queue, ...fresh.map(toTrack)]
+        this.prefetchNext()
+        return true
+      }
+      return false
+    })().catch(() => false)
+
+    this.queueMoreLoading = job
+    void job.finally(() => {
+      if (this.queueMoreRun === run && this.queueMoreLoading === job) {
+        this.queueMoreLoading = null
+      }
+    })
+    return job
+  }
+
   private persistSettings(patch: Partial<Settings>): void {
     this.pendingSettings = { ...this.pendingSettings, ...patch }
     if (this.settingsTimer) clearTimeout(this.settingsTimer)
@@ -644,6 +793,9 @@ class Player {
 
     const next = this.queue[this.index + 1]
     if (!next) {
+      // An artist queue can still be loading its discography. Warming radio now
+      // would race the catalog and seed it from the wrong end of the queue.
+      if (this.queueMore?.hasMore()) return
       // Last track: autoplay will need a radio queue, so fetch it and warm its
       // first URL now instead of leaving two seconds of silence at the seam.
       if (this.autoplay) void this.warmRadio()
@@ -837,6 +989,7 @@ class Player {
         }
       }
       this.prefetchNext()
+      this.prefillQueue()
       this.persistSession(true)
     } catch (err) {
       if (token !== this.playToken) return
@@ -982,10 +1135,16 @@ class Player {
     }
 
     if (next < 0 || next >= this.queue.length) {
-      if (this.repeat === 'all') {
+      // Grow the artist queue before deciding this is the end, including when
+      // repeat-all is on: the discography is part of the queue, not an add-on.
+      if (direction === 1 && this.queueMore) await this.fillQueueFromMore()
+
+      if (this.index + 1 < this.queue.length) {
+        next = this.index + 1
+      } else if (this.repeat === 'all') {
         next = direction === 1 ? 0 : this.queue.length - 1
       } else if (direction === 1 && this.autoplay) {
-        // Queue exhausted: continue with YouTube Music's radio for the last
+        // Tail exhausted: continue with YouTube Music's radio for the last
         // track instead of stopping — or worse, with an unrelated list item.
         await this.extendWithRadio()
         if (this.index + 1 < this.queue.length) {

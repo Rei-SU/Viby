@@ -318,10 +318,28 @@ export type Lyrics = {
 }
 
 /** Restored on launch so you can pick up where you stopped. */
+/**
+ * Enough to rebuild a lazy queue tail after a restart. Only the releases that
+ * have not been loaded yet are stored; tracks already in the saved queue window
+ * are deduped again when the tail resumes.
+ */
+export type PlaybackTail = {
+  kind: 'artist'
+  artist: { name: string; id?: string }
+  releaseIds: string[]
+}
+
 export type PlaybackSession = {
   track: Track | null
   queue: Track[]
   index: number
+  /**
+   * First queue position represented by `queue` when only a window around the
+   * current track was saved. Older sessions omit it and start at zero.
+   */
+  queueStart?: number
+  /** Lazy queue tail to resume on launch (artist Play all). */
+  tail?: PlaybackTail
   position: number
   updatedAt: number
 }

@@ -1,4 +1,5 @@
 import type { BrowseResult, CatalogItem, Shelf } from '@shared/types'
+import { api } from './api'
 
 const TTL_MS = 10 * 60 * 1000
 
@@ -36,6 +37,16 @@ export function cacheDetail(id: string, data: BrowseResult): void {
     const oldest = [...detailCache.entries()].sort((a, b) => a[1].at - b[1].at)[0]
     if (oldest) detailCache.delete(oldest[0])
   }
+}
+
+/** Cached browse, fetching once when missing. Shared by pages and the queue tail. */
+export async function browseCached(id: string): Promise<BrowseResult | null> {
+  const cached = cachedDetail(id)
+  if (cached) return cached
+  const res = await api.catalog.browse(id)
+  if (!res.ok) return null
+  cacheDetail(id, res.data)
+  return res.data
 }
 
 /** Radio queues, keyed by seed track, so autoplay can be warmed ahead of time. */

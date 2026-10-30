@@ -19,6 +19,8 @@ const suites = {
   'audio-track-pick': { file: 'audio-track-pick.test.ts' },
   'entity-lookup': { file: 'entity-lookup.test.ts' },
   'artist-releases': { file: 'artist-releases.test.ts' },
+  'artist-queue': { file: 'artist-queue.test.ts' },
+  'queue-session': { file: 'queue-session.test.ts' },
   'track-metadata': { file: 'track-metadata.test.ts' },
   'track-title': { file: 'track-title.test.ts' },
   'track-match': { file: 'track-match.test.ts' },
