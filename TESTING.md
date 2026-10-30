@@ -54,6 +54,9 @@ ones that touch main-process modules.
 | `import` | Link detection, all four non-Spotify adapters, matcher scoring, YouTube exact path |
 | `downloads-store` | downloads index: references, shared-file survival, pruning, source-aware collection cancellation, healing, orphan sweep, pinned lyrics, path safety |
 | `downloads-manager` | yt-dlp progress parsing (known/unknown totals), transient-vs-permanent failure classification, audio-first download id choice, user pause/resume and restart persistence |
+| `audio-cache` | audio cache: sanitized paths/containers, track snapshots and quality tags, LRU eviction and keep protection, failed-unlink retention, missing/truncated-file healing, clear, startup reconciliation (orphan adoption, junk/duplicate cleanup) |
+| `cache-policy` | cache-worthiness: favourite, owned playlist, half-played and replay thresholds, one-off misses |
+| `recording-alias` | catalog-row ↔ released-audio id map: bidirectional lookup, invalid input, relinking, persistence, cap pruning, corrupt-file sanitizing |
 | `download-jobs` | downloads panel grouping: collection coverage, shared jobs, loose songs, live progress and state ordering |
 | `download-groups` | Library download split: collection-owned vs loose songs, album order, offline artwork fallbacks |
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
@@ -64,6 +67,8 @@ ones that touch main-process modules.
 | `track-metadata` | catalog-first metadata merge: ids survive resolver records, gaps fill, album pairs stay consistent |
 | `track-title` | recording identity: official video/audio/lyric/4K and featuring markers ignored, live/remix/acoustic kept distinct, case and spacing normalised |
 | `track-match` | release-row matching: ids, featuring-insensitive titles, duplicate titles by duration, version mismatch refused, discovery query titles |
+| `artist-releases` | discography grouping: year parsing, missing release labels, Popular interleave, newest-first order, dedupe and missing shelves |
+| `audio-track-pick` | audio-first selection never crosses artists: exact artist match, version penalty, no guessing without an artist, page-artist fallback for credit-less rows |
 | `pixel-scramble` | dot-matrix boot: random digits, fixed colon, left-to-right lock order and the final landed value |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `main-guards` | private-address blocking (IPv4/IPv6/mapped) and image extension selection |
@@ -168,13 +173,14 @@ Find the row for what you changed; run what it lists.
 | You changed | Run |
 |---|---|
 | `src/main/ytdlp/**` | unit `resolver` (incl. the data-saver ceiling) · e2e `playback` |
-| `src/main/innertube/**` | unit `innertube`, `catalog`, `thumbs` · e2e `images`, `navigation`, `home` |
+| `src/main/innertube/**` | unit `innertube`, `catalog`, `thumbs`, `audio-track-pick` · e2e `images`, `navigation`, `home` |
 | `src/main/lyrics.ts` | unit `lyrics` · e2e `lyrics` |
 | `src/main/import/**` | unit `import`, `spotify`, `main-guards` · e2e `import` |
 | `src/renderer/components/ImportView.svelte` | e2e `import` |
 | `src/main/library.ts` | unit `library` · e2e `library` · behaviour |
 | `src/main/session.ts` | e2e `resume` |
-| `src/main/cache/**`, `src/main/media.ts`, `viby-media://` handler | e2e `playback`, `resume` |
+| `src/main/cache/**`, `src/main/media.ts`, `viby-media://` handler | unit `audio-cache`, `cache-policy` · e2e `playback`, `resume` |
+| `src/main/recording-alias.ts`, `src/main/safe-name.ts` | unit `recording-alias`, `audio-cache`, `downloads-store` · e2e `offline`, `playback` |
 | `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | unit `startup` · e2e `settings`, `playback` (volume restore) · behaviour · visual check: marked settings icon opens the update card, scrolled and flashed |
 | `src/main/startup.ts`, `src/main/index.ts`, `src/main/windows.ts` | unit `startup` · e2e `settings` |
 | `src/main/updater*.ts`, `release-feed.ts`, `update-manifest.ts`, `src/renderer/lib/updates.svelte.ts` | unit `version`, `updates` · manual update smoke test (Windows) |
@@ -190,7 +196,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
 | `src/main/changelog.ts`, `src/renderer/lib/changelog.svelte.ts`, `ChangelogDialog`, `scripts/build-changelog.mjs` | unit `changelog`, `release-notes` · e2e `changelog`, `settings` |
 | `src/shared/version.ts`, `src/main/version.ts` | unit `version`, `updates`, `changelog` |
-| `src/renderer/lib/nav.svelte.ts`, `release.ts`, `album.ts`, `artist.ts`, `entity-lookup.ts`, `src/shared/track-match.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title`, `track-match`, `entity-lookup` · visual check: search and history titles open the album, scroll to the row and flash it |
+| `src/renderer/lib/nav.svelte.ts`, `release.ts`, `album.ts`, `artist.ts`, `entity-lookup.ts`, `src/shared/entity-identity.ts`, `src/shared/track-match.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title`, `track-match`, `entity-lookup`, `audio-track-pick` · visual check: search and history titles open the album, scroll to the row and flash it |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts`, `release-focus` |
 | `src/renderer/lib/lyrics.svelte.ts`, `lyrics-sync.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` · unit `lyrics-sync` |
 | `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change`, `release-focus` · behaviour (reorder) |
@@ -206,7 +212,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/rail-fit.ts` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
 | `src/renderer/lib/keyboard.ts` | e2e `shortcuts` · behaviour |
 | `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel`, `release-focus` |
-| `src/renderer/components/DetailView.svelte`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening` |
+| `src/renderer/components/DetailView.svelte`, `DiscographyView.svelte`, `src/renderer/lib/artist-releases.ts`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening`, `artist-releases` · visual check: Popular 5→10, Discography tabs, Show all defaults to list with lazy tracks, grid toggle persists, filters and Back |
 | `src/renderer/components/PixelClock.svelte`, `src/renderer/lib/pixel-scramble.ts` | unit `pixel-scramble` · e2e `home` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |

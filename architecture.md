@@ -227,7 +227,7 @@ bounded names and presence snapshots are rejected or normalized here.
 `resolveForPlayback()` in `ipc.ts` is the authoritative order:
 
 ```
-1. Explicit download for this video id?  → play the local file, no network.
+1. Explicit download for this id?          → play the local file, no network.
    (Skipped for a forced recovery from a failed local file.)
 2. Audio cache hit?                       → play the cached file.
    (Skipped on force, except while offline, where cache is the fallback.)
@@ -236,6 +236,13 @@ bounded names and presence snapshots are rejected or normalized here.
    if the track is cache-worthy.
 5. No direct URL (SABR-only)              → download to disk, then play the file.
 ```
+
+Steps 1–2 search both ids of a recording: a catalog row and its released-audio
+id are linked in `recording-aliases.json`, so a download keyed by the row is
+found when playback starts from the audio row (and vice versa). Cache hits carry
+a track snapshot, so offline playback survives a reset `tracks.json`.
+Background caching is skipped without free disk space and ignored if the cache
+was cleared while it ran.
 
 The renderer resolves only when playback actually starts. Opening a 100-track
 album costs zero resolver calls; prefetch warms the next/hovered tracks.
@@ -258,7 +265,10 @@ titles are not unique across artists. Name-only links therefore verify a search
 result against the title *and* the credited artist (`entity-lookup.ts`); an
 unverified name opens the matching search results instead of the first hit.
 `tracks.json` merges catalog-first (`track-metadata.ts`), so resolver metadata
-can add a duration or artwork but never erase the ids a link needs.
+can add a duration or artwork but never erase the ids a link needs. Release
+track rows that carry no credit at all inherit the page's artist
+(`withFallbackArtist`), so playing from an artist page never shows or publishes
+"Unknown artist".
 
 **Song-title clicks are album-first.** A track's tagged album or EP opens at the
 song. When the tag is a single, or the row is a search result with no release,
@@ -282,13 +292,26 @@ no album behind it opens the song page.
 
 ### 4.6 Caches (`src/main/cache/`)
 
-- `audio.ts` — bounded LRU file cache with its own `index.json`. `lookup`,
-  `touch`, `put`, `evict(keepId)`, `clear(keepId)`. The currently loaded track is
-  never evicted.
+- `audio.ts` — bounded LRU file cache with its own `index.json`. Track ids are
+  sanitised into file names, and `reconcile()` rebuilds the index from the folder
+  at startup: valid orphans are adopted, junk and unsafe names deleted, one
+  container kept per id, then the cap is re-enforced. Entries store a track
+  snapshot and the quality they were cached at, so an offline hit does not depend
+  on `tracks.json` and data-saver copies can be invalidated on upgrade. A hit
+  verifies the file's byte count against the index, so a truncated or replaced
+  file is dropped instead of served. `put`
+  reclaims space before the rename and never evicts the file it just wrote;
+  `evict(keepId)` spares the loaded track and keeps an entry whose unlink failed
+  (disk and index never drift). `clear(keepId)` protects the playing file.
 - `images.ts` — content-addressed artwork cache (`sha1` filename), guarded remote
   fetches with manual redirects and public-host checks, batch cap enforcement.
 - `policy.ts` — cache-worthiness: favorited, in an owned playlist, ≥50% played,
   or played twice.
+- `src/main/safe-name.ts` — shared id/container sanitisers used by the audio
+  cache and downloads, so a track id can never escape its folder.
+- `src/main/recording-alias.ts` — persistent, capped map between a catalog row
+  and its released-audio id. Playback, cache and downloads use it to treat both
+  ids as one recording.
 
 ### 4.7 Downloads (`src/main/downloads/`)
 
@@ -438,8 +461,9 @@ is on by default and can be disabled in Settings.
 - `yt-dlp` concurrency capped; prefetch limited; renderer stays dumb.
 - DetailView and CollectionView page long track lists at 120 rows; rails lazy-load
   artwork and scale cards to whole slots.
-- Cache eviction runs only on cap/quality changes; image cache cap scans run once
-  per batch; resolver URL cache is pruned/capped.
+- Cache eviction runs on startup reconciliation, cap/quality changes and track
+  changes (which release the previous track's keep protection); image cache cap
+  scans run once per batch; resolver URL cache is pruned/capped.
 
 ---
 
@@ -501,7 +525,7 @@ through `nav`, never through callback chains.
 | Group | Files |
 |---|---|
 | Shell | `PlayerBar`, `SidePanel`, `QueuePanel`, `LyricsPanel`, `HistoryPanel`, `DownloadPanel`, `Rail`, `SearchBar`, `PlaylistPicker`, `QueueDropBar`, `ChangelogDialog` |
-| Views | `HomeView`, `OfflineHome`, `SearchView`, `LibraryView`, `CollectionView`, `DownloadCollectionView`, `DetailView`, `TrackView`, `MoodView`, `ImportView`, `SettingsView` |
+| Views | `HomeView`, `OfflineHome`, `SearchView`, `LibraryView`, `CollectionView`, `DownloadCollectionView`, `DetailView`, `DiscographyView`, `TrackView`, `MoodView`, `ImportView`, `SettingsView` |
 | Rows/cards | `TrackRow`, `MediaCard`, `Cover`, `DownloadBadge`, `CollectionDownloadButton`, `EntityLink`, `ArtistLinks`, `SubtitleParts` |
 | Home extras | `ListeningDashboard`, `PixelClock`, `MoodGrid` |
 | Primitives | `Icon`, `InlineAlert` |
@@ -509,6 +533,15 @@ through `nav`, never through callback chains.
 `TrackRow` is the most reused surface. Its title text navigates; the rest of the
 row plays. Artist/album links, favorite/download/queue/remove actions and the
 playing equalizer all live there.
+
+Artist pages group releases as **Popular releases**, **Albums** and **Singles and
+EPs** under a Discography heading. **Show all** opens `DiscographyView`, which
+lists the complete shelves newest first with All/Albums/Singles filters; both
+shelves are already expanded by the catalog client, so the page is instant.
+
+The discography defaults to Spotify-style **list view**: each release expands
+to its tracks, fetched lazily near the viewport and cached. A pressed-state
+toggle switches to the cover grid, and the choice is remembered locally.
 
 ### 5.4 Playback state machine
 
@@ -594,8 +627,9 @@ scoped in each `.svelte` file.
 | `tracks.json` | `ipc.ts` | Metadata snapshot for every played/cached track; offline metadata and bitrate estimation. |
 | `stream-urls.json` | `ytdlp/resolver.ts` | Resolved URLs with 2h expiry; bounded. |
 | `lyrics.json` | `lyrics.ts` | Cached lyrics and 24h misses. |
-| `cache/audio/index.json` + files | `cache/audio.ts` | Bounded LRU audio cache. |
+| `cache/audio/index.json` + files | `cache/audio.ts` | Bounded LRU audio cache with snapshots, quality tags and a reconciled index. |
 | `cache/art/` | `cache/images.ts` | Content-addressed artwork cache. |
+| `recording-aliases.json` | `recording-alias.ts` | Capped catalog-row ↔ released-audio id map. |
 | `downloads/index.json` | `downloads/store.ts` | Entries, collections, jobs. |
 | `downloads/audio/`, `art/`, `lyrics/`, `tmp/` | `downloads/` | Explicit downloads and their assets. |
 | `bin/` | `ytdlp/binary.ts` | Managed yt-dlp zipapp/runtime copy. |
@@ -766,8 +800,8 @@ This section is the complete file-level symbol index: every named function, clas
 method, constructor, getter and named arrow in the source, with its line and a
 one-line role.
 
-**Coverage:** 1,079 rows across 143 source files, generated from the code on
-2026-10-28. Constructors, getters and the preload `window.viby` object arrows are
+**Coverage:** 1,100+ rows across 149 source files, generated from the code on
+2026-10-30. Constructors, getters and the preload `window.viby` object arrows are
 included even where a basic AST pass would miss them.
 
 **How to use it:** find the area, then the file, then the symbol. The line number
@@ -838,26 +872,31 @@ The single IPC surface: registers every channel and implements the playback reso
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 84 | downloadStore | function | Lazily creates the downloads store rooted at `userData/downloads`. |
-| 89 | audioCache | function | Constructs an AudioCache bound to the current cache-cap setting. |
-| 94 | cacheInstance | function | Returns the lazily created shared audio cache instance. |
-| 100 | imageCache | function | Returns the lazily created shared artwork cache instance. |
-| 107 | trackStore | function | Lazily opens `tracks.json`, the metadata map for known tracks. |
-| 112 | registerIpc | function | Wires all IPC handlers for catalog, player, library, downloads, settings and updates. |
-| 113 | ok | arrow | Wraps a successful payload in a `Result`. |
-| 114 | fail | arrow | Converts a thrown value into a failed `Result`. |
-| 118 | offline | arrow | Returns an offline failure `Result`, or null when online. |
-| 138 | broadcast | arrow | Sends a payload on a channel to every live window. |
-| 214 | autoCheck | arrow | Runs a quiet update check when auto-check is enabled and the app is online. |
-| 223 | stopPlaybackBlocker | arrow | Releases the display-sleep blocker if one is held. |
-| 303 | snapshot | arrow | Returns the current downloads snapshot from the manager. |
-| 593 | historyEntries | arrow | Loads history and backfills missing metadata from the track store. |
-| 805 | resolveForPlayback | function | Resolves a request to a stream via download, cache, network, or SABR disk fallback. |
-| 897 | remember | function | Merges track metadata into the store, keeping catalog identity over resolver data. |
-| 908 | localStream | function | Builds `StreamInfo` for a local file, deriving average bitrate from size and duration. |
-| 936 | kickOffBackgroundCache | function | Opportunistically downloads a cache-worthy track so the next play is local. |
-| 979 | mediaFileFor | function | Maps a media URL to a real path, only if it stays inside cache or downloads. |
-| 1012 | handleMediaProtocol | function | Serves `viby-media` requests with byte-range support (200/206/416). |
+| 91 | downloadStore | function | Lazily creates the downloads store rooted at `userData/downloads`. |
+| 96 | audioCache | function | Constructs an AudioCache bound to the current cache-cap setting. |
+| 101 | cacheInstance | function | Returns the lazily created shared audio cache instance. |
+| 107 | imageCache | function | Returns the lazily created shared artwork cache instance. |
+| 114 | trackStore | function | Lazily opens `tracks.json`, the metadata map for known tracks. |
+| 121 | aliasStore | function | Lazily opens the catalog-row ↔ released-audio id map. |
+| 126 | registerIpc | function | Wires all IPC handlers for catalog, player, library, downloads, settings and updates. |
+| 127 | ok | arrow | Wraps a successful payload in a `Result`. |
+| 128 | fail | arrow | Converts a thrown value into a failed `Result`. |
+| 132 | offline | arrow | Returns an offline failure `Result`, or null when online. |
+| 158 | broadcast | arrow | Sends a payload on a channel to every live window. |
+| 242 | autoCheck | arrow | Runs a quiet update check when auto-check is enabled and the app is online. |
+| 251 | stopPlaybackBlocker | arrow | Releases the display-sleep blocker if one is held. |
+| 336 | snapshot | arrow | Returns the current downloads snapshot from the manager. |
+| 641 | historyEntries | arrow | Loads history and backfills missing metadata from the track store. |
+| 856 | relatedIds | function | Returns an id plus its recording counterpart for local lookups. |
+| 861 | inOwnedPlaylist | function | True when an owned playlist holds the recording under either id. |
+| 873 | listeningFor | function | Favourites and history aggregates for one recording across both ids. |
+| 896 | backgroundCacheHasRoom | function | Free-space guard for invisible background caching. |
+| 921 | resolveForPlayback | function | Resolves a request to a stream via download, cache, network, or SABR disk fallback, across both recording ids. |
+| 1036 | remember | function | Merges track metadata into the store, keeping catalog identity over resolver data. |
+| 1047 | localStream | function | Builds `StreamInfo` for a local file, deriving average bitrate from size and duration. |
+| 1078 | kickOffBackgroundCache | function | Opportunistically downloads a cache-worthy track so the next play is local. |
+| 1132 | mediaFileFor | function | Maps a media URL to a real path, only if it stays inside cache or downloads. |
+| 1165 | handleMediaProtocol | function | Serves `viby-media` requests with byte-range support (200/206/416). |
 
 #### src/main/json-store.ts
 
@@ -976,6 +1015,29 @@ SSRF guard shared by artwork fetching and import redirects; one copy so the two 
 |---:|---|---|---|
 | 8 | isPrivateAddress | function | Detects loopback, link-local, CGNAT and private IPv4/IPv6, recursing into mapped IPv4. |
 
+#### src/main/recording-alias.ts
+
+Persistent, capped map pairing a catalog row with its released-audio id so local lookups can use either.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 13 | RecordingAliases | class | Owns `recording-aliases.json` and a reverse map rebuilt from it. |
+| 20 | RecordingAliases.constructor | method | Opens the store, sanitizes links and builds the reverse map. |
+| 26 | RecordingAliases.link | method | Records audio → row, replaces that row's older audio, prunes the oldest links past the cap. |
+| 46 | RecordingAliases.related | method | Returns the id plus its recording counterpart in either direction. |
+| 55 | RecordingAliases.sanitize | method | Drops unsafe, self-referential, malformed or over-cap links. |
+| 89 | RecordingAliases.rebuild | method | Rebuilds the row → newest-audio reverse index. |
+
+#### src/main/safe-name.ts
+
+Shared sanitisers for ids and audio containers used by the cache and downloads.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 4 | safeFileId | function | Replaces unsafe characters and caps length so an id cannot escape its folder. |
+| 9 | safeAudioExtension | function | Lowercases a container and falls back to `m4a` unless it is an allowed audio type. |
+| 14 | isAudioExtension | function | True for the audio containers the cache may index or serve. |
+
 #### src/main/session.ts
 
 Playback session persistence: the last track, queue position and timestamp, restored on launch.
@@ -1054,20 +1116,28 @@ Bounded LRU cache for downloaded audio that indexes files in JSON and evicts by 
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 20 | AudioCache | class | Bounded LRU cache over `<dir>/<trackId>.<ext>` files backed by a JsonStore index. |
-| 23 | AudioCache.constructor | method | Creates the cache directory and opens `index.json` through JsonStore. |
-| 31 | AudioCache.path | method | Getter exposing the cache directory to IPC and settings callers. |
-| 36 | AudioCache.lookup | method | Returns the cached file path, or drops the index entry when the file vanished. |
-| 49 | AudioCache.extOf | method | Returns the container extension recorded for a track, or null. |
-| 53 | AudioCache.touch | method | Stamps `lastUsed` so LRU eviction preserves recently played tracks. |
-| 65 | AudioCache.put | method | Renames a finished temp file into the cache, indexes it, then evicts. |
-| 79 | AudioCache.remove | method | Deletes one cached file plus its index entry, ignoring already-missing files. |
-| 93 | AudioCache.has | method | True when lookup resolves an existing cached file. |
-| 97 | AudioCache.bytes | method | Sums indexed byte sizes across every cached entry. |
-| 106 | AudioCache.evict | method | Unlinks least-recently-used files until under the cap, sparing `keepId`. |
-| 129 | AudioCache.stats | method | Returns bytes, cap, entry count and directory as `CacheStats`. |
-| 140 | AudioCache.clear | method | Unlinks every file except the playing one, then resets the index. |
-| 157 | AudioCache.files | method | Private readdir helper that returns an empty list instead of throwing. |
+| 34 | snapshotTrack | function | Copies a track and its artist credits so the cache keeps its own metadata. |
+| 41 | validEntry | function | Validates a stored index entry, including the track snapshot shape. |
+| 68 | AudioCache | class | Bounded LRU cache over sanitized `<id>.<ext>` files backed by a JsonStore index. |
+| 71 | AudioCache.constructor | method | Creates the cache directory, opens `index.json` and sanitizes the index. |
+| 80 | AudioCache.path | method | Getter exposing the cache directory to IPC and settings callers. |
+| 85 | AudioCache.lookup | method | Returns the cached file path, or null when absent or vanished. |
+| 89 | AudioCache.find | method | Returns file, container, track snapshot and quality; a missing, truncated or resized file is dropped as a miss. |
+| 115 | AudioCache.extOf | method | Returns the container extension recorded for a track, or null. |
+| 119 | AudioCache.touch | method | Stamps `lastUsed` so LRU eviction preserves recently played tracks. |
+| 131 | AudioCache.put | method | Reclaims space, moves a temp file in, stores snapshot/quality, then evicts while sparing the new file. |
+| 165 | AudioCache.remove | method | Deletes one cached file plus its index entry, ignoring already-missing files. |
+| 175 | AudioCache.invalidateQuality | method | Removes entries cached at a quality, sparing the playing id and files that could not be unlinked. |
+| 191 | AudioCache.has | method | True when lookup resolves an existing cached file. |
+| 195 | AudioCache.bytes | method | Sums indexed byte sizes across every cached entry. |
+| 204 | AudioCache.evict | method | Unlinks least-recently-used files until under the cap, sparing `keepId`. |
+| 213 | AudioCache.reconcile | method | Rebuilds the index from the folder: adopts valid files, deletes junk/duplicate containers, keeps snapshots and re-enforces the cap. |
+| 265 | AudioCache.stats | method | Returns bytes, cap, entry count and directory as `CacheStats`. |
+| 270 | AudioCache.clear | method | Unlinks every file except the playing one, then resets the index. |
+| 282 | AudioCache.trim | method | Evicts LRU entries to a byte limit, retaining entries whose unlink failed. |
+| 306 | AudioCache.sanitizeIndex | method | Drops entries with unsafe ids or invalid shapes before they are trusted. |
+| 325 | AudioCache.files | method | Private readdir helper that returns an empty list instead of throwing. |
+| 334 | AudioCache.unlink | method | Removes one file; true when it is gone, including already missing. |
 
 #### src/main/cache/images.ts
 
@@ -1252,23 +1322,23 @@ YouTube Music InnerTube client for search, browse, playlists, radio and home she
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 27 | context | function | Builds the WEB_REMIX client context, including the remembered visitor id. |
-| 39 | rememberVisitor | function | Saves `responseContext.visitorData` so continuations keep the same visitor. |
-| 47 | call | function | POSTs an InnerTube endpoint with merged timeout/abort and remembers the visitor. |
-| 75 | search | function | Searches with an optional filter param and returns results ranked for search. |
-| 86 | rankForSearch | function | Sorts official audio first, then songs, videos, uploads and non-song items. |
-| 87 | weight | arrow | Score per item kind and video type used by `rankForSearch`. |
-| 98 | normalizeTitle | function | Strips "(Official Video)"/"[4K]" noise so titles can be matched. |
-| 116 | moodCategories | function | Fetches and session-caches the moods/genres navigation tiles. |
-| 129 | artistImage | function | Resolves an artist portrait through artist search, caching up to 200 entries. |
-| 158 | audioTrackFor | function | Finds the released audio track matching a video, caching results per video id. |
-| 198 | itemKey | function | Builds the `kind:id` identity used to merge pages without duplicates. |
-| 207 | discographyItems | function | Follows browse continuations to collect a full discography, capped at 100 pages. |
-| 237 | expandDiscography | function | Replaces discography shelf previews by fetching each shelf's "More" page. |
-| 273 | browse | function | Opens an album, artist or playlist: header, shelves, dedupe and all continuation pages. |
-| 341 | playlistItems | function | Follows playlist continuations, returning items plus the page header. |
-| 378 | radio | function | Builds the "Up next" queue from the `next` endpoint, filtering out videos and uploads. |
-| 398 | home | function | Fetches home browse shelves for moods, charts and recommendations. |
+| 28 | context | function | Builds the WEB_REMIX client context, including the remembered visitor id. |
+| 40 | rememberVisitor | function | Saves `responseContext.visitorData` so continuations keep the same visitor. |
+| 48 | call | function | POSTs an InnerTube endpoint with merged timeout/abort and remembers the visitor. |
+| 76 | search | function | Searches with an optional filter param and returns results ranked for search. |
+| 87 | rankForSearch | function | Sorts official audio first, then songs, videos, uploads and non-song items. |
+| 88 | weight | arrow | Score per item kind and video type used by `rankForSearch`. |
+| 99 | normalizeTitle | function | Strips "(Official Video)"/"[4K]" noise so titles can be matched. |
+| 117 | moodCategories | function | Fetches and session-caches the moods/genres navigation tiles. |
+| 130 | artistImage | function | Resolves an artist portrait through artist search, caching up to 200 entries. |
+| 159 | audioTrackFor | function | Finds the released audio track matching a video, requiring the same artist; cached per video id. |
+| 180 | itemKey | function | Builds the `kind:id` identity used to merge pages without duplicates. |
+| 189 | discographyItems | function | Follows browse continuations to collect a full discography, capped at 100 pages. |
+| 219 | expandDiscography | function | Replaces discography shelf previews by fetching each shelf's "More" page. |
+| 255 | browse | function | Opens an album, artist or playlist: header, shelves, dedupe and all continuation pages. |
+| 323 | playlistItems | function | Follows playlist continuations, returning items plus the page header. |
+| 360 | radio | function | Builds the "Up next" queue from the `next` endpoint, filtering out videos and uploads. |
+| 380 | home | function | Fetches home browse shelves for moods, charts and recommendations. |
 
 #### src/main/innertube/constants.ts
 
@@ -1695,6 +1765,18 @@ Opens artist pages from links that may arrive without a browse id.
 | 14 | openArtist | function | Navigates directly when given an id, otherwise resolves the full name asynchronously. |
 | 22 | lookup | function | Opens only an exact artist-name match; otherwise shows artist search results, never a guess. |
 
+#### src/renderer/lib/artist-releases.ts
+
+Turns artist shelves into discography groups.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 30 | yearOf | function | Reads the release year from a card caption. |
+| 39 | kindOf | function | Infers Album/Single/EP when YouTube omits the release label. |
+| 48 | decorate | function | Copies a card with a uniform “Kind • Year” caption. |
+| 65 | releasesFrom | function | Filters and dedupes album cards from one shelf. |
+| 78 | artistReleaseGroups | function | Builds Popular, Albums, Singles and newest-first All groups. |
+
 #### src/renderer/lib/artwork.svelte.ts
 Renderer-side artwork cache that swaps remote URLs for local `viby-media://` copies.
 
@@ -1797,10 +1879,11 @@ Verified matching for name-only artist and release links.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 14 | normalizeEntityName | function | Accent-, case- and punctuation-insensitive identity text. |
-| 47 | pickArtist | function | Returns only an exact artist-name match, or null. |
-| 62 | pickAlbum | function | Matches a release by title and credited artist; refuses to guess without both. |
-| 88 | primaryArtistName | function | First credited artist of a track, skipping page-type tags. |
+| 18 | albumArtistNames | function | Artists credited on an album search result, linked parts first. |
+| 38 | pickArtist | function | Returns only an exact artist-name match, or null. |
+| 50 | albumCreditsArtist | function | True when a release search result is credited to that artist. |
+| 63 | pickAlbum | function | Matches a release by title and credited artist; refuses to guess without both. |
+| 83 | primaryArtistName | function | First credited artist of a track, skipping page-type tags. |
 
 #### src/renderer/lib/entity-search.ts
 
@@ -1887,26 +1970,27 @@ Single navigation store with browser-style back and forward stacks.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 52 | Navigator | class | Holds the current view, page references and back/forward history stacks. |
-| 70 | Navigator.canGoBack | method | Reports whether a back entry exists. |
-| 74 | Navigator.canGoForward | method | Reports whether a forward entry exists. |
-| 78 | Navigator.revision | method | Exposes the counter bumped on each real navigation. |
-| 82 | Navigator.go | method | Switches top-level view, clearing detail state and recording history. |
-| 93 | Navigator.open | method | Opens a catalog detail page and clears track/collection/mood state. |
-| 107 | Navigator.openReleaseAt | method | Opens a release and sets a focus target for scrolling and highlighting. |
-| 118 | Navigator.clearFocus | method | Clears focus only when the nonce matches the active one. |
-| 123 | Navigator.openMood | method | Opens a mood page unless that same page is already showing. |
-| 132 | Navigator.openArtist | method | Builds an artist catalog item and opens its detail page. |
-| 145 | Navigator.openTrack | method | Opens the song page with a copied track snapshot. |
-| 156 | Navigator.openCollection | method | Opens a liked, playlist or download collection, skipping duplicates. |
-| 171 | Navigator.back | method | Pops the back stack, pushes current onto forward and restores the entry. |
-| 178 | Navigator.forward | method | Pops the forward stack, pushes current onto back and restores the entry. |
-| 186 | Navigator.clearForward | method | Empties the forward stack after the page it points at is deleted. |
-| 190 | Navigator.record | method | Pushes a snapshot, clears forward/focus and bumps the revision. |
-| 197 | Navigator.pushBack | method | Pushes a snapshot onto the back stack, capped at 40 entries. |
-| 202 | Navigator.pushForward | method | Pushes a snapshot onto the forward stack, capped at 40 entries. |
-| 207 | Navigator.snapshot | method | Captures the current view and page references. |
-| 217 | Navigator.restore | method | Applies a snapshot, clears focus and bumps the revision. |
+| 53 | Navigator | class | Holds the current view, page references and back/forward history stacks. |
+| 73 | Navigator.canGoBack | method | Reports whether a back entry exists. |
+| 77 | Navigator.canGoForward | method | Reports whether a forward entry exists. |
+| 81 | Navigator.revision | method | Exposes the counter bumped on each real navigation. |
+| 85 | Navigator.go | method | Switches top-level view, clearing detail state and recording history. |
+| 97 | Navigator.open | method | Opens a catalog detail page and clears track/collection/mood/discography state. |
+| 112 | Navigator.openReleaseAt | method | Opens a release and sets a focus target for scrolling and highlighting. |
+| 123 | Navigator.clearFocus | method | Clears focus only when the nonce matches the active one. |
+| 128 | Navigator.openMood | method | Opens a mood page unless that same page is already showing. |
+| 139 | Navigator.openDiscography | method | Opens an artist's full discography page and records history. |
+| 151 | Navigator.openArtist | method | Builds an artist catalog item and opens its detail page. |
+| 164 | Navigator.openTrack | method | Opens the song page with a copied track snapshot. |
+| 176 | Navigator.openCollection | method | Opens a liked, playlist or download collection, skipping duplicates. |
+| 192 | Navigator.back | method | Pops the back stack, pushes current onto forward and restores the entry. |
+| 199 | Navigator.forward | method | Pops the forward stack, pushes current onto back and restores the entry. |
+| 207 | Navigator.clearForward | method | Empties the forward stack after the page it points at is deleted. |
+| 211 | Navigator.record | method | Pushes a snapshot, clears forward/focus and bumps the revision. |
+| 218 | Navigator.pushBack | method | Pushes a snapshot onto the back stack, capped at 40 entries. |
+| 223 | Navigator.pushForward | method | Pushes a snapshot onto the forward stack, capped at 40 entries. |
+| 228 | Navigator.snapshot | method | Captures the current view and page references. |
+| 239 | Navigator.restore | method | Applies a snapshot, clears focus and bumps the revision. |
 
 #### src/renderer/lib/network.svelte.ts
 Connectivity state mirrored from the main-process probe.
@@ -2185,19 +2269,42 @@ No functions or classes are defined in this component.
 
 #### src/renderer/components/DetailView.svelte
 
-Album, artist or playlist catalogue page with cached browse, shelves, downloads and save-to-library.
+Album, artist or playlist catalogue page with cached browse, shelves, an expandable Popular list, downloads and save-to-library.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 67 | shelfLabel | function | Maps raw shelf titles to display labels, passing unknown titles through. |
-| 91 | bannerFailed | function | Records a failed banner URL and marks the artwork broken in the artwork store. |
-| 163 | withDefaults | function | Clones a row, filling fallback artist, page release metadata and header artwork. |
-| 204 | albumSnapshot | function | Builds the SavedAlbum record (title, artist, art, year, track count) for saving. |
-| 219 | toggleAlbumSave | function | Saves or unsaves the album snapshot, swallowing local write errors. |
-| 258 | load | function | Browses a catalogue id, guards stale requests, caches the result and prefetches songs. |
-| 281 | retry | function | Re-runs the browse after a failure with a fresh request token. |
-| 364 | playAll | function | Plays the page track list (top songs on artist pages) from the start. |
-| 369 | activate | function | Plays a card when playable, else navigates; album-from-artist keeps the artist credit. |
+| 119 | shelfLabel | function | Maps raw shelf titles to display labels, passing unknown titles through. |
+| 139 | bannerFailed | function | Records a failed banner URL and marks the artwork broken in the artwork store. |
+| 218 | withDefaults | function | Clones a row, filling fallback artist, page release metadata and header artwork. |
+| 251 | albumSnapshot | function | Builds the SavedAlbum record (title, artist, art, year, track count) for saving. |
+| 266 | toggleAlbumSave | function | Saves or unsaves the album snapshot, swallowing local write errors. |
+| 306 | load | function | Browses a catalogue id, guards stale requests, caches the result and prefetches songs. |
+| 329 | retry | function | Re-runs the browse after a failure with a fresh request token. |
+| 412 | playAll | function | Plays the page track list (the visible Popular list on artist pages) from the start. |
+| 417 | activate | function | Plays a card when playable, else navigates; album-from-artist keeps the artist credit. |
+
+#### src/renderer/components/DiscographyView.svelte
+
+Full artist discography, newest first, with release-type filters.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 18 | storedView | function | Reads the remembered list/grid preference, defaulting to list. |
+| 37 | setView | function | Switches the layout and remembers it. |
+| 100 | retry | function | Re-runs the browse after a failure. |
+| 104 | activate | function | Opens a release page from the grid. |
+
+#### src/renderer/components/DiscographyRelease.svelte
+
+One release in the discography list: header plus lazily loaded tracks.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 48 | load | function | Fetches and caches the release's track list once. |
+| 72 | songsOf | function | Filters playable song rows and fills missing credits with the page artist. |
+| 78 | retry | function | Retries a failed track-list load. |
+| 82 | play | function | Plays the release from its loaded tracks. |
+| 86 | open | function | Opens the release page. |
 
 #### src/renderer/components/DownloadBadge.svelte
 
@@ -2573,6 +2680,18 @@ Decides which baked release notes a launch should show from the seen/shown versi
 | 15 | previousVersion | function | Returns the newest baked version strictly older than the given version, or an empty string. |
 | 26 | baselineFor | function | Private resolver that reconciles lastSeenVersion with lastShownVersion into one notes baseline. |
 | 50 | unseenEntries | function | Filters entries newer than the baseline, newest first; a first run yields nothing. |
+
+#### src/shared/entity-identity.ts
+
+Recording identity shared by entity links and the audio-first swap.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 9 | normalizeEntityName | function | Accent-, case- and punctuation-insensitive identity text. |
+| 20 | primaryArtistName | function | First credited artist of a combined string, skipping page-type tags. |
+| 25 | artistMatches | function | Exact, accent-insensitive artist match. |
+| 38 | withFallbackArtist | function | Fills a row that carries no credit with the page's known artist. |
+| 64 | pickAudioTrack | function | Picks the audio release for a video row, refusing a different artist or a guess without one. |
 
 #### src/shared/ipc.ts
 
