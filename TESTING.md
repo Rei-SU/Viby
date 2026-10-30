@@ -62,12 +62,14 @@ ones that touch main-process modules.
 | `library-items` | unified Library tiles: badges/full/partial marks, no downloaded-playlist duplicates, album coverage, orphan snapshots |
 | `startup` | login-item payloads: dev no-op, Windows path/args, macOS bundle, unsupported platforms; defaults |
 | `listening` | seven-day summaries, duration weighting, duplicate history, history rows and their artist/release links |
-| `artist-credits` | credit parsing: the leading artist run, page-type tags, separator trimming, conservative splitting of combined names, structured credits winning over the fallback |
+| `artist-credits` | credit parsing: the leading artist run, page-type tags, separator trimming, conservative splitting of combined names, featured names without browse ids, release/artist card counters, structured credits winning over the fallback |
 | `entity-lookup` | name-only link identity: accent-insensitive names, exact artist matches, release title plus credited artist, polluted credits |
 | `track-metadata` | catalog-first metadata merge: ids survive resolver records, gaps fill, album pairs stay consistent |
 | `track-title` | recording identity: official video/audio/lyric/4K and featuring markers ignored, live/remix/acoustic kept distinct, case and spacing normalised |
 | `track-match` | release-row matching: ids, featuring-insensitive titles, duplicate titles by duration, version mismatch refused, discovery query titles |
 | `artist-releases` | discography grouping: year parsing, missing release labels, Popular interleave, newest-first order, dedupe and missing shelves |
+| `artist-queue` | artist Play all tail: newest-first release loading, popular/cross-release dedupe by id or title + duration, five-track batches, header/card cover and album fallback, page-artist fallback, failed-release skip, cancellation, offline, and saved release ids |
+| `queue-session` | session windows: short queues, 20-before/100-row caps, absolute index mapping, last-track inclusion, legacy sessions without an offset, round trips |
 | `audio-track-pick` | audio-first selection never crosses artists: exact artist match, version penalty, no guessing without an artist, page-artist fallback for credit-less rows |
 | `pixel-scramble` | dot-matrix boot: random digits, fixed colon, left-to-right lock order and the final landed value |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
@@ -192,7 +194,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts`, `private-address.ts`, `image-extension.ts` | unit `images`, `main-guards` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
-| `src/renderer/lib/player.svelte.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening` |
+| `src/renderer/lib/player.svelte.ts`, `queue-session.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening`, `queue-session` · manual: relaunch mid-discography restores the right track and keeps the artist tail |
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
 | `src/main/changelog.ts`, `src/renderer/lib/changelog.svelte.ts`, `ChangelogDialog`, `scripts/build-changelog.mjs` | unit `changelog`, `release-notes` · e2e `changelog`, `settings` |
 | `src/shared/version.ts`, `src/main/version.ts` | unit `version`, `updates`, `changelog` |
@@ -212,7 +214,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/rail-fit.ts` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
 | `src/renderer/lib/keyboard.ts` | e2e `shortcuts` · behaviour |
 | `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel`, `release-focus` |
-| `src/renderer/components/DetailView.svelte`, `DiscographyView.svelte`, `src/renderer/lib/artist-releases.ts`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening`, `artist-releases` · visual check: Popular 5→10, Discography tabs, Show all defaults to list with lazy tracks, grid toggle persists, filters and Back |
+| `src/renderer/components/DetailView.svelte`, `DiscographyView.svelte`, `src/renderer/lib/artist-releases.ts`, `src/renderer/lib/artist-queue.ts`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening`, `artist-releases`, `artist-queue` · visual check: Popular 5→10, Play all queues the popular set plus the lazy discography tail, Discography tabs, Show all defaults to list with lazy tracks, grid toggle persists, filters and Back |
 | `src/renderer/components/PixelClock.svelte`, `src/renderer/lib/pixel-scramble.ts` | unit `pixel-scramble` · e2e `home` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |

@@ -247,6 +247,10 @@ was cleared while it ran.
 The renderer resolves only when playback actually starts. Opening a 100-track
 album costs zero resolver calls; prefetch warms the next/hovered tracks.
 
+Artist **Play all** uses the same pipeline with a lazy queue tail: the popular
+songs start now, each release is browsed as the queue nears its end, and radio
+is deferred until that discography tail is exhausted.
+
 ### 4.4 Catalog (`src/main/innertube/`)
 
 - `client.ts` — InnerTube calls: `search`, `moodCategories`, `artistImage`,
@@ -264,6 +268,9 @@ rebuilt from history, downloads or a resolver may know only a name, and release
 titles are not unique across artists. Name-only links therefore verify a search
 result against the title *and* the credited artist (`entity-lookup.ts`); an
 unverified name opens the matching search results instead of the first hit.
+YouTube occasionally omits the browse endpoint for a featured credit; the shared
+credit range keeps that name and the row links it by verified name rather than
+leaving a dead name between working ones.
 `tracks.json` merges catalog-first (`track-metadata.ts`), so resolver metadata
 can add a duration or artwork but never erase the ids a link needs. Release
 track rows that carry no credit at all inherit the page's artist
@@ -543,6 +550,17 @@ The discography defaults to Spotify-style **list view**: each release expands
 to its tracks, fetched lazily near the viewport and cached. A pressed-state
 toggle switches to the cover grid, and the choice is remembered locally.
 
+**Play all** queues the full popular list regardless of the Show more state,
+then continues through the discography newest-first. The remaining releases are
+loaded by a lazy queue tail (`artist-queue.ts`) as playback approaches the end,
+deduped against the songs already queued. Release rows borrow the release
+header's cover, album title, id and type, so every queue row keeps its artwork
+and release context. Autoplay radio only starts once that
+tail is exhausted; repeat-all loops the completed artist queue, and shuffle
+grows the pool one batch per track so it does not repeat a small popular set.
+The session stores the tail's remaining release ids, so relaunching mid-album
+continues the discography instead of falling back to radio.
+
 ### 5.4 Playback state machine
 
 `Player` owns:
@@ -554,7 +572,12 @@ toggle switches to the cover grid, and the choice is remembered locally.
   stopped state (`failPlayback`);
 - audio-first swap: music videos are replaced with the official audio release and
   `sourceId` keeps the originating row highlighted;
-- session persistence (throttled, exact saves on pause/seek/end/quit);
+- lazy queue tails: `playList(items, index, more)` starts immediately and appends
+  batches from a continuation as playback nears the end; radio is deferred until
+  the tail reports exhaustion. A new explicit play or a cleared queue cancels it;
+- session persistence (throttled, exact saves on pause/seek/end/quit): a
+  100-row window around the current track plus its queue offset, and the lazy
+  tail descriptor, so a long queue restores the right song and keeps loading;
 - `mediaSession` metadata/actions/position;
 - a throttled reactive clock for the bar and OS UI, plus an exact `currentTime`
   getter the synced lyrics panel samples each frame;
@@ -623,7 +646,7 @@ scoped in each `.svelte` file.
 |---|---|---|
 | `settings.json` | `settings.ts` | Audio quality, volume/mute/modes, autoplay, background/tray, login, offline, updates, Discord, changelog baselines. |
 | `library.json` | `library.ts` | Favorites, history (5,000 cap), playlists, saved albums. |
-| `session.json` | `session.ts` | Current track, queue (≤100), index, position, updatedAt. |
+| `session.json` | `session.ts` | Current track, a 100-row queue window with `queueStart`, the artist tail descriptor, index and position. |
 | `tracks.json` | `ipc.ts` | Metadata snapshot for every played/cached track; offline metadata and bitrate estimation. |
 | `stream-urls.json` | `ytdlp/resolver.ts` | Resolved URLs with 2h expiry; bounded. |
 | `lyrics.json` | `lyrics.ts` | Cached lyrics and 24h misses. |
@@ -1765,6 +1788,14 @@ Opens artist pages from links that may arrive without a browse id.
 | 14 | openArtist | function | Navigates directly when given an id, otherwise resolves the full name asynchronously. |
 | 22 | lookup | function | Opens only an exact artist-name match; otherwise shows artist search results, never a guess. |
 
+#### src/renderer/lib/artist-queue.ts
+
+Lazy queue tail for artist Play all: release tracks load as playback approaches the end.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 33 | createArtistQueue | function | Returns a cancellable source that browses releases newest-first, batches at least five fresh tracks, dedupes by id or title + duration, fills cover and album metadata from the release header, applies the page-artist fallback, and persists its remaining release ids. |
+
 #### src/renderer/lib/artist-releases.ts
 
 Turns artist shelves into discography groups.
@@ -1797,11 +1828,12 @@ Ten-minute caches for catalog detail pages, radio queues and home shelf state.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 10 | ShelfState | class | Holds shelf list, loading/error flags and an attempted guard for Home. |
-| 22 | cachedDetail | function | Returns a non-expired browse result, deleting the entry when stale. |
-| 32 | cacheDetail | function | Stores a browse result and evicts the oldest beyond 40 entries. |
-| 44 | cachedRadio | function | Returns the cached radio queue for a seed track, or null. |
-| 48 | cacheRadio | function | Stores a seed's radio queue and evicts the oldest beyond 12 seeds. |
+| 11 | ShelfState | class | Holds shelf list, loading/error flags and an attempted guard for Home. |
+| 23 | cachedDetail | function | Returns a non-expired browse result, deleting the entry when stale. |
+| 33 | cacheDetail | function | Stores a browse result and evicts the oldest beyond 40 entries. |
+| 43 | browseCached | function | Returns a cached browse result or fetches and caches it once; shared by pages and the queue tail. |
+| 55 | cachedRadio | function | Returns the cached radio queue for a seed track, or null. |
+| 59 | cacheRadio | function | Stores a seed's radio queue and evicts the oldest beyond 12 seeds. |
 
 #### src/renderer/lib/changelog.svelte.ts
 What's New sheet state, comparing the running version with the last-shown notes.
@@ -2025,59 +2057,64 @@ The app-wide audio player: one element, queue, playback state and OS media integ
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 32 | isPlayable | function | True for song catalog items that carry an id. |
-| 36 | toTrack | function | Converts a catalog item into a track, deriving credits, album and artist. |
-| 72 | Player | class | Owns the single audio element, queue, playback state and media session. |
-| 134 | Player.init | method | Wires audio and media handlers, applies settings and restores the session. |
-| 154 | Player.applySettings | method | Adopts volume, mute, shuffle, repeat and autoplay from settings. |
-| 165 | Player.restoreSession | method | Restores the saved queue, index and paused position from main. |
-| 187 | Player.persistSession | method | Saves a plain track/queue snapshot, throttled unless immediate. |
-| 210 | Player.updatePosition | method | Mirrors the audio clock into state at most once per second. |
-| 220 | Player.wire | method | Installs play, pause, timeupdate, metadata, ended and error handlers. |
-| 283 | Player.playList | method | Replaces the queue with playable items and starts at the given index. |
-| 295 | Player.playItem | method | Plays one catalog item by replacing the queue. |
-| 301 | Player.enqueue | method | Appends a playable item without starting playback. |
-| 309 | Player.enqueueAll | method | Appends every playable item in a list. |
-| 321 | Player.insertAt | method | Inserts an item at a queue slot and shifts the current index. |
-| 334 | Player.playAt | method | Jumps to a queue index and starts playback. |
-| 343 | Player.play | method | Resolves a pasted input, appends it to the queue and starts playback. |
-| 392 | Player.next | method | Skips forward through `advance(1)`. |
-| 397 | Player.previous | method | Restarts after three seconds, otherwise skips back one track. |
-| 403 | Player.prefetch | method | Warms a track's stream URL through the prefetch channel. |
-| 410 | Player.prefetchList | method | Prefetches the first few playable items in a list. |
-| 414 | Player.toggle | method | Starts a restored track or toggles play/pause on the element. |
-| 440 | Player.resume | method | Resumes playback, falling back to recovery on media failure. |
-| 459 | Player.seek | method | Seeks the element or records a pending resume position before load. |
-| 481 | Player.diagnostics | method | Exposes raw readyState, networkState, error code and seekable ranges. |
-| 501 | Player.cancel | method | Cancels an in-flight resolve and clears the busy timer. |
-| 512 | Player.setVolume | method | Clamps volume, updates the element and persists it debounced. |
-| 523 | Player.toggleMute | method | Flips element mute and persists it. |
-| 531 | Player.toggleShuffle | method | Flips shuffle and saves the setting. |
-| 536 | Player.toggleAutoplay | method | Flips autoplay and saves the setting. |
-| 541 | Player.cycleRepeat | method | Cycles repeat through off/all/one and saves it. |
-| 547 | Player.clearQueue | method | Stops audio, clears the queue and persists the empty session. |
-| 567 | Player.removeAt | method | Removes a queue row, restarting or clearing when it was the current one. |
-| 585 | Player.move | method | Reorders a queue row and keeps the current index on its track. |
-| 605 | Player.startTimer | method | Starts the elapsed-time interval for resolve progress. |
-| 614 | Player.stopTimer | method | Clears the elapsed-time interval. |
-| 621 | Player.persistSettings | method | Debounces settings patches into one IPC write. |
-| 637 | Player.prefetchNext | method | Warms the next track or radio queue when appropriate. |
-| 659 | Player.warmRadio | method | Fetches and caches the radio queue, warming its first playable URL. |
-| 686 | Player.start | method | Resolves and plays the current queue track, swapping in official audio. |
-| 857 | Player.recover | method | Re-resolves a failed stream up to twice, then fails playback. |
-| 948 | Player.failPlayback | method | Shows a stopped state, detaches the dead source and clears the stream. |
-| 965 | Player.advance | method | Computes the next index honouring shuffle/repeat, then starts it. |
-| 1010 | Player.extendWithRadio | method | Appends up to 25 fresh radio tracks for autoplay. |
-| 1034 | Player.recordHistory | method | Sends playback history with completion ratio and credits to main. |
-| 1059 | Player.setMediaHandlers | method | Registers media session action handlers once. |
-| 1062 | bind | arrow | Wraps `setActionHandler` in a try/catch for unsupported actions. |
-| 1089 | Player.setTaskbarHandlers | method | Subscribes once to Windows taskbar button commands. |
-| 1099 | Player.syncTaskbarControls | method | Pushes track, playing and previous/next flags to the Windows taskbar. |
-| 1112 | Player.syncMetadata | method | Publishes MediaMetadata, upgrading local art to a data URL. |
-| 1146 | Player.localArtwork | method | Reads a cached cover via main and memoizes an 8-entry data URL cache. |
-| 1166 | Player.syncPlaybackState | method | Sets the media session playback state to playing or paused. |
-| 1171 | Player.syncPositionState | method | Publishes duration, rate and clamped position to the media session. |
-| 1186 | Player.currentTime | getter | Exact audio element clock for lyric sync; the reactive position stays throttled. |
+| 53 | isPlayable | function | True for song catalog items that carry an id. |
+| 57 | toTrack | function | Converts a catalog item into a track, deriving credits, album and artist. |
+| 93 | Player | class | Owns the single audio element, queue, playback state and media session. |
+| 158 | Player.init | method | Wires audio and media handlers, applies settings and restores the session. |
+| 178 | Player.applySettings | method | Adopts volume, mute, shuffle, repeat and autoplay from settings. |
+| 189 | Player.restoreSession | method | Restores the queue window at the right index and rebuilds the lazy tail. |
+| 214 | Player.restoreTail | method | Recreates an artist queue tail from its saved release ids, seeding dedupe with the restored window. |
+| 239 | Player.persistSession | method | Saves a 100-row window around the current track, its offset and the tail descriptor. |
+| 268 | Player.updatePosition | method | Mirrors the audio clock into state at most once per second. |
+| 278 | Player.wire | method | Installs play, pause, timeupdate, metadata, ended and error handlers. |
+| 341 | Player.playList | method | Replaces the queue with playable items, starts at an index and attaches an optional lazy tail. |
+| 361 | Player.playItem | method | Plays one catalog item by replacing the queue. |
+| 367 | Player.enqueue | method | Appends a playable item without starting playback. |
+| 375 | Player.enqueueAll | method | Appends every playable item in a list. |
+| 387 | Player.insertAt | method | Inserts an item at a queue slot and shifts the current index. |
+| 400 | Player.playAt | method | Jumps to a queue index and starts playback. |
+| 409 | Player.play | method | Resolves a pasted input, appends it to the queue and starts playback. |
+| 459 | Player.next | method | Skips forward through `advance(1)`. |
+| 464 | Player.previous | method | Restarts after three seconds, otherwise skips back one track. |
+| 470 | Player.prefetch | method | Warms a track's stream URL through the prefetch channel. |
+| 477 | Player.prefetchList | method | Prefetches the first few playable items in a list. |
+| 481 | Player.toggle | method | Starts a restored track or toggles play/pause on the element. |
+| 507 | Player.resume | method | Resumes playback after an interruption, guarding against duplicate recovery. |
+| 526 | Player.seek | method | Seeks the element or records a pending resume position before load. |
+| 548 | Player.diagnostics | getter | Exposes raw readyState, networkState, error code and seekable ranges. |
+| 568 | Player.cancel | method | Cancels an in-flight resolve and clears the busy timer. |
+| 579 | Player.setVolume | method | Clamps volume, updates the element and persists it debounced. |
+| 590 | Player.toggleMute | method | Flips element mute and persists it. |
+| 598 | Player.toggleShuffle | method | Flips shuffle and saves the setting. |
+| 603 | Player.toggleAutoplay | method | Flips autoplay and saves the setting. |
+| 608 | Player.cycleRepeat | method | Cycles repeat through off/all/one and saves it. |
+| 614 | Player.clearQueue | method | Cancels the lazy tail, stops audio, clears the queue and persists the empty session. |
+| 635 | Player.removeAt | method | Removes a queue row, restarting or clearing when it was the current one. |
+| 653 | Player.move | method | Reorders a queue row and keeps the current index on its track. |
+| 673 | Player.startTimer | method | Starts the elapsed-time interval for resolve progress. |
+| 682 | Player.stopTimer | method | Clears the elapsed-time interval. |
+| 690 | Player.cancelQueueMore | method | Cancels and detaches the lazy queue tail. |
+| 698 | Player.primeQueueMore | method | Loads a couple of tail batches up front so the queue panel has depth. |
+| 711 | Player.prefillQueue | method | Grows the tail when the playhead is close to the end, or every track under shuffle. |
+| 724 | Player.fillQueueFromMore | method | Appends one deduped batch, serializes concurrent fills and drops the tail at exhaustion. |
+| 771 | Player.persistSettings | method | Debounces settings patches into one IPC write. |
+| 787 | Player.prefetchNext | method | Warms the next track, but defers radio while the lazy tail still has work. |
+| 812 | Player.warmRadio | method | Fetches and caches the radio queue, warming its first playable URL. |
+| 839 | Player.start | method | Resolves and plays the current queue track, swapping in official audio. |
+| 1011 | Player.recover | method | Re-resolves a failed stream up to twice, then fails playback. |
+| 1102 | Player.failPlayback | method | Shows a stopped state, detaches the dead source and clears the stream. |
+| 1119 | Player.advance | method | Computes the next index, grows the tail before repeating or going to radio. |
+| 1170 | Player.extendWithRadio | method | Appends up to 25 fresh radio tracks for autoplay. |
+| 1194 | Player.recordHistory | method | Sends playback history with completion ratio and credits to main. |
+| 1219 | Player.setMediaHandlers | method | Registers media session action handlers once. |
+| 1222 | bind | arrow | Wraps `setActionHandler` in a try/catch for unsupported actions. |
+| 1249 | Player.setTaskbarHandlers | method | Subscribes once to Windows taskbar button commands. |
+| 1259 | Player.syncTaskbarControls | method | Pushes track, playing and previous/next flags to the Windows taskbar. |
+| 1272 | Player.syncMetadata | method | Publishes MediaMetadata, upgrading local art to a data URL. |
+| 1306 | Player.localArtwork | method | Reads a cached cover via main and memoizes an 8-entry data URL cache. |
+| 1326 | Player.syncPlaybackState | method | Sets the media session playback state to playing or paused. |
+| 1331 | Player.syncPositionState | method | Publishes duration, rate and clamped position to the media session. |
+| 1345 | Player.currentTime | getter | Exact audio element clock for lyric sync; the reactive position stays throttled. |
 
 #### src/renderer/lib/playlist-picker.svelte.ts
 Anchored add-to-playlist popover state shared by every track row.
@@ -2110,6 +2147,14 @@ Human-readable codec and bitrate labels for streams.
 |---:|---|---|---|
 | 4 | codecLabel | function | Maps a file extension to AAC, OPUS, MP3 or the uppercased extension. |
 | 20 | qualityLabel | function | Combines codec and bitrate into a display label, or null. |
+
+#### src/renderer/lib/queue-session.ts
+Saves a window around the current queue row and maps it back on restore.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 18 | queueWindow | function | Returns the 100-row window around `index` plus the absolute `queueStart`. |
+| 36 | restoreQueue | function | Resolves the saved absolute index into the window, falling back to zero for older sessions. |
 
 #### src/renderer/lib/rail-fit.ts
 Fits whole cards into a carousel rail and handles Windows wheel scrolling.
@@ -2273,15 +2318,16 @@ Album, artist or playlist catalogue page with cached browse, shelves, an expanda
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 119 | shelfLabel | function | Maps raw shelf titles to display labels, passing unknown titles through. |
-| 139 | bannerFailed | function | Records a failed banner URL and marks the artwork broken in the artwork store. |
-| 218 | withDefaults | function | Clones a row, filling fallback artist, page release metadata and header artwork. |
-| 251 | albumSnapshot | function | Builds the SavedAlbum record (title, artist, art, year, track count) for saving. |
-| 266 | toggleAlbumSave | function | Saves or unsaves the album snapshot, swallowing local write errors. |
-| 306 | load | function | Browses a catalogue id, guards stale requests, caches the result and prefetches songs. |
-| 329 | retry | function | Re-runs the browse after a failure with a fresh request token. |
-| 412 | playAll | function | Plays the page track list (the visible Popular list on artist pages) from the start. |
-| 417 | activate | function | Plays a card when playable, else navigates; album-from-artist keeps the artist credit. |
+| 121 | shelfLabel | function | Maps raw shelf titles to display labels, passing unknown titles through. |
+| 141 | bannerFailed | function | Records a failed banner URL and marks the artwork broken in the artwork store. |
+| 220 | withDefaults | function | Clones a row, filling fallback artist, page release metadata and header artwork. |
+| 253 | albumSnapshot | function | Builds the SavedAlbum record (title, artist, art, year, track count) for saving. |
+| 268 | toggleAlbumSave | function | Saves or unsaves the album snapshot, swallowing local write errors. |
+| 308 | load | function | Browses a catalogue id, guards stale requests, caches the result and prefetches songs. |
+| 331 | retry | function | Re-runs the browse after a failure with a fresh request token. |
+| 414 | loadReleaseTracks | function | Browses one release for the artist queue tail through the shared detail cache. |
+| 424 | playAll | function | Plays an album/playlist list, or the full popular set plus a lazy discography tail on an artist page. |
+| 445 | activate | function | Plays a card when playable, else navigates; album-from-artist keeps the artist credit. |
 
 #### src/renderer/components/DiscographyView.svelte
 
@@ -2664,12 +2710,13 @@ Turns structured subtitle runs or a combined credit string into per-artist linka
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
 | 14 | isSeparator | function | Detects punctuation-only credit fragments such as " • " or ", " that carry no id. |
-| 19 | isArtistName | function | Rejects separators and connector words (feat, ft, with, vs, and, x) from credit runs. |
-| 25 | isCounter | function | Private guard that filters out play/view counters and durations from credits. |
-| 40 | creditParts | function | Copies subtitle parts up to the album/counter boundary, drops a leading page-type tag and trims separators. |
-| 81 | splitArtistParts | function | Conservatively splits a combined credit string, drops a legacy row tag and gives the stored id to the first name. |
-| 113 | artistPartsFor | function | Returns sanitized structured credits, falling back to splitArtistParts on the display string. |
-| 124 | artistNames | function | Maps credit parts to trimmed artist names for callers that need a plain list. |
+| 19 | isArtistName | function | Rejects separators, connector words and bare years from credit runs. |
+| 29 | isCounter | function | Private guard that filters out play/view/listener counters, durations and track counts. |
+| 44 | creditRange | function | Returns the start/end of the leading artist run: skips a page-type tag, stops at the album or a counter, trims separators. |
+| 77 | creditParts | function | Copies the credit range, including featured names that arrived without an id. |
+| 99 | splitArtistParts | function | Conservatively splits a combined credit string, drops a legacy row tag and gives the stored id to the first name. |
+| 131 | artistPartsFor | function | Returns sanitized structured credits, falling back to splitArtistParts on the display string. |
+| 142 | artistNames | function | Maps credit parts to trimmed artist names for callers that need a plain list. |
 
 #### src/shared/changelog.ts
 
