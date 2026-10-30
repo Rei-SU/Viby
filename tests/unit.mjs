@@ -16,6 +16,7 @@ const suites = {
   'artist-shelves': { file: 'artist-shelves.test.ts' },
   library: { file: 'library.test.ts', electron: true },
   'artist-credits': { file: 'artist-credits.test.ts' },
+  'audio-track-pick': { file: 'audio-track-pick.test.ts' },
   'entity-lookup': { file: 'entity-lookup.test.ts' },
   'track-metadata': { file: 'track-metadata.test.ts' },
   'track-title': { file: 'track-title.test.ts' },

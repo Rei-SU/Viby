@@ -1,4 +1,5 @@
 import type { BrowseHeader, BrowseResult, CatalogItem, MoodCategory, Shelf } from '@shared/types'
+import { normalizeEntityName, pickAudioTrack, primaryArtistName } from '@shared/entity-identity'
 import { INNERTUBE, SEARCH_FILTERS, type SearchFilter } from './constants'
 import {
   continuationToken,
@@ -160,37 +161,21 @@ export async function audioTrackFor(
   title: string,
   artist: string
 ): Promise<CatalogItem | null> {
-  if (audioTrackCache.has(videoId)) return audioTrackCache.get(videoId) ?? null
+  // The same video can be requested with or without credits. Cache per artist
+  // too, so an unknown-artist refusal cannot poison the credited lookup.
+  const cacheKey = `${videoId}|${normalizeEntityName(primaryArtistName(artist))}`
+  if (audioTrackCache.has(cacheKey)) return audioTrackCache.get(cacheKey) ?? null
 
   const base = normalizeTitle(title)
   if (!base) return null
 
-  const primaryArtist = artist.split(',')[0]?.trim().toLowerCase() ?? ''
+  const primaryArtist = artist.split(',')[0]?.trim() ?? ''
   const query = `${base} ${primaryArtist}`.trim()
   const results = (await search(query, 'songs')).filter((item) => item.videoType !== 'ugc')
-  const versionWord = /\b(live|remix|cover|karaoke|instrumental|acoustic|sped up|slowed|nightcore)\b/i
-  const baseHasVersion = versionWord.test(base)
-
-  const ranked = results
-    .filter((item) => item.kind === 'song' && item.id)
-    .map((item) => {
-      const name = normalizeTitle(item.title)
-      if (!name) return null
-      if (!(name === base || name.startsWith(base) || base.startsWith(name))) return null
-      let score = name === base ? 4 : 2
-      const itemArtist = (item.artists ?? []).join(' ').toLowerCase()
-      if (primaryArtist && itemArtist.includes(primaryArtist)) score += 3
-      if (!baseHasVersion && versionWord.test(name)) score -= 4
-      if (item.videoType === 'audio') score += 1
-      return { item, score }
-    })
-    .filter((entry): entry is { item: CatalogItem; score: number } => Boolean(entry))
-    .sort((a, b) => b.score - a.score)
-
-  const candidate = ranked[0]?.item ?? null
+  const candidate = pickAudioTrack(results, title, artist)
 
   if (audioTrackCache.size > 300) audioTrackCache.clear()
-  audioTrackCache.set(videoId, candidate)
+  audioTrackCache.set(cacheKey, candidate)
   return candidate
 }
 

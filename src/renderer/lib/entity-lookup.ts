@@ -1,5 +1,8 @@
 import { artistPartsFor, isArtistName } from '@shared/artist-credits'
+import { normalizeEntityName } from '@shared/entity-identity'
 import type { CatalogItem, Track } from '@shared/types'
+
+export { normalizeEntityName }
 
 /**
  * Identity matching for name-only entity links.
@@ -11,18 +14,6 @@ import type { CatalogItem, Track } from '@shared/types'
  * whose credited artist — actually agree with what was clicked. Callers fall
  * back to search results when nothing is confident.
  */
-export function normalizeEntityName(value: string): string {
-  return value
-    .normalize('NFKD')
-    // Split accents from their letters before punctuation stripping, otherwise
-    // "Caméléon" becomes "came le on".
-    .replace(/\p{M}+/gu, '')
-    .toLowerCase()
-    .replace(/\b(?:feat|ft|with)\b.*$/i, '')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
-}
-
 /** Artists credited on an album search result, linked parts first. */
 function albumArtistNames(item: CatalogItem): string[] {
   const linked = (item.parts ?? [])
