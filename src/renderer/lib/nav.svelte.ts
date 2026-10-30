@@ -39,6 +39,7 @@ type Snapshot = {
   track: Track | null
   collection: CollectionRef | null
   mood: MoodRef | null
+  discography: CatalogItem | null
 }
 
 /**
@@ -58,6 +59,8 @@ class Navigator {
   collection = $state<CollectionRef | null>(null)
   /** A YouTube Music mood or genre page. */
   mood = $state<MoodRef | null>(null)
+  /** The artist whose full discography is open. */
+  discography = $state<CatalogItem | null>(null)
   /** A song the release page should scroll to and highlight. */
   focus = $state<TrackFocus | null>(null)
 
@@ -88,6 +91,7 @@ class Navigator {
     this.track = null
     this.collection = null
     this.mood = null
+    this.discography = null
   }
 
   open(item: CatalogItem): void {
@@ -98,6 +102,7 @@ class Navigator {
     this.track = null
     this.collection = null
     this.mood = null
+    this.discography = null
   }
 
   /**
@@ -127,6 +132,20 @@ class Navigator {
     this.detail = null
     this.track = null
     this.collection = null
+    this.discography = null
+  }
+
+  /** Open an artist's full discography page. */
+  openDiscography(artist: CatalogItem): void {
+    const id = artist.browseId ?? artist.id
+    if (!id) return
+    if (this.discography && (this.discography.browseId ?? this.discography.id) === id) return
+    this.record()
+    this.discography = artist
+    this.detail = null
+    this.track = null
+    this.collection = null
+    this.mood = null
   }
 
   openArtist(id: string, name: string, thumbnail?: string): void {
@@ -151,6 +170,7 @@ class Navigator {
     this.detail = null
     this.collection = null
     this.mood = null
+    this.discography = null
   }
 
   openCollection(ref: CollectionRef): void {
@@ -166,6 +186,7 @@ class Navigator {
     this.detail = null
     this.track = null
     this.mood = null
+    this.discography = null
   }
 
   back(): void {
@@ -210,7 +231,8 @@ class Navigator {
       detail: this.detail,
       track: this.track,
       collection: this.collection,
-      mood: this.mood
+      mood: this.mood,
+      discography: this.discography
     }
   }
 
@@ -220,6 +242,7 @@ class Navigator {
     this.track = snapshot.track
     this.collection = snapshot.collection
     this.mood = snapshot.mood
+    this.discography = snapshot.discography
     this.focus = null
     this.rev++
   }

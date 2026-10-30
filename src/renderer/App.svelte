@@ -28,6 +28,7 @@
   import { network } from './lib/network.svelte'
   import { updates } from './lib/updates.svelte'
   import DownloadIndicator from './components/DownloadIndicator.svelte'
+  import DiscographyView from './components/DiscographyView.svelte'
   import { downloads } from './lib/downloads.svelte'
   import { favorites } from './lib/favorites.svelte'
   import { savedAlbums } from './lib/saved-albums.svelte'
@@ -87,7 +88,14 @@
   }
 
   function isActive(id: View): boolean {
-    return nav.view === id && !nav.detail && !nav.track && !nav.collection && !nav.mood
+    return (
+      nav.view === id &&
+      !nav.detail &&
+      !nav.track &&
+      !nav.collection &&
+      !nav.mood &&
+      !nav.discography
+    )
   }
 
   /** The rail icon and the app menu go straight to the update card when present. */
@@ -179,6 +187,10 @@
   function viewKey(): string {
     if (nav.track) return `track:${nav.track.id}`
     if (nav.detail) return `detail:${nav.detail.id}`
+    if (nav.mood) return `mood:${nav.mood.params}`
+    if (nav.discography) {
+      return `discography:${nav.discography.browseId ?? nav.discography.id}`
+    }
     if (nav.collection) {
       if (nav.collection.kind === 'liked') return 'collection:liked'
       if (nav.collection.kind === 'playlist') return `collection:${nav.collection.id}`
@@ -407,6 +419,8 @@
       <DetailView item={nav.detail} />
     {:else if nav.mood}
       <MoodView mood={nav.mood} />
+    {:else if nav.discography}
+      <DiscographyView artist={nav.discography} />
     {:else if nav.collection}
       {#if nav.collection.kind === 'download'}
         <DownloadCollectionView collectionKey={nav.collection.key} />

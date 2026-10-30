@@ -51,6 +51,7 @@ export async function run(app, check) {
         listeners: document.querySelector('.banner .listeners')?.textContent?.trim() ?? null,
         rows: document.querySelectorAll('.tracks .row').length,
         tabs: [...document.querySelectorAll('.tab')].map((b) => b.textContent?.trim()),
+        activeTab: document.querySelector('.tab.on')?.textContent?.trim() ?? null,
         rails: document.querySelectorAll('.rail').length,
         searchRows: rows
       }
@@ -67,16 +68,24 @@ export async function run(app, check) {
   )
   check('artist page lists tracks', artist.rows > 0, `${artist.rows} rows`)
   check(
-    'artist page has a discography switcher',
-    Array.isArray(artist.tabs) && artist.tabs.includes('Albums') && artist.tabs.includes('Singles & EPs'),
+    'artist page has the streaming discography tabs',
+    Array.isArray(artist.tabs) &&
+      artist.tabs.includes('Popular releases') &&
+      artist.tabs.includes('Albums') &&
+      artist.tabs.includes('Singles and EPs'),
     JSON.stringify(artist.tabs)
+  )
+  check(
+    'the discography defaults to popular releases',
+    artist.activeTab === 'Popular releases',
+    String(artist.activeTab)
   )
   check(
     'no video/live/featured tabs',
     Array.isArray(artist.tabs) && !artist.tabs.some((s) => /videos|live performances|featured on/i.test(s ?? '')),
     JSON.stringify(artist.tabs)
   )
-  check('only one carousel', artist.rails === 1, `${artist.rails} rails`)
+  check('artist page keeps its release and extra shelves', artist.rails >= 1, `${artist.rails} rails`)
 
   const layout = await app.evaluate(`
     (() => {

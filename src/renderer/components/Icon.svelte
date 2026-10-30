@@ -12,6 +12,7 @@
     | 'heart'
     | 'plus'
     | 'list'
+    | 'grid'
     | 'home'
     | 'search'
     | 'download'
@@ -60,7 +61,8 @@
       d: 'M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8L12 21.2l8.8-8.8a5.5 5.5 0 000-7.8z'
     },
     plus: { d: 'M12 5v14M5 12h14' },
-    list: { d: 'M4 6h16M4 12h16M4 18h10' },
+    list: { d: 'M4 6h16M4 12h16M4 18h16' },
+    grid: { d: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z' },
     home: { d: 'M3 10.5L12 3l9 7.5V21H3zM9 21v-7h6v7' },
     search: { d: 'M11 4a7 7 0 100 14 7 7 0 000-14zM16.5 16.5L21 21' },
     download: { d: 'M12 3v12M7 10l5 5 5-5M5 21h14' },

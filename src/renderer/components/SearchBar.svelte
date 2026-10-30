@@ -107,7 +107,14 @@
   }
 
   function isSearchPage(): boolean {
-    return nav.view === 'search' && !nav.detail && !nav.track && !nav.collection
+    return (
+      nav.view === 'search' &&
+      !nav.detail &&
+      !nav.track &&
+      !nav.collection &&
+      !nav.mood &&
+      !nav.discography
+    )
   }
 
   /**
@@ -266,6 +273,8 @@
     nav.detail
     nav.track
     nav.collection
+    nav.mood
+    nav.discography
     close()
   })
 

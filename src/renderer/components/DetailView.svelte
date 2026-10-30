@@ -1,7 +1,10 @@
 <script lang="ts">
   import { onDestroy, tick, untrack } from 'svelte'
   import type { BrowseResult, CatalogItem, SavedAlbum } from '@shared/types'
+  import { withFallbackArtist } from '@shared/entity-identity'
+  import { artistReleaseGroups } from '../lib/artist-releases'
   import { pickTrackIndex } from '@shared/track-match'
+  import { trackTitleKey } from '@shared/track-title'
   import { api } from '../lib/api'
   import { artwork } from '../lib/artwork.svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
@@ -41,7 +44,7 @@
   const shelves = $derived(result?.shelves ?? [])
   const songs = $derived((result?.items ?? []).filter((i) => i.kind === 'song' && i.id))
 
-  /** Artist pages: the "Top songs" shelf is the play context; the rest is discography. */
+  /** Artist pages: YouTube's "Top songs" shelf feeds the Popular section. */
   const topSongs = $derived(
     (shelves.find((shelf) => /top songs/i.test(shelf.title))?.items ?? []).filter(
       (i) => i.kind === 'song' && i.id
@@ -55,27 +58,72 @@
   const HIDDEN_SHELF = /^(videos|live performances|featured on)$/i
 
   const trackList = $derived(isArtist ? topSongs : songs)
-  const otherShelves = $derived(
-    shelves.filter((shelf) => !/top songs/i.test(shelf.title) && !HIDDEN_SHELF.test(shelf.title.trim()))
+
+  // The shelf carries five songs; the page's song list has the rest. Merge them
+  // once, deduped by recording identity, and reveal ten at most on request.
+  const ARTIST_TOP_COLLAPSED = 5
+  const ARTIST_TOP_EXPANDED = 10
+  let artistSongsExpanded = $state(false)
+
+  const artistTopSongs = $derived.by(() => {
+    if (!isArtist) return songs
+    const seen = new Set<string>()
+    const merged: CatalogItem[] = []
+    for (const source of [...topSongs, ...songs]) {
+      const track = withFallbackArtist(source, pageArtistFallback)
+      const key = trackTitleKey(track.title)
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(track)
+      if (merged.length >= ARTIST_TOP_EXPANDED) break
+    }
+    return merged
+  })
+
+  const visibleTopSongs = $derived(
+    isArtist && !artistSongsExpanded
+      ? artistTopSongs.slice(0, ARTIST_TOP_COLLAPSED)
+      : artistTopSongs
+  )
+  const canExpandTopSongs = $derived(
+    isArtist && artistTopSongs.length > ARTIST_TOP_COLLAPSED
   )
 
-  // One rail, switchable between release types.
-  let activeShelf = $state(0)
-  const shelfIndex = $derived(Math.min(activeShelf, Math.max(0, otherShelves.length - 1)))
-  const currentShelf = $derived(otherShelves[shelfIndex])
+  const releases = $derived(artistReleaseGroups(shelves))
+
+  /** Playlists and similar artists stay, but outside the discography tabs. */
+  const extraShelves = $derived(
+    shelves.filter(
+      (shelf) =>
+        !/top songs/i.test(shelf.title) &&
+        !/^albums$/i.test(shelf.title.trim()) &&
+        !/\bsingles?\b|\beps?\b/i.test(shelf.title) &&
+        !HIDDEN_SHELF.test(shelf.title.trim())
+    )
+  )
+
+  // Popular releases first; the other tabs mirror a streaming discography.
+  let activeReleaseTab = $state(0)
+  const releaseTabs = $derived(
+    [
+      { key: 'popular', label: 'Popular releases', items: releases.popular },
+      { key: 'albums', label: 'Albums', items: releases.albums },
+      { key: 'singles', label: 'Singles and EPs', items: releases.singles }
+    ].filter((tab) => tab.items.length > 0)
+  )
+  const releaseTabIndex = $derived(
+    Math.min(activeReleaseTab, Math.max(0, releaseTabs.length - 1))
+  )
+  const currentReleases = $derived(releaseTabs[releaseTabIndex]?.items ?? [])
 
   function shelfLabel(title: string): string {
-    if (/^albums$/i.test(title)) return 'Albums'
-    if (/singles/i.test(title)) return 'Singles & EPs'
-    if (/playlists/i.test(title)) return 'Playlists'
+    if (/^playlists$/i.test(title)) return 'Playlists'
     if (/fans|similar/i.test(title)) return 'Similar artists'
     return title
   }
 
-  const albumCount = $derived(shelves.find((shelf) => /^albums$/i.test(shelf.title))?.items.length ?? 0)
-  const singleCount = $derived(
-    shelves.find((shelf) => /singles/i.test(shelf.title))?.items.length ?? 0
-  )
+  const albumCount = $derived(releases.albums.length)
+  const singleCount = $derived(releases.singles.length)
 
   const total = $derived(songs.reduce((acc, i) => acc + (i.durationSec ?? 0), 0))
   const art = $derived(result?.header?.thumbnail ?? item.thumbnail)
@@ -109,6 +157,13 @@
     if (fromItem?.artistId) return { name: fromItem.text.trim(), id: fromItem.artistId }
     return result?.header?.artist ?? null
   })
+
+  /** An artist page always knows whose page this is, even if a row has no credit. */
+  const pageArtistFallback = $derived(
+    isArtist
+      ? { name: (result?.header?.title ?? item.title).trim(), id: item.browseId ?? item.id }
+      : null
+  )
 
   /** Album headers put the artist in the subtitle; keep it linked. */
   const albumArtist = $derived.by(() => {
@@ -161,15 +216,7 @@
   )
 
   function withDefaults(track: CatalogItem): CatalogItem {
-    let next = track
-    if ((track.artists?.length ?? 0) === 0 && fallbackArtist) {
-      next = {
-        ...track,
-        subtitle: fallbackArtist.name,
-        artists: [fallbackArtist.name],
-        parts: [{ text: fallbackArtist.name, artistId: fallbackArtist.id, entity: 'artist' }]
-      }
-    }
+    let next = withFallbackArtist(track, fallbackArtist)
     if (pageRelease) {
       next = {
         ...next,
@@ -229,7 +276,8 @@
   $effect(() => {
     const browseId = item.browseId ?? item.id
     shown = PAGE
-    activeShelf = 0
+    activeReleaseTab = 0
+    artistSongsExpanded = false
     highlighted = null
     if (highlightTimer) {
       clearTimeout(highlightTimer)
@@ -297,7 +345,7 @@
     const focus = nav.focus
     if (!focus || loading || !result) return
 
-    const list = isArtist ? trackList : displaySongs
+    const list = isArtist ? visibleTopSongs : displaySongs
     // A search result can point at the music video while the release lists the
     // official audio. Match by title, using duration to choose between two
     // versions and refusing a version that is clearly a different recording.
@@ -362,7 +410,7 @@
   })
 
   function playAll(): void {
-    void player.playList(isArtist ? trackList : displaySongs, 0)
+    void player.playList(isArtist ? visibleTopSongs : displaySongs, 0)
   }
 
   /** A discography card either plays (song/video) or opens a page (album/playlist/artist). */
@@ -429,7 +477,7 @@
       </div>
 
       <div class="artist-actions">
-        {#if trackList.length > 0}
+        {#if visibleTopSongs.length > 0}
           <button class="play-all" onclick={playAll}>
             <Icon name="play" size={14} solid />
             <span>Play all</span>
@@ -439,8 +487,8 @@
           <span class="artist-meta">
             {albumCount} albums{singleCount > 0 ? ` · ${singleCount} singles & EPs` : ''}
           </span>
-        {:else if trackList.length > 0}
-          <span class="artist-meta">{trackList.length} top songs</span>
+        {:else if artistTopSongs.length > 0}
+          <span class="artist-meta">{artistTopSongs.length} songs</span>
         {/if}
       </div>
     </header>
@@ -513,15 +561,15 @@
 
   {#if loading}
     <p class="placeholder">Loading…</p>
-  {:else if isArtist && (trackList.length > 0 || otherShelves.length > 0)}
+  {:else if isArtist && (visibleTopSongs.length > 0 || releaseTabs.length > 0 || extraShelves.length > 0)}
     {#if trackList.length > 0}
       <section class="shelf">
-        <h2>Top songs</h2>
+        <h2>Popular</h2>
         <ol class="tracks" bind:this={tracksEl}>
-          {#each trackList as track, i (track.id + i)}
+          {#each visibleTopSongs as track, i (track.id + i)}
             <TrackRow
               item={track}
-              context={trackList}
+              context={visibleTopSongs}
               index={i}
               showIndex
               focused={highlighted === track.id}
@@ -529,33 +577,71 @@
             />
           {/each}
         </ol>
+        {#if canExpandTopSongs}
+          <div class="more-row">
+            <button
+              class="show-more"
+              aria-expanded={artistSongsExpanded}
+              onclick={() => (artistSongsExpanded = !artistSongsExpanded)}
+            >
+              {artistSongsExpanded ? 'Show less' : 'Show more'}
+            </button>
+          </div>
+        {/if}
       </section>
     {/if}
 
-    {#if currentShelf && otherShelves.length > 0}
-      {#key shelfIndex}
+    {#if releaseTabs.length > 0}
+      <section class="shelf discography">
+        <div class="disc-head">
+          <h2>Discography</h2>
+          <button
+            class="show-all"
+            title="Open the full artist discography"
+            onclick={() =>
+              nav.openDiscography({
+                ...item,
+                title: result?.header?.title ?? item.title,
+                thumbnail: art
+              })}
+          >
+            Show all
+          </button>
+        </div>
+
         <Rail>
           {#snippet header()}
             <div class="tabs" role="tablist" aria-label="Release type">
-              {#each otherShelves as shelf, i (shelf.title)}
+              {#each releaseTabs as tab, i (tab.key)}
                 <button
                   class="tab"
-                  class:on={i === shelfIndex}
+                  class:on={i === releaseTabIndex}
                   role="tab"
-                  aria-selected={i === shelfIndex}
-                  onclick={() => (activeShelf = i)}
+                  aria-selected={i === releaseTabIndex}
+                  onclick={() => (activeReleaseTab = i)}
                 >
-                  {shelfLabel(shelf.title)}
+                  {tab.label}
                 </button>
               {/each}
             </div>
           {/snippet}
-          {#each currentShelf.items as entry (entry.kind + entry.id + entry.title)}
-            <MediaCard item={entry} onActivate={(target) => activate(currentShelf.items, target)} />
+          {#each currentReleases as release (release.item.id)}
+            <MediaCard
+              item={release.item}
+              onActivate={(target) => activate(currentReleases.map((entry) => entry.item), target)}
+            />
           {/each}
         </Rail>
-      {/key}
+      </section>
     {/if}
+
+    {#each extraShelves as shelf (shelf.title)}
+      <Rail title={shelfLabel(shelf.title)}>
+        {#each shelf.items as entry (entry.kind + entry.id + entry.title)}
+          <MediaCard item={entry} onActivate={(target) => activate(shelf.items, target)} />
+        {/each}
+      </Rail>
+    {/each}
   {:else if displaySongs.length > 0}
     <ol class="tracks" bind:this={tracksEl}>
       {#each displaySongs.slice(0, shown) as track, i (track.id + i)}
@@ -834,6 +920,53 @@
     border-color: transparent;
     color: #08080b;
     font-weight: 550;
+  }
+
+  .disc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .disc-head h2 {
+    margin: 0;
+  }
+
+  .show-all {
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: var(--text-faint);
+    font-size: 12px;
+    transition:
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
+  }
+
+  .show-all:hover {
+    background: var(--glass-hover);
+    color: var(--text);
+  }
+
+  .more-row {
+    display: flex;
+    justify-content: center;
+    margin-top: -2px;
+  }
+
+  .show-more {
+    padding: 6px 14px;
+    border-radius: 999px;
+    color: var(--text-faint);
+    font-size: 12px;
+    transition:
+      color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .show-more:hover {
+    background: var(--glass-hover);
+    color: var(--text);
   }
 
   .tracks {
