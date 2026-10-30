@@ -1,4 +1,4 @@
-import { createReadStream, realpathSync, rmSync, statSync } from 'node:fs'
+import { createReadStream, realpathSync, rmSync, statfsSync, statSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
@@ -51,6 +51,7 @@ import { shouldCache } from './cache/policy'
 import { Resolver, NoDirectUrlError } from './ytdlp/resolver'
 import { ensureRunner, runnerInfo, updateRunner } from './ytdlp/binary'
 import { JsonStore, userDataFile } from './json-store'
+import { RecordingAliases } from './recording-alias'
 import { MEDIA_SCHEME, mediaUrlFor, mimeForPath, pathFromMediaUrl } from './media'
 import * as innertube from './innertube/client'
 import { resolveImport, matchImport } from './import'
@@ -75,6 +76,12 @@ let downloadBlockerId: number | null = null
 /** The track the <audio> element has loaded; paused still counts as in use. */
 let loadedTrackId: string | null = null
 let activeResolve: AbortController | null = null
+/**
+ * Bumped by "Clear cache". Background downloads capture it before starting and
+ * refuse to write afterwards, so a slow download cannot repopulate a cache the
+ * user just emptied.
+ */
+let cacheGeneration = 0
 /** All in-flight hover prefetches share one controller so a real click can cancel them. */
 let prefetchAbort: AbortController | null = null
 
@@ -109,6 +116,13 @@ function trackStore(): JsonStore<Record<string, Track>> {
   return tracks
 }
 
+/** The same recording under its catalog id and its released-audio id. */
+let aliases: RecordingAliases | null = null
+function aliasStore(): RecordingAliases {
+  if (!aliases) aliases = new RecordingAliases(userDataFile('recording-aliases.json'))
+  return aliases
+}
+
 export function registerIpc(): void {
   const ok = <T>(data: T): Result<T> => ({ ok: true, data })
   const fail = (err: unknown): Result<never> => ({
@@ -132,7 +146,13 @@ let importResolveController: AbortController | null = null
   void ensureRunner().catch(() => undefined)
 
   cacheInstance()
-  cacheInstance().evict()
+  // The index is a promise that the folder must keep. Rebuild it once here so a
+  // lost/corrupt index or an interrupted eviction cannot strand audio files.
+  try {
+    cacheInstance().reconcile()
+  } catch {
+    cacheInstance().evict()
+  }
 
   // ---- offline + downloads (PLAN §17) ------------------------------------
   const broadcast = <T>(channel: string, payload: T): void => {
@@ -147,7 +167,8 @@ let importResolveController: AbortController | null = null
     // `unreachable` (captive portal/DNS failure) as unavailable so we do not
     // spend retries and power on jobs that cannot finish.
     isOffline: () => networkMonitor.isLocalFirst(),
-    isPlaying: (trackId) => loadedTrackId === trackId,
+    isPlaying: (trackId) =>
+      loadedTrackId !== null && aliasStore().related(loadedTrackId).includes(trackId),
     onProgress: (progress: DownloadProgress) => broadcast(CH.downloadsProgress, progress),
     onChanged: () => {
       void manager.snapshot().then((snapshot) => broadcast(CH.downloadsChanged, snapshot))
@@ -164,7 +185,11 @@ let importResolveController: AbortController | null = null
     onCompleted: (trackId) => {
       // The explicit download supersedes the invisible cache copy — unless that
       // copy is the file currently playing, which must survive until eviction.
-      if (loadedTrackId !== trackId) cacheInstance().remove(trackId)
+      // The cache may be keyed by either id for this recording.
+      const playing = loadedTrackId ? aliasStore().related(loadedTrackId) : []
+      for (const id of aliasStore().related(trackId)) {
+        if (!playing.includes(id)) cacheInstance().remove(id)
+      }
       const entry = downloadsStore.entry(trackId)
       if (entry) remember(entry.track)
     },
@@ -172,8 +197,11 @@ let importResolveController: AbortController | null = null
     // header's artist was parsed.
     catalogAlbum: async (browseId) => innertube.browse(browseId),
     // Music-video rows download their official audio release when it exists.
-    audioTrack: async (videoId, title, artist) =>
-      innertube.audioTrackFor(videoId, title, artist)
+    audioTrack: async (videoId, title, artist) => {
+      const found = await innertube.audioTrackFor(videoId, title, artist)
+      if (found?.id) aliasStore().link(found.id, videoId)
+      return found && found.id ? { id: found.id } : null
+    }
   })
   downloadsManager = manager
 
@@ -262,6 +290,11 @@ let importResolveController: AbortController | null = null
     // Evict only when the cap changes; volume/mute/shuffle writes must not
     // delete cached audio as a side effect.
     if (patch.cacheCapBytes !== undefined || next.audioQuality !== previous.audioQuality) {
+      // A file cached under the data saver is exactly the quality the user just
+      // opted out of. Drop those so the next play fetches the good copy.
+      if (previous.audioQuality === 'data-saver' && next.audioQuality === 'best') {
+        cacheInstance().invalidateQuality('data-saver', loadedTrackId ?? undefined)
+      }
       cacheInstance().evict(loadedTrackId ?? undefined)
     }
 
@@ -434,7 +467,13 @@ let importResolveController: AbortController | null = null
     activeResolve = controller
     try {
       const result = await resolveForPlayback(req, controller.signal)
+      const previousLoaded = loadedTrackId
       loadedTrackId = result.track.id
+      // The old track's "in use" protection only expires when playback moves
+      // on; enforce the cap now instead of waiting for the next write.
+      if (previousLoaded && previousLoaded !== loadedTrackId) {
+        cacheInstance().evict(loadedTrackId)
+      }
       return ok(result)
     } catch (err) {
       return fail(err)
@@ -459,7 +498,12 @@ let importResolveController: AbortController | null = null
     if (!value || activeResolve || networkMonitor.isOffline()) return
     if (prefetching.has(value) || prefetching.size >= 2) return
     const directId = Resolver.extractId(value)
-    if (directId && downloadStore().has(directId)) return
+    if (directId) {
+      const ids = aliasStore().related(directId)
+      // A warm stream URL is wasted work when the bytes are already on disk.
+      if (ids.some((id) => downloadStore().has(id))) return
+      if (ids.some((id) => cacheInstance().has(id))) return
+    }
     if (resolver.hasCached(value, qualityCapKbps())) return
 
     if (!prefetchAbort) prefetchAbort = new AbortController()
@@ -540,7 +584,11 @@ let importResolveController: AbortController | null = null
       try {
         const blocked = offline()
         if (blocked) return blocked
-        return ok(await innertube.audioTrackFor(videoId, title, artist))
+        const found = await innertube.audioTrackFor(videoId, title, artist)
+        // Remember the pairing so a later download/offline check can find the
+        // audio release by the row id, and vice versa.
+        if (found?.id) aliasStore().link(found.id, videoId)
+        return ok(found)
       } catch (err) {
         return fail(err)
       }
@@ -737,6 +785,16 @@ let importResolveController: AbortController | null = null
   ipcMain.handle(CH.cacheStats, () => cacheInstance().stats())
 
   ipcMain.handle(CH.cacheClear, () => {
+    // A background download that finishes after this point must not put the
+    // cache back on disk; abort it and fence off late writes.
+    for (const controller of backgroundDownloadControllers) controller.abort()
+    backgroundDownloadControllers.clear()
+    inflightDownloads.clear()
+    cacheGeneration++
+    // URL cache entries are independent of the files; a cleared cache should
+    // start over on the next play instead of silently streaming from a stale
+    // resolved URL.
+    resolver.clearUrlCache()
     // Keep the track loaded in the player; deleting its file breaks seeking and
     // can make the unlink fail on Windows.
     cacheInstance().clear(loadedTrackId ?? undefined)
@@ -794,6 +852,60 @@ let importResolveController: AbortController | null = null
   })
 }
 
+/** The id itself plus the released-audio/catalog counterpart, when known. */
+function relatedIds(trackId: string | null): string[] {
+  return trackId ? aliasStore().related(trackId) : []
+}
+
+/** True when any owned playlist holds this recording under either id. */
+function inOwnedPlaylist(trackId: string): boolean {
+  const ids = new Set(aliasStore().related(trackId))
+  return lib()
+    .playlists()
+    .some((playlist) =>
+      playlist.tracks.some(
+        (track) => ids.has(track.id) || (track.sourceId ? ids.has(track.sourceId) : false)
+      )
+    )
+}
+
+/** Favourites and listening history for one recording, across both ids. */
+function listeningFor(trackId: string): {
+  favorited: boolean
+  playCount: number
+  completion: number
+} {
+  const ids = new Set(aliasStore().related(trackId))
+  const favorited = lib()
+    .favorites()
+    .some((track) => ids.has(track.id) || (track.sourceId ? ids.has(track.sourceId) : false))
+  let playCount = 0
+  let completion = 0
+  for (const entry of lib().history(5000)) {
+    if (!ids.has(entry.trackId)) continue
+    playCount++
+    if (entry.completion > completion) completion = entry.completion
+  }
+  return { favorited, playCount, completion }
+}
+
+const BACKGROUND_MIN_FREE_BYTES = 500 * 1024 * 1024
+const BACKGROUND_ESTIMATE_BYTES = 12 * 1024 * 1024
+
+/** An invisible copy must never be the reason the user's disk fills up. */
+function backgroundCacheHasRoom(): boolean {
+  try {
+    const fs = statfsSync(app.getPath('userData'))
+    return (
+      Number(fs.bavail) * Number(fs.bsize) >=
+      BACKGROUND_MIN_FREE_BYTES + BACKGROUND_ESTIMATE_BYTES
+    )
+  } catch {
+    // A filesystem that cannot report free space must not block caching.
+    return true
+  }
+}
+
 /**
  * Playback pipeline (PLAN §3).
  *
@@ -801,6 +913,10 @@ let importResolveController: AbortController | null = null
  * 2. Resolve a direct URL, and if the track is cache-worthy, start a background
  *    download so the next play is a hit.
  * 3. No direct URL available → download-to-cache and play from disk.
+ *
+ * The same recording can have a catalog id and a released-audio id. Downloads
+ * key by the row, the cache by whatever was resolved, so every local lookup
+ * walks both ids before deciding there is nothing on disk.
  */
 async function resolveForPlayback(
   req: ResolveRequest,
@@ -812,40 +928,64 @@ async function resolveForPlayback(
   const store = cacheInstance()
   const known = trackStore().get()
   const directId = Resolver.extractId(input)
+  const ids = relatedIds(directId)
   const offline = networkMonitor.isOffline()
 
   // 1. An explicit download always wins, even over a fresh URL. It is the one
   //    file the user asked us to keep. The exception is a forced recovery from a
   //    file stream: if the downloaded file itself failed to decode, handing the
   //    same file back makes recovery impossible. Bypass it for this attempt.
-  if (directId) {
-    const file = downloadStore().lookup(directId)
-    const entry = downloadStore().entry(directId)
-    if (file && entry && !(req.force && req.discardCache)) {
-      const track = known[directId] ?? entry.track
+  if (!(req.force && req.discardCache)) {
+    for (const id of ids) {
+      const file = downloadStore().lookup(id)
+      const entry = file ? downloadStore().entry(id) : null
+      if (!file || !entry) continue
+      const track = (directId ? known[directId] : undefined) ?? known[id] ?? entry.track
       remember(track)
       return {
         track,
-        stream: localStream(file, entry.ext, directId, 'download'),
+        stream: localStream(file, entry.ext, track.id, 'download', entry.track.durationSec),
         client: 'download',
         resolveMs: 0
       }
     }
   }
 
-  if (req.discardCache && directId) store.remove(directId)
+  // A broken local copy is the reason for this retry; discard all of its ids so
+  // the fallback cannot find the same bytes under the other id.
+  if (req.discardCache) {
+    for (const id of ids) store.remove(id)
+  }
 
   // 2. The invisible cache is still a valid offline bonus when no explicit
   //    download exists. On a forced retry we normally bypass it, except offline,
-  //    where a cached copy is better than a guaranteed failure.
+  //    where a cached copy is better than a guaranteed failure. A hit carries
+  //    its own metadata snapshot, so a reset track store does not lose offline
+  //    playback.
   if (directId && (!req.force || offline)) {
-    const file = store.lookup(directId)
-    const track = known[directId]
-    if (file && track) {
-      store.touch(directId)
+    const loadedIds = new Set(relatedIds(loadedTrackId))
+    for (const id of ids) {
+      const hit = store.find(id)
+      if (!hit) continue
+      // A file cached under the data saver is not the quality the user asked
+      // for. Drop it (unless it is the outgoing track, still open) and stream
+      // the good copy instead.
+      if (hit.quality === 'data-saver' && !offline && settings().get().audioQuality === 'best') {
+        if (!loadedIds.has(id)) {
+          store.remove(id)
+          continue
+        }
+      }
+      const track = (directId ? known[directId] : undefined) ?? known[id] ?? hit.track
+      if (!track) {
+        store.remove(id)
+        continue
+      }
+      store.touch(id)
+      remember(track)
       return {
         track,
-        stream: localStream(file, store.extOf(directId) ?? 'm4a', directId),
+        stream: localStream(hit.file, hit.ext, track.id, 'cache', hit.track?.durationSec),
         client: 'cache',
         resolveMs: 0
       }
@@ -873,12 +1013,11 @@ async function resolveForPlayback(
     const downloaded = await resolver.download(url, signal, qualityCapKbps())
     let file: string
     try {
-      file = store.put(
-        downloaded.id,
-        downloaded.file,
-        downloaded.ext,
-        loadedTrackId ?? undefined
-      )
+      file = store.put(downloaded.id, downloaded.file, downloaded.ext, {
+        keepId: loadedTrackId ?? undefined,
+        track: known[downloaded.id] ?? err.track,
+        quality: settings().get().audioQuality
+      })
     } finally {
       // The audio file was moved into the cache; the temp directory itself is
       // now empty and must not survive every SABR playback.
@@ -909,11 +1048,14 @@ function localStream(
   file: string,
   ext: string,
   trackId: string,
-  source: 'cache' | 'download' = 'cache'
+  source: 'cache' | 'download' = 'cache',
+  fallbackDurationSec = 0
 ): StreamInfo {
   let bitrateKbps: number | undefined
   try {
-    const duration = trackStore().get()[trackId]?.durationSec ?? 0
+    const known = trackStore().get()[trackId]?.durationSec ?? 0
+    // A cached snapshot outlives its track-store entry; keep the tag truthful.
+    const duration = known > 0 ? known : fallbackDurationSec
     if (duration > 0) {
       bitrateKbps = Math.round((statSync(file).size * 8) / duration / 1000)
     }
@@ -935,32 +1077,43 @@ function localStream(
 
 function kickOffBackgroundCache(track: Track, input: string): void {
   const store = cacheInstance()
-  if (store.has(track.id) || inflightDownloads.has(track.id)) return
+  const ids = aliasStore().related(track.id)
+  if (ids.some((id) => store.has(id))) return
+  if (ids.some((id) => inflightDownloads.has(id))) return
   // A user-owned download already covers this track; do not duplicate the file.
   // A queued/running explicit download will produce that copy shortly.
-  if (downloadStore().has(track.id) || downloadStore().job(track.id)) return
+  if (ids.some((id) => downloadStore().has(id) || downloadStore().job(id))) return
 
+  const listening = listeningFor(track.id)
   const worth = shouldCache({
-    favorited: lib().isFavorite(track.id),
-    inOwnedPlaylist: false, // wired once playlists land in P2
-    completion: lib().bestCompletion(track.id),
-    playCount: lib().playCount(track.id)
+    favorited: listening.favorited,
+    inOwnedPlaylist: inOwnedPlaylist(track.id),
+    completion: listening.completion,
+    playCount: listening.playCount
   })
   if (!worth) return
+  if (!backgroundCacheHasRoom()) return
 
-  inflightDownloads.add(track.id)
+  // A clear while this runs must win; the generation fence stops the write.
+  const generation = cacheGeneration
+  for (const id of ids) inflightDownloads.add(id)
   const controller = new AbortController()
   backgroundDownloadControllers.add(controller)
   resolver
     .download(Resolver.normalizeInput(input), controller.signal, qualityCapKbps(), true)
     .then((downloaded) => {
       try {
+        if (generation !== cacheGeneration) return
         // The user may have started an explicit download while this ran. The
         // explicit copy wins; cache the same bytes would waste space.
         if (downloadStore().has(downloaded.id) || downloadStore().job(downloaded.id)) {
           return
         }
-        store.put(downloaded.id, downloaded.file, downloaded.ext, loadedTrackId ?? undefined)
+        store.put(downloaded.id, downloaded.file, downloaded.ext, {
+          keepId: loadedTrackId ?? undefined,
+          track: trackStore().get()[downloaded.id] ?? track,
+          quality: settings().get().audioQuality
+        })
       } finally {
         rmSync(downloaded.dir, { recursive: true, force: true })
       }
@@ -971,7 +1124,7 @@ function kickOffBackgroundCache(track: Track, input: string): void {
     })
     .finally(() => {
       backgroundDownloadControllers.delete(controller)
-      inflightDownloads.delete(track.id)
+      for (const id of ids) inflightDownloads.delete(id)
     })
 }
 

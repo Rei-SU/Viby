@@ -26,6 +26,7 @@ import type {
 } from '@shared/types'
 import { JsonStore, recoveryMarkerFor } from '../json-store'
 import { mediaUrlFor } from '../media'
+import { safeFileId } from '../safe-name'
 
 export type DownloadJob = {
   track: Track
@@ -148,7 +149,7 @@ export class DownloadsStore {
 
   /** Video ids are already URL-safe, but never let an id escape the folder. */
   safeId(trackId: string): string {
-    return trackId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 96)
+    return safeFileId(trackId)
   }
 
   lyricsPath(trackId: string): string {
