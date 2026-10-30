@@ -640,11 +640,7 @@
                     <span class="row-text">
                       <span class="row-title truncate">{item.title}</span>
                       <span class="row-sub truncate">
-                        <SubtitleParts
-                          parts={item.parts}
-                          fallback={item.subtitle}
-                          linkPlainArtists={item.kind === 'playlist'}
-                        />
+                        <SubtitleParts parts={item.parts} fallback={item.subtitle} />
                       </span>
                     </span>
                     {#if item.kind === 'song' && item.durationSec}

@@ -238,11 +238,7 @@
                   <span class="top-title">{top.title}</span>
                 {/if}
                 <span class="top-sub">
-                  <SubtitleParts
-                    parts={top.parts}
-                    fallback={top.subtitle}
-                    linkPlainArtists={top.kind === 'playlist'}
-                  />
+                  <SubtitleParts parts={top.parts} fallback={top.subtitle} />
                 </span>
               </div>
               {#if top.kind === 'song'}

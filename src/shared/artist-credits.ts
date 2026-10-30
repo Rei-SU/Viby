@@ -18,13 +18,17 @@ export function isSeparator(part: SubtitlePart): boolean {
 /** A run that names an artist rather than a separator or a connector word. */
 export function isArtistName(part: SubtitlePart): boolean {
   if (isSeparator(part)) return false
-  return !/^(?:feat(?:uring)?|ft|with|vs|and|x)[.:]?$/i.test(part.text.trim())
+  const text = part.text.trim()
+  // A release caption ("Album • 2023") is not a person; a bare year or index
+  // would otherwise become a fake artist link.
+  if (/^\d{1,4}$/.test(text)) return false
+  return !/^(?:feat(?:uring)?|ft|with|vs|and|x)[.:]?$/i.test(text)
 }
 
 /** A play/like counter or a duration — never part of the credit run. */
 function isCounter(part: SubtitlePart): boolean {
   if (part.artistId || part.albumId || part.entity) return false
-  return /^(?:\d[\d.,]*\s*[KMB]?\s*(?:views?|plays?|likes?)|\d{1,2}:\d{2}(?::\d{2})?)$/i.test(
+  return /^(?:\d[\d.,]*\s*[KMB]?\s*(?:views?|plays?|likes?|monthly (?:audience|listeners?)|subscribers?|listeners?)|\d{1,2}:\d{2}(?::\d{2})?|\d+\s+(?:songs?|tracks?))$/i.test(
     part.text.trim()
   )
 }
@@ -37,8 +41,8 @@ function isCounter(part: SubtitlePart): boolean {
 const PAGE_TYPE_LABEL = /^(?:song|video|ep|album|single|playlist|podcast|profile|artist)$/i
 
 /** Just the artist credit run from a row's subtitle parts, separators included. */
-export function creditParts(parts: SubtitlePart[] | undefined): SubtitlePart[] | undefined {
-  if (!parts?.length) return undefined
+export function creditRange(parts: SubtitlePart[] | undefined): [number, number] {
+  if (!parts?.length) return [0, 0]
 
   let start = 0
   if (
@@ -52,17 +56,31 @@ export function creditParts(parts: SubtitlePart[] | undefined): SubtitlePart[] |
     start = 2
   }
 
-  const credit: SubtitlePart[] = []
-  for (const part of parts.slice(start)) {
+  let end = start
+  for (let i = start; i < parts.length; i++) {
+    const part = parts[i]
     // Everything from the album on is not a credit.
     if (part.albumId || part.entity === 'album' || isCounter(part)) break
-    // Copy: catalog rows can be Svelte state proxies, and structured clone
-    // (IPC) rejects proxies even when they wrap plain data.
-    credit.push({ ...part })
+    end = i + 1
   }
-  while (credit.length > 0 && isSeparator(credit[credit.length - 1])) credit.pop()
-  while (credit.length > 0 && isSeparator(credit[0])) credit.shift()
 
+  while (start < end && isSeparator(parts[start])) start++
+  while (end > start && isSeparator(parts[end - 1])) end--
+  return [start, end]
+}
+
+/**
+ * The leading credit run. A featured name can arrive without its own browse id
+ * (YouTube omits the endpoint for some credits); it stays in the run, and the
+ * renderer links it by name from here instead of dropping it as plain text.
+ */
+export function creditParts(parts: SubtitlePart[] | undefined): SubtitlePart[] | undefined {
+  const [start, end] = creditRange(parts)
+  if (!parts || end <= start) return undefined
+
+  // Copy: catalog rows can be Svelte state proxies, and structured clone
+  // (IPC) rejects proxies even when they wrap plain data.
+  const credit = parts.slice(start, end).map((part) => ({ ...part }))
   return credit.some(isArtistName) ? credit : undefined
 }
 

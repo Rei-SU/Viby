@@ -52,11 +52,7 @@
     <span class="card-title truncate" aria-hidden="true">{item.title}</span>
   {/if}
   <span class="card-sub truncate">
-    <SubtitleParts
-      parts={item.parts}
-      fallback={item.subtitle}
-      linkPlainArtists={item.kind === 'playlist'}
-    />
+    <SubtitleParts parts={item.parts} fallback={item.subtitle} />
   </span>
 </div>
 

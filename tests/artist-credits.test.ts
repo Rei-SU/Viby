@@ -2,6 +2,7 @@ import {
   artistNames,
   artistPartsFor,
   creditParts,
+  creditRange,
   isArtistName,
   isSeparator,
   splitArtistParts
@@ -46,6 +47,46 @@ const radio: SubtitlePart[] = [
 ]
 const radioCredit = creditParts(radio) ?? []
 check('radio byline keeps only artists and separators', texts(radioCredit) === 'Alpha • Beta', texts(radioCredit))
+
+// YouTube omits the browse endpoint for some featured credits (observed on
+// Future / WE DON'T TRUST YOU: The Weeknd and Kendrick Lamar arrive as plain
+// runs). They are still artists and must stay in the credit run.
+const plainFeature: SubtitlePart[] = [
+  { text: 'Future', artistId: 'UCfuture', entity: 'artist' },
+  { text: ', ' },
+  { text: 'Metro Boomin', artistId: 'UCmetro', entity: 'artist' },
+  { text: ' & ' },
+  { text: 'The Weeknd' }
+]
+const featureCredit = creditParts(plainFeature) ?? []
+check('a featured name without an id stays in the credit run', texts(featureCredit) === 'Future, Metro Boomin & The Weeknd', texts(featureCredit))
+check(
+  'every credited name is still an artist',
+  artistNames(featureCredit).join('|') === 'Future|Metro Boomin|The Weeknd',
+  artistNames(featureCredit).join('|')
+)
+check('the credit range covers the plain feature', creditRange(plainFeature).join(',') === '0,5')
+
+// Release and artist cards share the subtitle renderer; their captions must
+// never become fake artist links.
+check('a bare year is not an artist', isArtistName({ text: '2023' }) === false)
+check(
+  'an album card has no credit run',
+  creditParts([{ text: 'Album' }, { text: ' • ' }, { text: '2023' }]) === undefined
+)
+check(
+  'an artist card monthly audience is a counter',
+  creditParts([{ text: 'Artist' }, { text: ' • ' }, { text: '68.3M monthly audience' }]) ===
+    undefined
+)
+check(
+  'a playlist track count is a counter',
+  creditRange([
+    { text: 'Alpha', artistId: 'UCalpha', entity: 'artist' },
+    { text: ' • ' },
+    { text: '40 songs' }
+  ]).join(',') === '0,1'
+)
 
 // ---- splitArtistParts: fallback for combined strings ----------------------
 const split = splitArtistParts('Stormy, Manal')

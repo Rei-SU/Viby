@@ -1,27 +1,25 @@
 <script lang="ts">
   import type { SubtitlePart } from '@shared/types'
+  import { creditRange, isArtistName } from '@shared/artist-credits'
   import EntityLink from './EntityLink.svelte'
 
   let {
     parts = [],
-    fallback = '',
-    linkPlainArtists = false
+    fallback = ''
   }: {
     parts?: SubtitlePart[]
     fallback?: string
-    /** Playlist cards list featured artists as plain text. */
-    linkPlainArtists?: boolean
   } = $props()
 
-  function looksLikeArtist(text: string): boolean {
-    const value = text.trim()
-    if (!value) return false
-    if (/^[\s·,•&/]+$/.test(value)) return false
-    if (/^(playlist|album|single|ep|youtube music)$/i.test(value)) return false
-    if (/^\d[\d.,]*\s*[KMB]?\s*(views?|plays?|likes?)$/i.test(value)) return false
-    if (/^\d+\s+(songs?|tracks?)$/i.test(value)) return false
-    if (/^\d+:\d+$/.test(value)) return false
-    return true
+  /**
+   * Some featured credits arrive without a browse id. They still belong to the
+   * leading artist run, so link them by name (verified on click) instead of
+   * leaving a dead name in the middle of three working ones.
+   */
+  const credit = $derived(creditRange(parts))
+
+  function isNamedCredit(index: number): boolean {
+    return index >= credit[0] && index < credit[1] && isArtistName(parts[index])
   }
 </script>
 
@@ -31,7 +29,7 @@
       <EntityLink kind="artist" id={part.artistId} name={part.text} />
     {:else if part.entity === 'album' || part.albumId}
       <EntityLink kind="album" id={part.albumId} name={part.text} artist={part.artistName} />
-    {:else if linkPlainArtists && looksLikeArtist(part.text)}
+    {:else if isNamedCredit(i)}
       <EntityLink kind="artist" name={part.text} />
     {:else}
       <span>{part.text}</span>
