@@ -3,6 +3,8 @@
   import { nav } from '../lib/nav.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
   import { favorites } from '../lib/favorites.svelte'
+  import { contextItem } from '../lib/context-item'
+  import { trackToItem } from '../lib/track'
   import { sidePanel } from '../lib/side-panel.svelte'
   import { isTrackDrag, trackDrag } from '../lib/track-drag.svelte'
   import { toast } from '../lib/toast.svelte'
@@ -172,7 +174,12 @@
 </script>
 
 <footer class="dock glass">
-  <div class="meta">
+  <div
+    class="meta"
+    use:contextItem={track
+      ? { item: trackToItem(track), play: () => player.toggle() }
+      : null}
+  >
     <Cover src={track?.thumbnail} size={50} radius={10} alt={track?.title ?? ''} />
     <div class="meta-text">
       <button class="title truncate" title="Open song page" onclick={() => track && nav.openTrack(track)}>

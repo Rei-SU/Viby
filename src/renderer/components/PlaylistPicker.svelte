@@ -15,13 +15,13 @@
   }
 
   $effect(() => {
-    // A new anchor/track while the panel is open must cancel the previous
+    // A new anchor/tracks while the panel is open must cancel the previous
     // "added" auto-close timer, or it will close the new panel.
-    void picker.track
+    void picker.tracks
     clearCloseTimer()
     if (!picker.open) return
     void playlists.load()
-    creating = false
+    creating = picker.creating
     name = ''
     added = null
   })
@@ -41,23 +41,28 @@
   onDestroy(clearCloseTimer)
 
   async function add(id: string, label: string): Promise<void> {
-    if (!picker.track) return
-    await playlists.addTrack(id, { ...picker.track })
-    added = label
+    if (picker.tracks.length === 0) return
+    for (const track of picker.tracks) {
+      await playlists.addTrack(id, { ...track })
+    }
+    added =
+      picker.tracks.length === 1 ? label : `${label} · ${picker.tracks.length} songs`
     if (closeTimer) clearTimeout(closeTimer)
     closeTimer = setTimeout(() => picker.close(), 600)
   }
 
   async function createAndAdd(event: SubmitEvent): Promise<void> {
     event.preventDefault()
-    if (!picker.track || !name.trim()) return
+    if (picker.tracks.length === 0 || !name.trim()) return
     const playlist = await playlists.create(name)
-    await playlists.addTrack(playlist.id, { ...picker.track })
+    for (const track of picker.tracks) {
+      await playlists.addTrack(playlist.id, { ...track })
+    }
     picker.close()
   }
 </script>
 
-{#if picker.open && picker.track}
+{#if picker.open && picker.tracks.length > 0}
   <div class="scrim" role="presentation" onclick={() => picker.close()}></div>
 
   <div

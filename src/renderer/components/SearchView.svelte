@@ -7,6 +7,7 @@
   import { nav } from '../lib/nav.svelte'
   import { openArtist } from '../lib/artist'
   import { openTrackFromItem } from '../lib/release'
+  import { contextItem } from '../lib/context-item'
   import { sidePanel } from '../lib/side-panel.svelte'
   import MediaCard from './MediaCard.svelte'
   import Rail from './Rail.svelte'
@@ -211,7 +212,7 @@
         {#if top}
           <section class="top-result">
             <h2>Top result</h2>
-            <div class="top-card">
+            <div class="top-card" use:contextItem={{ item: top }}>
               <button
                 type="button"
                 class="top-hit"

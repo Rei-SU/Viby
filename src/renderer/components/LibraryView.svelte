@@ -8,6 +8,7 @@
   import { nav } from '../lib/nav.svelte'
   import { artwork } from '../lib/artwork.svelte'
   import { buildLibraryItems, type LibraryItem } from '../lib/library-items'
+  import { contextItem } from '../lib/context-item'
   import {
     entryToItem,
     formatSize,
@@ -19,6 +20,30 @@
   import TrackRow from './TrackRow.svelte'
 
   type Filter = 'all' | 'playlists' | 'albums' | 'downloaded'
+
+  /** A saved release tile speaks the same catalog shape as a search card. */
+  function savedAlbumItem(item: LibraryItem): CatalogItem | null {
+    if (item.kind !== 'album' || !item.album) return null
+    const album = item.album
+    return {
+      id: album.id,
+      browseId: album.id,
+      kind: 'album',
+      title: album.title,
+      subtitle: album.releaseType ?? 'Album',
+      thumbnail: album.thumbnail,
+      releaseType: album.releaseType,
+      artists: album.artist ? [album.artist] : undefined,
+      parts: album.artist
+        ? [{ text: album.artist, artistId: album.artistId, entity: 'artist' }]
+        : undefined
+    }
+  }
+
+  function tileContext(item: LibraryItem) {
+    const album = savedAlbumItem(item)
+    return album ? { item: album } : null
+  }
 
   const FILTERS: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -139,7 +164,7 @@
   {#if visible.length > 0 || showNew}
     <div class="grid">
       {#each visible as item (item.id)}
-        <button class="tile" onclick={() => openItem(item)}>
+        <button class="tile" onclick={() => openItem(item)} use:contextItem={tileContext(item)}>
           <span class="art-wrap">
             {#if item.kind === 'liked'}
               <span class="art liked">

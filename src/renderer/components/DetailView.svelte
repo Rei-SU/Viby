@@ -13,6 +13,7 @@
   import { network } from '../lib/network.svelte'
   import { savedAlbums } from '../lib/saved-albums.svelte'
   import { browseCached, cacheDetail, cachedDetail } from '../lib/catalog-cache.svelte'
+  import { contextItem } from '../lib/context-item'
   import { formatDuration as fmt } from '../lib/format'
   import Rail from './Rail.svelte'
   import Cover from './Cover.svelte'
@@ -521,7 +522,10 @@
       </div>
     </header>
   {:else}
-    <header class="hero">
+    <header
+      class="hero"
+      use:contextItem={{ item, artist: albumArtist ?? undefined }}
+    >
       {#if art}
         <span class="glow" style="background-image: url({art})"></span>
       {/if}

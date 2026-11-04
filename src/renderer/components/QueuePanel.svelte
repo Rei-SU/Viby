@@ -5,6 +5,8 @@
   import { isTrackDrag, trackDrag } from '../lib/track-drag.svelte'
   import { toast } from '../lib/toast.svelte'
   import { openTrackTarget } from '../lib/release'
+  import { contextItem } from '../lib/context-item'
+  import { trackToItem } from '../lib/track'
   import ArtistLinks from './ArtistLinks.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -279,6 +281,12 @@
             class="row"
             role="button"
             tabindex="0"
+            use:contextItem={{
+              item: trackToItem(track),
+              play: () => player.playAt(i),
+              onRemove: () => player.removeAt(i),
+              removeLabel: 'Remove from queue'
+            }}
             onclick={() => player.playAt(i)}
             onkeydown={(event) => {
               if (event.target !== event.currentTarget) return

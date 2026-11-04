@@ -9,6 +9,7 @@
   import { network } from '../lib/network.svelte'
   import { openTrackFromItem } from '../lib/release'
   import { TRACK_DRAG_TYPE, trackDrag } from '../lib/track-drag.svelte'
+  import { contextItem } from '../lib/context-item'
   import { formatDuration as fmt } from '../lib/format'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
@@ -243,6 +244,12 @@
   ondragend={dragEnd}
   onpointerenter={hoverStart}
   onpointerleave={hoverEnd}
+  use:contextItem={{
+    item,
+    context,
+    index: contextIndex ?? index,
+    onRemove: onRemove ? () => onRemove(item) : undefined
+  }}
 >
   <div
     class="main"

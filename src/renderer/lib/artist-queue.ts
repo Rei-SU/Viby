@@ -1,6 +1,7 @@
 import type { BrowseResult, CatalogItem, PlaybackTail } from '@shared/types'
 import { trackTitleKey } from '@shared/track-title'
 import { withFallbackArtist, type ArtistIdentity } from '@shared/entity-identity'
+import { withReleaseContext } from '@shared/release-context'
 import type { ArtistRelease } from './artist-releases'
 
 export type ArtistQueueSource = {
@@ -110,15 +111,12 @@ export function createArtistQueue(opts: {
         // Album rows rarely carry their own cover or release links. Without
         // these fallbacks the queue shows placeholders and history loses the
         // album context for every track beyond the popular list.
-        const item: CatalogItem = {
-          ...withFallbackArtist(row, opts.artist),
-          album: row.album?.trim() || header?.title?.trim() || release?.item.title?.trim(),
-          albumId: row.albumId ?? release?.item.browseId ?? release?.item.id,
-          releaseType:
-            row.releaseType ?? header?.releaseType ?? release?.item.releaseType,
-          thumbnail:
-            row.thumbnail ?? header?.thumbnail ?? release?.item.thumbnail
-        }
+        const item = withReleaseContext(withFallbackArtist(row, opts.artist), {
+          album: header?.title ?? release?.item.title,
+          albumId: release?.item.browseId ?? release?.item.id,
+          releaseType: header?.releaseType ?? release?.item.releaseType,
+          thumbnail: header?.thumbnail ?? release?.item.thumbnail
+        })
         if (isDuplicate(item)) continue
         remember(item)
         batch.push(item)

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CatalogItem } from '@shared/types'
+  import { contextItem } from '../lib/context-item'
   import { api } from '../lib/api'
   import { nav } from '../lib/nav.svelte'
   import { player } from '../lib/player.svelte'
@@ -615,6 +616,7 @@
                     role="option"
                     tabindex="-1"
                     aria-selected={active === index}
+                    use:contextItem={{ item }}
                     onclick={() => choose({ type: 'result', item })}
                     onkeydown={(event) => {
                       if (event.target !== event.currentTarget) return

@@ -5,6 +5,7 @@
   import { withFallbackArtist } from '@shared/entity-identity'
   import type { ArtistRelease } from '../lib/artist-releases'
   import { cachedDetail, cacheDetail } from '../lib/catalog-cache.svelte'
+  import { contextItem } from '../lib/context-item'
   import { nav } from '../lib/nav.svelte'
   import { network } from '../lib/network.svelte'
   import { player } from '../lib/player.svelte'
@@ -95,7 +96,10 @@
 </script>
 
 <section class="release" class:divided bind:this={rootEl}>
-  <div class="head">
+  <div
+    class="head"
+    use:contextItem={{ item: release.item, artist: fallbackArtist ?? undefined }}
+  >
     <Cover src={release.item.thumbnail} size={96} radius={11} alt={title} />
     <div class="text">
       <button class="title truncate" title={`Open ${title}`} onclick={open}>{title}</button>

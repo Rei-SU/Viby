@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CatalogItem } from '@shared/types'
   import { openTrackFromItem } from '../lib/release'
+  import { contextItem } from '../lib/context-item'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
   import SubtitleParts from './SubtitleParts.svelte'
@@ -18,7 +19,7 @@
   const action = $derived(item.kind === 'song' ? `Play ${item.title}` : `Open ${item.title}`)
 </script>
 
-<div class="card" style="--card-size: {size}px">
+<div class="card" style="--card-size: {size}px" use:contextItem={{ item }}>
   <button
     type="button"
     class="card-hit"

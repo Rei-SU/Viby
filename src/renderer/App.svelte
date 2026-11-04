@@ -28,6 +28,7 @@
   import { network } from './lib/network.svelte'
   import { updates } from './lib/updates.svelte'
   import DownloadIndicator from './components/DownloadIndicator.svelte'
+  import ContextMenu from './components/ContextMenu.svelte'
   import DiscographyView from './components/DiscographyView.svelte'
   import { downloads } from './lib/downloads.svelte'
   import { favorites } from './lib/favorites.svelte'
@@ -449,6 +450,7 @@
   <SidePanel />
   <PlayerBar />
   <PlaylistPicker />
+  <ContextMenu />
   <QueueDropBar />
   <ChangelogDialog />
 
