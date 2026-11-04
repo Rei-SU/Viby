@@ -155,6 +155,7 @@ the app while they run — they own the queue.
 | `resume` | session save → reload → restored paused at the timestamp |
 | `navigation` | drag strip, full-bleed artist banner, titlebar back/forward, artist page from search, history restore |
 | `quick-search` | centered titlebar field, recents, grouped songs/artists/playlists, show-more filters, Enter routing, song click, arrow navigation |
+| `context-menu` | right-click menus from quick search, song top result and album cards; song and release actions; Escape dismissal; Add to queue; Add to playlist hover flyout with search/create/list; Save to Library toggles |
 | `settings` | sidebar entry, quality/autoplay/cache-cap persist, clear control |
 | `offline` | manual offline: local-first Home, titlebar pill, gated Import, Charts page stays gone, Library stays and opens, separate Downloads page is gone, auto restores |
 | `import` | paste a Spotify link, match 50 tracks, create and clean up a playlist |
@@ -200,20 +201,21 @@ Find the row for what you changed; run what it lists.
 | `src/shared/version.ts`, `src/main/version.ts` | unit `version`, `updates`, `changelog` |
 | `src/renderer/lib/nav.svelte.ts`, `release.ts`, `album.ts`, `artist.ts`, `entity-lookup.ts`, `src/shared/entity-identity.ts`, `src/shared/track-match.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title`, `track-match`, `entity-lookup`, `audio-track-pick` · visual check: search and history titles open the album, scroll to the row and flash it |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts`, `release-focus` |
+| `src/renderer/lib/context-menu.svelte.ts`, `context-menu-entries.ts`, `context-item.ts`, `collection-tracks.ts`, `components/ContextMenu.svelte`, `src/shared/release-context.ts` | e2e `context-menu`, `quick-search`, `navigation` · visual check: song and release menus at the pointer, Escape/arrows, edge flipping |
 | `src/renderer/lib/lyrics.svelte.ts`, `lyrics-sync.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` · unit `lyrics-sync` |
 | `src/renderer/lib/side-panel.svelte.ts`, `SidePanel`, `QueuePanel` | e2e `queue`, `lyrics`, `lyrics-change`, `release-focus` · behaviour (reorder) |
 | `src/renderer/lib/history.svelte.ts`, `HistoryPanel`, `favorites.svelte.ts` | unit `listening` · e2e `home`, `queue` · behaviour |
 | `src/renderer/components/MoodGrid.svelte`, `MoodView.svelte`, `src/renderer/lib/moods.svelte.ts` | unit `innertube` · e2e `home`, `navigation`, `carousel` |
-| `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker`, `CollectionDownloadButton` | e2e `library` · behaviour · visual check of download/pause/resume/cancel on an album and a playlist page |
+| `src/renderer/lib/playlists.svelte.ts`, `LibraryView`, `CollectionView`, `PlaylistPicker`, `CollectionDownloadButton` | e2e `library`, `context-menu` · behaviour · visual check of download/pause/resume/cancel on an album and a playlist page |
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts`, `src/main/track-metadata.ts` | unit `artist-credits`, `entity-lookup`, `track-metadata`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
 | `src/shared/track-title.ts`, title navigation metadata | unit `track-title`, `innertube`, `listening` · e2e `release-focus` |
-| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts`, `release-focus`, `queue` · visual check |
+| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts`, `release-focus`, `queue`, `context-menu` · visual check |
 | `src/renderer/lib/track-drag.svelte.ts`, `toast.svelte.ts`, `QueueDropBar` | e2e `queue` · native drag via CDP `Input.setInterceptDrags` |
-| `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue` |
+| `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue`, `context-menu` |
 | `src/renderer/lib/rail-fit.ts` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
 | `src/renderer/lib/keyboard.ts` | e2e `shortcuts` · behaviour |
-| `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel`, `release-focus` |
+| `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel`, `release-focus`, `context-menu` |
 | `src/renderer/components/DetailView.svelte`, `DiscographyView.svelte`, `src/renderer/lib/artist-releases.ts`, `src/renderer/lib/artist-queue.ts`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening`, `artist-releases`, `artist-queue` · visual check: Popular 5→10, Play all queues the popular set plus the lazy discography tail, Discography tabs, Show all defaults to list with lazy tracks, grid toggle persists, filters and Back |
 | `src/renderer/components/PixelClock.svelte`, `src/renderer/lib/pixel-scramble.ts` | unit `pixel-scramble` · e2e `home` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |

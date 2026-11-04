@@ -531,7 +531,7 @@ through `nav`, never through callback chains.
 
 | Group | Files |
 |---|---|
-| Shell | `PlayerBar`, `SidePanel`, `QueuePanel`, `LyricsPanel`, `HistoryPanel`, `DownloadPanel`, `Rail`, `SearchBar`, `PlaylistPicker`, `QueueDropBar`, `ChangelogDialog` |
+| Shell | `PlayerBar`, `SidePanel`, `QueuePanel`, `LyricsPanel`, `HistoryPanel`, `DownloadPanel`, `Rail`, `SearchBar`, `PlaylistPicker`, `ContextMenu`, `QueueDropBar`, `ChangelogDialog` |
 | Views | `HomeView`, `OfflineHome`, `SearchView`, `LibraryView`, `CollectionView`, `DownloadCollectionView`, `DetailView`, `DiscographyView`, `TrackView`, `MoodView`, `ImportView`, `SettingsView` |
 | Rows/cards | `TrackRow`, `MediaCard`, `Cover`, `DownloadBadge`, `CollectionDownloadButton`, `EntityLink`, `ArtistLinks`, `SubtitleParts` |
 | Home extras | `ListeningDashboard`, `PixelClock`, `MoodGrid` |
@@ -560,6 +560,16 @@ tail is exhausted; repeat-all loops the completed artist queue, and shuffle
 grows the pool one batch per track so it does not repeat a small popular set.
 The session stores the tail's remaining release ids, so relaunching mid-album
 continues the discography instead of falling back to radio.
+
+Right-clicking a track row, media card, quick-search row, top result, queue row,
+player-bar title or release header opens one app-wide context menu
+(`context-menu*`, `ContextMenu.svelte`). Song menus offer Play, Play next, Add to
+queue, Add to playlist, Like, Download and Go to artist/album; release menus load
+the track list for Play, queue, playlist and download, and reuse Save to Library.
+Add to playlist opens a hover flyout with playlist search, Create playlist and
+the list; release tracks load only when an entry is chosen. The menu is
+portal-rendered and flips at viewport edges; Context Menu/Shift+F10, arrow keys,
+Home/End and Escape work, and it closes on outside click, scroll or navigation.
 
 ### 5.4 Playback state machine
 
@@ -1847,6 +1857,45 @@ What's New sheet state, comparing the running version with the last-shown notes.
 | 107 | ChangelogStore.dismiss | method | Closes the sheet, clears entries and persists last-seen/shown versions. |
 | 124 | ChangelogStore.clearTimer | method | Cancels and nulls the pending open timer. |
 
+#### src/renderer/lib/collection-tracks.ts
+Loads song rows for a release or playlist card and fills missing release metadata.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 7 | itemArtist | function | Returns the first artist credit with its page id, if any. |
+| 19 | loadCollection | function | Browses and caches a card's tracks, filling cover, album, release type and artist gaps. |
+
+#### src/renderer/lib/context-item.ts
+Svelte action that opens the app-wide menu from any row or card.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 9 | contextItem | action | Listens for contextmenu, builds the subject's actions and opens the menu at the pointer or anchor. |
+
+#### src/renderer/lib/context-menu-entries.ts
+Builds the actions for songs, releases and playlists from the existing stores.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 15 | ContextSubject | type | Row item plus list context, queue play/remove hooks and a fallback artist. |
+| 87 | songDownload | function | Chooses Download, Pause, Resume, Retry, Remove or an offline-disabled entry. |
+| 114 | songEntries | function | Song actions: play, play next, queue, playlist, like, download, artist/album and removal. |
+| 165 | downloadCollection | function | Release/playlist download state, including collection start and removal. |
+| 217 | collectionEntries | function | Release/playlist play, queue, playlist, save, download and artist actions. |
+| 259 | buildContextEntries | function | Dispatches by catalog kind; artists and unknown rows get no menu. |
+
+#### src/renderer/lib/context-menu.svelte.ts
+Positioning, focus return and action execution for the app-wide menu.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 3 | MenuIcon | type | Icon subset supported by menu actions. |
+| 32 | ContextMenuState | class | Holds open state, position and entries for the single menu instance. |
+| 24 | MenuSubmenu | type | Hover flyout: filter field, pinned create action and a live entries function. |
+| 40 | ContextMenuState.show | method | Clamps/flips the menu, handles keyboard anchoring and records focus return. |
+| 66 | ContextMenuState.close | method | Closes and optionally restores focus to the invoking row. |
+| 77 | ContextMenuState.run | method | Closes first, then runs the action and reports failures as a toast. |
+
 #### src/renderer/lib/download-groups.ts
 Pure helpers that split downloads into collections and loose songs.
 
@@ -2117,13 +2166,15 @@ The app-wide audio player: one element, queue, playback state and OS media integ
 | 1345 | Player.currentTime | getter | Exact audio element clock for lyric sync; the reactive position stays throttled. |
 
 #### src/renderer/lib/playlist-picker.svelte.ts
-Anchored add-to-playlist popover state shared by every track row.
+Anchored add-to-playlist popover state shared by every track row and context menu.
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 8 | PlaylistPicker | class | Holds the popover's open flag, target track and position. |
-| 14 | PlaylistPicker.show | method | Positions the popover against an anchor and opens it for a track. |
-| 25 | PlaylistPicker.close | method | Closes the popover and clears the target track. |
+| 8 | PlaylistPicker | class | Holds the popover's open flag, target tracks, create mode and position. |
+| 16 | PlaylistPicker.show | method | Positions the popover for one track. |
+| 20 | PlaylistPicker.showMany | method | Positions the popover for an album, EP or playlist track list. |
+| 24 | PlaylistPicker.showNew | method | Opens the multi-track popover directly on the New playlist form. |
+| 42 | PlaylistPicker.close | method | Closes the popover and clears its targets and create mode. |
 
 #### src/renderer/lib/playlists.svelte.ts
 User playlists mirrored with generation guards against stale loads.
@@ -2305,6 +2356,21 @@ Liked-songs or playlist page with hero, download/rename/delete controls and a pa
 | 100 | startRename | function | Seeds the draft with the playlist name and enters rename mode. |
 | 106 | commitRename | function | Prevents submit, renames the playlist, leaves rename mode. |
 | 113 | deletePlaylist | function | Deletes the playlist, then navigates back and clears forward history. |
+
+#### src/renderer/components/ContextMenu.svelte
+
+Portal-rendered, keyboard-navigable context menu with outside-click dismissal.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 34 | portal | function | Moves a menu panel to the document body so page transforms cannot clip it. |
+| 39 | cancelSubmenuClose | function | Cancels the pending hover-leave close. |
+| 44 | resetSubmenu | function | Clears the open flyout, anchor and filter. |
+| 51 | scheduleSubmenuClose | function | Delays closing so the pointer can cross into the flyout. |
+| 62 | openSubmenu | function | Positions the flyout beside its trigger and flips when it would overflow. |
+| 93 | focusFirstSubmenu | function | Moves keyboard focus into the opened flyout. |
+| 152 | onKeydown | function | Main menu keys: Escape/Tab, submenu Right, arrows, Home and End. |
+| 187 | onSubmenuKeydown | function | Flyout keys: Escape/Left back to the trigger, arrows, Home and End. |
 
 #### src/renderer/components/Cover.svelte
 
@@ -2754,6 +2820,13 @@ Aggregates local history into a seven-day listening summary and converts entries
 |---:|---|---|---|
 | 29 | summarizeHistory | function | Rolls history entries into per-day and per-artist totals, weighted by duration times completion. |
 | 92 | historyItem | function | Rebuilds a CatalogItem from a history entry with sanitized credits and an album link carrying its artist. |
+
+#### src/shared/release-context.ts
+Fills missing release metadata on browse rows without overwriting known values.
+
+| Line | Symbol | Kind | Role |
+|---:|---|---|---|
+| 14 | withReleaseContext | function | Copies a row, falling back to the release page's album, id, type and cover. |
 
 #### src/shared/track-match.ts
 
