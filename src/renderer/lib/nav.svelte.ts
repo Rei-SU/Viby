@@ -82,9 +82,21 @@ class Navigator {
     return this.rev
   }
 
+  /**
+   * True while a detail-like page sits above the active tab. Every "am I
+   * already there?" check must use this: a new page state added without it is
+   * how Home silently stopped working on the discography page.
+   */
+  get hasPage(): boolean {
+    return Boolean(
+      this.detail || this.track || this.collection || this.mood || this.discography
+    )
+  }
+
   go(view: View): void {
     // Clicking the tab you are already on should not create a history entry.
-    if (this.view === view && !this.detail && !this.track && !this.collection && !this.mood) return
+    // A detail page keeps the underlying tab, so it counts as "not here yet".
+    if (this.view === view && !this.hasPage) return
     this.record()
     this.view = view
     this.detail = null

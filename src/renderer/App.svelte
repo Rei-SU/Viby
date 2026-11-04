@@ -88,14 +88,7 @@
   }
 
   function isActive(id: View): boolean {
-    return (
-      nav.view === id &&
-      !nav.detail &&
-      !nav.track &&
-      !nav.collection &&
-      !nav.mood &&
-      !nav.discography
-    )
+    return nav.view === id && !nav.hasPage
   }
 
   /** The rail icon and the app menu go straight to the update card when present. */

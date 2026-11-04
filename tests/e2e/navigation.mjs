@@ -186,4 +186,42 @@ export async function run(app, check) {
     })()
   `)
   check('known artist page shows monthly listeners', /monthly listeners/i.test(known.listeners ?? ''), JSON.stringify(known))
+
+  const homePages = await app.evaluate(`
+    (async () => {
+      const { nav } = window.__viby
+      const home = () => document.querySelector('aside.sidebar button.nav[aria-label="Home"]')
+      const states = [
+        ['artist', () => nav.openArtist('artist-x', 'Artist')],
+        ['album', () => nav.open({ id: 'MPREb_x', browseId: 'MPREb_x', kind: 'album', title: 'Album', subtitle: 'Album' })],
+        ['track', () => nav.openTrack({ id: 'track-x', title: 'Track', artist: 'Artist', durationSec: 180 })],
+        ['collection', () => nav.openCollection({ kind: 'liked' })],
+        ['mood', () => nav.openMood({ title: 'Focus', params: 'focus' })],
+        ['discography', () => nav.openDiscography({ id: 'artist-x', browseId: 'artist-x', kind: 'artist', title: 'Artist', subtitle: 'Artist' })]
+      ]
+      const results = []
+      for (const [name, open] of states) {
+        nav.go('home')
+        open()
+        const opened = nav.hasPage
+        home()?.click()
+        await new Promise((r) => setTimeout(r, 60))
+        results.push({
+          name,
+          opened,
+          closed: !nav.hasPage,
+          view: nav.view,
+          active: home()?.classList.contains('on') ?? null
+        })
+      }
+      return results
+    })()
+  `)
+  for (const page of homePages) {
+    check(
+      `Home closes the ${page.name} page`,
+      page.opened && page.closed && page.view === 'home' && page.active === true,
+      JSON.stringify(page)
+    )
+  }
 }
