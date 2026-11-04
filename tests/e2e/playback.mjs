@@ -20,6 +20,67 @@ export async function run(app, check) {
   console.log('  started:', JSON.stringify(started))
   check('first track starts playing', started.title === 'Track A' && started.playing, JSON.stringify(started))
 
+  const controlColors = await app.evaluate(`
+    (async () => {
+      const p = window.__viby.player
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+      const shuffle = document.querySelector('.buttons .shuffle')
+      const repeat = document.querySelector('.buttons .repeat')
+      const color = (el) => getComputedStyle(el).color
+
+      if (p.shuffle) {
+        shuffle.click()
+        await wait(260)
+      }
+      const shuffleOff = color(shuffle)
+      shuffle.click()
+      await wait(260)
+      const shuffleOn = color(shuffle)
+      shuffle.click()
+      await wait(260)
+
+      while (p.repeat !== 'off') {
+        repeat.click()
+        await wait(260)
+      }
+      const repeatOff = color(repeat)
+      repeat.click()
+      await wait(260)
+      const repeatOn = color(repeat)
+      while (p.repeat !== 'off') {
+        repeat.click()
+        await wait(260)
+      }
+
+      return {
+        shuffleOff,
+        shuffleOn,
+        repeatOff,
+        repeatOn,
+        shuffleRestored: p.shuffle === false,
+        repeatRestored: p.repeat === 'off'
+      }
+    })()
+  `)
+  console.log('  toggle colors:', JSON.stringify(controlColors))
+  check(
+    'shuffle active is Spotify green',
+    controlColors.shuffleOn === 'rgb(30, 215, 96)' &&
+      controlColors.shuffleOn !== controlColors.shuffleOff,
+    JSON.stringify(controlColors)
+  )
+  check(
+    'repeat active is Spotify green',
+    controlColors.repeatOn === 'rgb(30, 215, 96)' &&
+      controlColors.repeatOn !== controlColors.repeatOff,
+    JSON.stringify(controlColors)
+  )
+  check(
+    'toggle states are restored',
+    controlColors.shuffleRestored && controlColors.repeatRestored,
+    JSON.stringify(controlColors)
+  )
+
   const before = await app.evaluate(`
     (() => {
       const p = window.__viby.player

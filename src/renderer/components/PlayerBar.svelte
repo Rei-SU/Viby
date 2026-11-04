@@ -209,10 +209,11 @@
   <div class="controls">
     <div class="buttons">
       <button
-        class="icon"
+        class="icon shuffle"
         class:on={player.shuffle}
         title="Shuffle"
         aria-label="Shuffle"
+        aria-pressed={player.shuffle}
         onclick={() => player.toggleShuffle()}
       >
         <Icon name="shuffle" size={16} />
@@ -243,10 +244,11 @@
       </button>
 
       <button
-        class="icon"
+        class="icon repeat"
         class:on={player.repeat !== 'off'}
         title={repeatLabel}
         aria-label={repeatLabel}
+        aria-pressed={player.repeat !== 'off'}
         onclick={() => player.cycleRepeat()}
       >
         <Icon name={player.repeat === 'one' ? 'repeatOne' : 'repeat'} size={16} />
@@ -419,6 +421,13 @@
 
   .icon.on {
     color: var(--accent);
+  }
+
+  /* Shuffle and repeat are the only transport toggles whose state is easy to
+     miss; give their active state the Spotify-style green accent. */
+  .icon.shuffle.on,
+  .icon.repeat.on {
+    color: var(--accent-green);
   }
 
   /* While a song is in the air, the queue button advertises itself as a target;

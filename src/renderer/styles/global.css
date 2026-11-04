@@ -23,6 +23,8 @@
   --accent-ring: rgba(255, 255, 255, 0.38);
 
   --danger: #ff8080;
+  /** Shuffle/repeat "on" state: unmistakably different from the off grey. */
+  --accent-green: #1ed760;
 
   --radius-xl: 22px;
   --radius-lg: 16px;
