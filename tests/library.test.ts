@@ -81,6 +81,29 @@ lib.toggleFavorite(track('x', 'X'))
 check('favourite is stored', lib.isFavorite('x'))
 check('favourite toggles off', lib.toggleFavorite(track('x')).favorited === false)
 
+console.log('\nhistory:')
+const play = {
+  trackId: 'h1',
+  title: 'H1',
+  artist: 'Artist',
+  playedAt: 1_000,
+  completion: 0.2
+}
+lib.addHistory(play)
+check('a play is stored', lib.history().length === 1 && lib.history()[0]?.trackId === 'h1')
+lib.addHistory({ ...play, completion: 1 })
+check(
+  'updating the same play replaces it in place',
+  lib.history().length === 1 && lib.history()[0]?.completion === 1,
+  JSON.stringify(lib.history())
+)
+lib.addHistory({ ...play, playedAt: 2_000, completion: 0.1 })
+check('a replay adds a second row', lib.history().length === 2)
+check('newest play first', lib.history()[0]?.playedAt === 2_000)
+check('play count counts plays, not updates', lib.playCount('h1') === 2)
+check('best completion keeps the highest', lib.bestCompletion('h1') === 1)
+check('history persists', new Library(file).history().length === 2)
+
 console.log('\nself-healing:')
 const raw = JSON.parse(readFileSync(file, 'utf8'))
 raw.playlists = [

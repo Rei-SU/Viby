@@ -81,6 +81,8 @@
 
   $effect(() => {
     void player.current?.id
+    // A play that qualifies mid-track must reach the card without a skip.
+    void history.revision
     void loadRecent()
   })
 

@@ -122,6 +122,15 @@ export class Library {
     if (!isValidHistoryEntry(entry)) return
     this.store.update((data) => {
       if (!Array.isArray(data.history)) data.history = []
+      // One entry per play: the player writes it once the listening threshold
+      // is met, then updates that same row when the play pauses or ends.
+      const at = data.history.findIndex(
+        (row) => row.trackId === entry.trackId && row.playedAt === entry.playedAt
+      )
+      if (at >= 0) {
+        data.history[at] = entry
+        return
+      }
       data.history.unshift(entry)
       if (data.history.length > MAX_HISTORY) data.history.length = MAX_HISTORY
     })

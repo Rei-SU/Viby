@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import { historyItem } from '@shared/listening'
   import { history } from '../lib/history.svelte'
   import TrackRow from './TrackRow.svelte'
 
-  onMount(() => {
+  // Load on open, and again when a play qualifies while the panel is open.
+  $effect(() => {
+    void history.revision
     void history.load(true)
   })
 </script>

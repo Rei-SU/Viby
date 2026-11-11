@@ -10,6 +10,7 @@ import type {
 import { api } from './api'
 import { network } from './network.svelte'
 import { browseCached, cacheRadio, cachedRadio } from './catalog-cache.svelte'
+import { history } from './history.svelte'
 import { sourceAction } from './player-source'
 import { createArtistQueue } from './artist-queue'
 import { queueWindow, restoreQueue } from './queue-session'
@@ -36,6 +37,11 @@ const CANCELLED = 'Cancelled.'
 const QUEUE_PREFETCH_AHEAD = 4
 /** Load a couple of batches up front so the queue panel is not empty. */
 const QUEUE_PRIME_BATCHES = 2
+
+/** Spotify's rule: a play counts after 30 seconds of actual playback. */
+const HISTORY_MIN_PLAYED_SEC = 30
+/** A clock jump larger than this is a seek or a source swap, not listening. */
+const PLAYED_JUMP_MAX_SEC = 5
 
 /**
  * A lazy tail for a queue. The artist page starts with its popular songs and
@@ -139,6 +145,16 @@ class Player {
    * second. Seeks, pauses and track changes still update immediately.
    */
   private lastPositionUpdateAt = 0
+  /** Seconds of the current play actually heard; seeks do not add to it. */
+  private playedSeconds = 0
+  /** Last audio-clock sample, so timeupdate deltas can be accumulated. */
+  private playedSampleAt = 0
+  /** Track id the current play belongs to; null between plays. */
+  private historyTrackId: string | null = null
+  /** `playedAt` of the entry written at the threshold, reused for its update. */
+  private historyPlayedAt: number | null = null
+  /** True between a seek and its `seeked` event, so the jump is not counted. */
+  private seeking = false
   /** Local artwork converted to a data URL, keyed by its viby-media URL. */
   private artDataUrls = new Map<string, { src: string; type: string }>()
   /** Guards an async artwork conversion against a track change in the meantime. */
@@ -161,7 +177,11 @@ class Player {
     if (!this.wired) {
       this.wire()
       this.wired = true
-      window.addEventListener('beforeunload', () => this.persistSession(true))
+      window.addEventListener('beforeunload', () => {
+        // Quitting is the end of the current play; flush it before the last save.
+        this.finalizePlay()
+        this.persistSession(true)
+      })
     }
     this.setMediaHandlers()
     this.setTaskbarHandlers()
@@ -278,6 +298,11 @@ class Player {
   private wire(): void {
     audio.onplay = () => {
       this.playing = true
+      // A play begins here, after the element has a source. Resuming a paused
+      // track keeps the same play; only a new track starts a new one.
+      if (!this.historyTrackId && this.current && this.loadedId === this.current.id) {
+        this.beginPlay(this.current.id)
+      }
       // Sound is coming out: any error banner is stale by definition.
       this.error = null
       api.player.setPlaying(true)
@@ -293,12 +318,25 @@ class Player {
       // The throttled clock can be up to a second behind the real stop point.
       // Capture and save it now, or resuming replays that last second.
       if (wasPlaying) this.updatePosition(true, true)
+      // Keep the play's completion truthful even when the pause came from the
+      // OS rather than `toggle()`.
+      this.samplePlayed()
+      this.updateHistory()
     }
     audio.ontimeupdate = () => {
       // `removeAttribute('src')` can emit one last timeupdate with the old
       // currentTime; without this guard the player showed a position while idle.
       if (!this.loadedId) return
+      this.samplePlayed()
       this.updatePosition()
+    }
+    audio.onseeking = () => {
+      // The clock is about to jump; the jump is not listening time.
+      this.seeking = true
+    }
+    audio.onseeked = () => {
+      this.seeking = false
+      this.playedSampleAt = audio.currentTime
     }
     audio.onloadedmetadata = () => {
       this.duration = Number.isFinite(audio.duration)
@@ -312,7 +350,7 @@ class Player {
       // Only advance if the element really finished the track the UI is showing.
       // A stale `ended` from a replaced source used to skip a track silently.
       if (!this.current || this.loadedId !== this.current.id) return
-      this.recordHistory()
+      this.finalizePlay()
       this.persistSession(true)
       void this.advance(1)
     }
@@ -431,6 +469,8 @@ class Player {
         thumbnail: res.data.track.thumbnail,
         videoType: res.data.track.videoType
       }
+      // The import replaces whatever was playing; settle that play first.
+      this.finalizePlay()
       this.queue = [...this.queue, track]
       this.index = this.queue.length - 1
       this.stream = res.data.stream
@@ -493,8 +533,8 @@ class Player {
     if (audio.paused) {
       if (!this.reconnecting) void this.resume()
     } else {
+      // The pause handler settles the play's history entry.
       audio.pause()
-      this.recordHistory()
     }
   }
 
@@ -535,7 +575,11 @@ class Player {
       return
     }
 
+    // A seek is not listening time: flush what was heard, then resync the clock
+    // sample so the jump itself is never counted.
+    this.samplePlayed()
     audio.currentTime = Math.max(0, Math.min(seconds, this.duration || seconds))
+    this.playedSampleAt = audio.currentTime
     this.position = audio.currentTime
     // A seek is user-visible and must be reflected and saved immediately, even
     // when the throttled timeupdate handler is not due yet.
@@ -615,6 +659,8 @@ class Player {
     this.cancelQueueMore()
     this.playToken += 1
     api.player.cancel()
+    // The element still holds the playing track; settle its play first.
+    this.finalizePlay()
     audio.pause()
     audio.removeAttribute('src')
     this.queue = []
@@ -880,6 +926,8 @@ class Player {
     // audible under a new title is confusing, and it also hides how long the
     // resolve actually takes.
     if (!audio.paused) audio.pause()
+    // Leaving this track ends its play, whatever comes next.
+    this.finalizePlay()
     this.playing = false
     api.player.setPlaying(false)
 
@@ -1108,6 +1156,8 @@ class Player {
     this.recoveringFor = null
     api.player.setPlaying(false)
     if (!audio.paused) audio.pause()
+    // Keep whatever was actually heard before the stream died.
+    this.finalizePlay()
     // No load(): an empty element would only emit another error event. Play
     // notices the missing source and starts a fresh resolve.
     audio.removeAttribute('src')
@@ -1119,8 +1169,13 @@ class Player {
   private async advance(direction: 1 | -1): Promise<void> {
     if (this.queue.length === 0) return
 
+    // The current play is over, whether it ended or the user skipped it.
+    this.finalizePlay()
+
     if (this.repeat === 'one') {
       audio.currentTime = 0
+      // Repeat-one is a fresh play, not a continuation.
+      if (this.current) this.beginPlay(this.current.id)
       await audio.play().catch(() => undefined)
       return
     }
@@ -1191,27 +1246,107 @@ class Player {
     }
   }
 
-  private recordHistory(): void {
+  /**
+   * How long this track must be heard to count. Spotify uses a flat 30 seconds;
+   * capping at the track length lets a short interlude qualify when it finishes.
+   */
+  private historyThreshold(): number {
+    const duration = this.duration || this.current?.durationSec || 0
+    return duration > 0 ? Math.min(HISTORY_MIN_PLAYED_SEC, duration) : HISTORY_MIN_PLAYED_SEC
+  }
+
+  /** A play of `trackId` starts now; the listening clock starts from zero. */
+  private beginPlay(trackId: string): void {
+    this.historyTrackId = trackId
+    this.historyPlayedAt = null
+    this.playedSeconds = 0
+    this.playedSampleAt = audio.currentTime
+    this.seeking = false
+  }
+
+  /**
+   * Accumulate listening time from the audio clock. A paused element adds
+   * nothing, and a jump (seek, source swap) is never counted as listening.
+   */
+  private samplePlayed(): void {
+    if (!this.historyTrackId || this.historyTrackId !== this.loadedId) {
+      this.playedSampleAt = audio.currentTime
+      return
+    }
+    const now = audio.currentTime
+    const delta = now - this.playedSampleAt
+    this.playedSampleAt = now
+    if (this.seeking || !Number.isFinite(delta) || delta <= 0 || delta > PLAYED_JUMP_MAX_SEC) return
+    this.playedSeconds += delta
+    this.maybeRecordHistory()
+  }
+
+  /** Write the play's history entry as soon as it qualifies. */
+  private maybeRecordHistory(): void {
+    if (this.historyPlayedAt !== null) return
+    if (this.playedSeconds < this.historyThreshold()) return
+    this.writeHistory()
+  }
+
+  /** Refresh the entry written at the threshold with the latest completion. */
+  private updateHistory(): void {
+    if (this.historyPlayedAt === null) return
+    this.writeHistory()
+  }
+
+  private writeHistory(): void {
     const track = this.current
     if (!track) return
-    const completion = this.duration > 0 ? Math.min(1, this.position / this.duration) : 0
+    // Reuse the timestamp of the first write so main updates that same row
+    // instead of recording a second play.
+    const firstWrite = this.historyPlayedAt === null
+    const playedAt = this.historyPlayedAt ?? Date.now()
+    this.historyPlayedAt = playedAt
+    const completion = this.duration > 0 ? Math.min(1, audio.currentTime / this.duration) : 0
     // A resolver-only track has no structured credits; store the conservative
     // split so a replay from Recently played keeps every artist clickable.
     const artistParts = plainParts(artistPartsFor(track))
-    void api.history.add({
-      trackId: track.id,
-      title: track.title,
-      artist: track.artist,
-      artistId: track.artistId,
-      artistParts: artistParts?.length ? artistParts : undefined,
-      album: track.album,
-      albumId: track.albumId,
-      releaseType: track.releaseType,
-      durationSec: track.durationSec,
-      playedAt: Date.now(),
-      completion,
-      thumbnail: track.thumbnail
-    })
+    void api.history
+      .add({
+        trackId: track.id,
+        title: track.title,
+        artist: track.artist,
+        artistId: track.artistId,
+        artistParts: artistParts?.length ? artistParts : undefined,
+        album: track.album,
+        albumId: track.albumId,
+        releaseType: track.releaseType,
+        durationSec: track.durationSec,
+        playedAt,
+        completion,
+        thumbnail: track.thumbnail
+      })
+      // A new play has to show up in Recently played while it is still playing;
+      // later completion updates change no visible row, so they stay silent.
+      .then(() => {
+        if (firstWrite) history.notify()
+      })
+  }
+
+  /**
+   * The play is over: end, skip, track change, failure or quit. Flush what was
+   * heard, settle the entry once, and leave no play in progress.
+   */
+  private finalizePlay(): void {
+    const hadEntry = this.historyPlayedAt !== null
+    this.samplePlayed()
+    // samplePlayed already wrote the entry if this play just crossed the
+    // threshold; otherwise only an earlier entry needs its completion updated.
+    if (hadEntry) this.updateHistory()
+    this.resetPlay()
+  }
+
+  private resetPlay(): void {
+    this.historyTrackId = null
+    this.historyPlayedAt = null
+    this.playedSeconds = 0
+    this.playedSampleAt = 0
+    this.seeking = false
   }
 
   // ---- OS integration ----------------------------------------------------

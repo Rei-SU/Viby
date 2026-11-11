@@ -10,9 +10,17 @@ import { api } from './api'
 class HistoryStore {
   entries = $state<HistoryEntry[]>([])
   loading = $state(false)
+  /** Bumped when a play is written, so open readers refetch. */
+  revision = $state(0)
 
   private loadedAt = 0
   private request = 0
+
+  /** A play was recorded; the cached list is stale. */
+  notify(): void {
+    this.loadedAt = 0
+    this.revision += 1
+  }
 
   async load(force = false): Promise<void> {
     // Home loads this from an effect; reading `entries` there would make every

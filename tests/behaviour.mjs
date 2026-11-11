@@ -231,19 +231,88 @@ const favOff = await evaluate(
 check('heart button unfavourites', favOff.on === false && favOff.saved === false, JSON.stringify(favOff))
 
 // ---- history ---------------------------------------------------------------
+// Spotify's rule: a play counts after 30 seconds of listening, not on pause.
 console.log('\nhistory:')
-const historyBefore = (await evaluate(`window.__viby.api.history.list(500).then((h) => h.length)`))
-const recorded = await evaluate(
+await playQueue([TRACKS[0]], 0)
+await waitFor((x) => x.title === 'Q1' && x.playing)
+await evaluate(
   `(async () => {
-     const { api, player } = window.__viby
-     player.toggle() // pause -> records
-     await new Promise((r) => setTimeout(r, 300))
-     const list = await api.history.list(500)
-     return { length: list.length, top: list[0] }
+     await window.__viby.api.debug?.forgetHistory(['Q1', 'Q2', 'Q3'])
+     return true
    })()`
 )
-check('pausing records history', recorded.length === historyBefore + 1, `${historyBefore} -> ${recorded.length}`)
-check('history entry has the track', recorded.top?.trackId === 'dQw4w9WgXcQ', JSON.stringify(recorded.top))
+
+const beforePause = await evaluate(
+  `(async () => {
+     const { api, player } = window.__viby
+     player.seek(0)
+     player.toggle() // pause well before the threshold
+     await new Promise((r) => setTimeout(r, 400))
+     return (await api.history.list(500)).filter((h) => h.title === 'Q1').length
+   })()`
+)
+check('pausing before 30 seconds records nothing', beforePause === 0, `${beforePause} entries`)
+
+// Open the panel before the threshold so the next check proves it refreshes
+// while open, not just when it is mounted.
+const panelBefore = await evaluate(
+  `(async () => {
+     const { sidePanel } = window.__viby
+     if (sidePanel.mode !== 'history') sidePanel.toggle('history')
+     await new Promise((r) => setTimeout(r, 500))
+     return {
+       open: sidePanel.mode === 'history',
+       q1: Array.from(document.querySelectorAll('.panel .history .row .title')).some(
+         (el) => el.textContent.trim() === 'Q1'
+       )
+     }
+   })()`
+)
+check(
+  'the history panel is open without the play',
+  panelBefore.open && !panelBefore.q1,
+  JSON.stringify(panelBefore)
+)
+
+await evaluate(`(() => { window.__viby.player.toggle(); return true })()`)
+await sleep(31000)
+const qualified = await evaluate(
+  `window.__viby.api.history.list(500).then((list) => list.filter((h) => h.title === 'Q1'))`
+)
+check('30 seconds of listening records one play', qualified.length === 1, `${qualified.length} entries`)
+check(
+  'the entry carries the track',
+  qualified[0]?.trackId === 'dQw4w9WgXcQ',
+  JSON.stringify(qualified[0])
+)
+check('the entry has a completion ratio', (qualified[0]?.completion ?? 0) > 0, `${qualified[0]?.completion}`)
+
+const panelRows = await evaluate(
+  `(async () => {
+     await new Promise((r) => setTimeout(r, 300))
+     return Array.from(document.querySelectorAll('.panel .history .row .title')).map((el) =>
+       el.textContent.trim()
+     )
+   })()`
+)
+check('the open history panel shows the new play', panelRows.includes('Q1'), JSON.stringify(panelRows))
+
+const afterPause = await evaluate(
+  `(async () => {
+     const { api, player } = window.__viby
+     player.toggle()
+     await new Promise((r) => setTimeout(r, 400))
+     const list = (await api.history.list(500)).filter((h) => h.title === 'Q1')
+     return { count: list.length, playedAt: list[0]?.playedAt, completion: list[0]?.completion }
+   })()`
+)
+check('pausing updates the same entry', afterPause.count === 1, `${afterPause.count} entries`)
+check(
+  'the update reuses the original play',
+  afterPause.playedAt === qualified[0]?.playedAt &&
+    afterPause.completion >= (qualified[0]?.completion ?? 0),
+  JSON.stringify(afterPause)
+)
 
 // ---- media session ---------------------------------------------------------
 console.log('\nmedia session:')
@@ -261,8 +330,9 @@ check('artwork is published to the OS', media.art > 0, `artwork=${media.art}`)
 // ---- restore ---------------------------------------------------------------
 await evaluate(`
   (async () => {
-    const { api, player } = window.__viby
+    const { api, player, sidePanel } = window.__viby
     player.clearQueue()
+    sidePanel.close()
     if (player.muted !== window.__saved.muted) player.toggleMute()
     player.setVolume(window.__saved.volume)
     if (player.shuffle !== window.__saved.shuffle) player.toggleShuffle()
