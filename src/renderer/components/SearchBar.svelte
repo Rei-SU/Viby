@@ -3,6 +3,7 @@
   import { contextItem } from '../lib/context-item'
   import { api } from '../lib/api'
   import { nav } from '../lib/nav.svelte'
+  import { contextMenu } from '../lib/context-menu.svelte'
   import { player } from '../lib/player.svelte'
   import { searchState } from '../lib/search.svelte'
   import { network } from '../lib/network.svelte'
@@ -342,11 +343,19 @@
     // The panel is portaled outside the wrapper, so both containers count as
     // "inside" the search surface.
     if (next && (wrapper?.contains(next) || panel?.contains(next))) return
+    // Right-clicking a result moves focus into the app-wide context menu, which
+    // is portaled separately. That menu belongs to this surface: retracting the
+    // palette behind it would force the user to reopen search.
+    if (contextMenu.open) return
     close()
   }
 
   function onWindowPointerDown(event: PointerEvent): void {
     if (!open) return
+    // The context menu's own capture listener has already closed it for clicks
+    // outside, so an open menu here means the click landed on the menu itself.
+    // Choosing an action must not dismiss the palette underneath.
+    if (contextMenu.open) return
     const target = event.target as Node | null
     if (!target || (!wrapper?.contains(target) && !panel?.contains(target))) close()
   }

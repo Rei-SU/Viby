@@ -89,7 +89,10 @@ class ContextMenuState {
 
   async run(entry: MenuAction): Promise<void> {
     if (entry.disabled) return
-    this.close()
+    // Return focus to whatever owned it before the menu opened, as Escape and
+    // Tab already do. Search's quick panel relies on this: it stays open while
+    // a result's menu is up, so focus must come back to the field afterwards.
+    this.close(true)
     try {
       await entry.run()
     } catch (err) {

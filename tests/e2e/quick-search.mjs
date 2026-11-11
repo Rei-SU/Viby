@@ -236,6 +236,70 @@ export async function run(app, check) {
     JSON.stringify(song)
   )
 
+  const rightClick = await app.evaluate(`
+    (async () => {
+      const { nav } = window.__viby
+      nav.go('home')
+      await new Promise((r) => setTimeout(r, 300))
+      const input = document.querySelector('.searchbox input')
+      input.focus()
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+      setter.call(input, 'daft punk')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 150))
+        if (document.querySelector('.quick-row[data-kind="song"]')) break
+      }
+      const row = document.querySelector('.quick-row[data-kind="song"]')
+      if (!row) return { ok: false, reason: 'no quick result' }
+
+      row.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: 200,
+          clientY: 220,
+          button: 2
+        })
+      )
+      await new Promise((r) => setTimeout(r, 150))
+      const expanded = () => document.querySelector('.searchbox input')?.getAttribute('aria-expanded') === 'true'
+      const opened = {
+        menu: Boolean(document.querySelector('[role="menu"]')),
+        panel: expanded()
+      }
+
+      // Escape returns focus to the field and keeps the palette open.
+      document
+        .querySelector('[role="menu"]')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await new Promise((r) => setTimeout(r, 200))
+      const dismissed = {
+        menu: Boolean(document.querySelector('[role="menu"]')),
+        panel: expanded(),
+        focused: document.activeElement === input
+      }
+
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true }))
+      await new Promise((r) => setTimeout(r, 150))
+      return { ok: true, opened, dismissed, closed: !expanded() }
+    })()
+  `)
+  check(
+    'right-clicking a quick result keeps the palette open',
+    rightClick.ok === true && rightClick.opened.menu === true && rightClick.opened.panel === true,
+    JSON.stringify(rightClick)
+  )
+  check(
+    'dismissing the menu returns to the open palette',
+    rightClick.ok === true &&
+      rightClick.dismissed.menu === false &&
+      rightClick.dismissed.panel === true &&
+      rightClick.dismissed.focused === true &&
+      rightClick.closed === true,
+    JSON.stringify(rightClick)
+  )
+
   const keyboard = await app.evaluate(`
     (async () => {
       const { nav, player } = window.__viby
