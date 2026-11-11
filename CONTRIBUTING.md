@@ -114,9 +114,12 @@ macOS publishes exactly two DMGs — `Viby-macos-arm.dmg` (Apple Silicon) and
 `Viby-macos-intel.dmg` (Intel) — with no zip or blockmap artifacts:
 electron-updater on mac updates from zip, but that requires signing, so those
 assets return with Developer ID signing (see PLAN §2.1).
-macOS builds are unsigned, so the first launch must be approved in System
-Settings → Privacy & Security → Open Anyway (recent macOS removed the
-right-click bypass). Windows publishes `Viby-windows-x64.exe` and the
+macOS builds are ad-hoc signed but not notarized, so the first launch must remove
+the download quarantine once:
+`xattr -dr com.apple.quarantine /Applications/Viby.app`. Do not point users at
+Privacy & Security → Open Anyway; a quarantined build whose signature cannot be
+validated is reported as "damaged" and that dialog has no Open Anyway button.
+Windows publishes `Viby-windows-x64.exe` and the
 `latest.yml` manifest — Windows auto-update works unsigned and is wired:
 installed builds check GitHub, download and install in place. On macOS the same
 check downloads the matching DMG and opens it, since an ad-hoc-signed build

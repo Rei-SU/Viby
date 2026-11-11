@@ -1,6 +1,6 @@
 # Viby — Architecture
 
-Status: current as of **0.5.3** (2026-10-28). This document describes how the code is
+Status: current as of **0.5.7** (2026-11-11). This document describes how the code is
 organized and how data moves. Product decisions, history and performance measurements
 live in [PLAN.md](PLAN.md); this is the map for finding and changing code.
 
@@ -118,7 +118,10 @@ element for the whole app.
 | `types.ts` | `Track`, `Playlist`, `CatalogItem`, `Settings`, `DownloadsSnapshot`, `PresenceSnapshot`, IPC result types, etc. |
 | `ipc.ts` | `CH` channel names and the `VibyApi` contract. |
 | `artist-credits.ts` | Credit parsing/splitting; keeps every featured artist linkable. |
+| `entity-identity.ts` | Exact artist/recording identity for name-only links and the audio-first swap. |
+| `release-context.ts` | Fills missing cover, album id and release type on release track rows. |
 | `track-title.ts` | Recording identity: strips official-video/lyric/4K markers, keeps live/remix/acoustic distinct. |
+| `track-match.ts` | Release-row matching by id, version-aware title key and duration tolerance. |
 | `listening.ts` | Seven-day listening summary and history-row construction. |
 | `changelog.ts` | Types for baked release notes. |
 | `version.ts` | SemVer ordering for update checks. |
@@ -170,7 +173,7 @@ docs/                     import research + README screenshots
 | Lyrics fetching or the panel | `src/main/lyrics.ts`, `lib/lyrics.svelte.ts`, `LyricsPanel.svelte` |
 | Playlist import | `src/main/import/index.ts`, adapters, `matcher.ts`, `ImportView.svelte` |
 | Updates / release notes | `src/main/updater*.ts`, `release-feed.ts`, `SettingsView.svelte`, `scripts/build-changelog.mjs` |
-| Discord Rich Presence | `src/main/discord/`, `lib/player.svelte.ts` (`setPresence`), `SettingsView` |
+| Discord Rich Presence | `src/main/discord/`, the `App.svelte` presence effect, `SettingsView` |
 | Window chrome, tray, login, taskbar | `src/main/windows.ts`, `background.ts`, `startup.ts`, `taskbar.ts` |
 | Security boundaries | `windows.ts`, `index.ts` (CSP), `ipc.ts`, `bounded-body.ts`, `import/http.ts` |
 | A new setting | `shared/types.ts` → `settings.ts` → `SettingsView.svelte` → the consumer |
@@ -406,7 +409,7 @@ than `file://`, keeping `webSecurity` on. The handler:
   `up-to-date`, `available`, `downloading`, `ready`, `manual`, `error`).
 - `updater-native.ts` — Electron/NSIS path for Windows in-place updates.
 - `release-feed.ts` — GitHub release metadata for macOS; selects the correct DMG.
-- `updater-manual.ts` — downloads and opens the macOS DMG (unsigned builds cannot
+- `updater-manual.ts` - downloads and opens the macOS DMG (ad-hoc-signed builds cannot
   self-update).
 - `update-manifest.ts` / `update-key.ts` — Ed25519-signed manifest verification;
   a pinned key fails closed if the manifest is missing, malformed or mismatched.
@@ -519,6 +522,12 @@ through `nav`, never through callback chains.
 | `track-drag.svelte.ts` | HTML5 drag payload for adding songs to the queue. |
 | `toast.svelte.ts` | Transient status chips. |
 | `keyboard.ts` | Global shortcuts with text-field guards. |
+| `context-item.ts` / `context-menu-entries.ts` / `context-menu.svelte.ts` | The app-wide right-click menu: item identity, song/release entries, anchored state. |
+| `collection-tracks.ts` | Loads a release's track list for menu, queue and download actions. |
+| `entity-lookup.ts` / `entity-search.ts` | Verify name-only artist/album links against title and credited artist. |
+| `artist-queue.ts` / `artist-releases.ts` | Lazy discography queue tail and release grouping. |
+| `queue-session.ts` | The 100-row session window and lazy artist tail descriptors. |
+| `lyrics-sync.ts` | Samples the audio clock for the active lyric line. |
 | `release.ts` / `album.ts` / `artist.ts` / `track.ts` | Entity navigation and catalog-item ↔ track mapping. |
 | `player-source.ts` | Decides reuse/detach/resolve when the player changes tracks. |
 | `quality.ts` | Codec/bitrate label shared by the dock and Discord. |
@@ -531,9 +540,9 @@ through `nav`, never through callback chains.
 
 | Group | Files |
 |---|---|
-| Shell | `PlayerBar`, `SidePanel`, `QueuePanel`, `LyricsPanel`, `HistoryPanel`, `DownloadPanel`, `Rail`, `SearchBar`, `PlaylistPicker`, `ContextMenu`, `QueueDropBar`, `ChangelogDialog` |
+| Shell | `PlayerBar`, `SidePanel`, `QueuePanel`, `LyricsPanel`, `HistoryPanel`, `DownloadPanel`, `DownloadIndicator`, `Rail`, `SearchBar`, `PlaylistPicker`, `ContextMenu`, `QueueDropBar`, `ChangelogDialog` |
 | Views | `HomeView`, `OfflineHome`, `SearchView`, `LibraryView`, `CollectionView`, `DownloadCollectionView`, `DetailView`, `DiscographyView`, `TrackView`, `MoodView`, `ImportView`, `SettingsView` |
-| Rows/cards | `TrackRow`, `MediaCard`, `Cover`, `DownloadBadge`, `CollectionDownloadButton`, `EntityLink`, `ArtistLinks`, `SubtitleParts` |
+| Rows/cards | `TrackRow`, `MediaCard`, `Cover`, `DownloadBadge`, `CollectionDownloadButton`, `DiscographyRelease`, `EntityLink`, `ArtistLinks`, `SubtitleParts` |
 | Home extras | `ListeningDashboard`, `PixelClock`, `MoodGrid` |
 | Primitives | `Icon`, `InlineAlert` |
 
@@ -592,6 +601,7 @@ Home/End and Escape work, and it closes on outside click, scroll or navigation.
 - a throttled reactive clock for the bar and OS UI, plus an exact `currentTime`
   getter the synced lyrics panel samples each frame;
 - Windows taskbar control mirroring;
+- Discord presence: a plain snapshot on track/play/seek changes, with main projecting the position from `updatedAt`;
 - autoplay radio extension and next-track prefetch.
 
 Queue edits (`enqueue`, `insertAt`, `move`, `removeAt`) never start audio; adding
@@ -643,10 +653,10 @@ Top result plus category grids.
 
 ### 5.9 Styling
 
-`src/renderer/styles/global.css` defines the monochrome design tokens: near-black
-surfaces, three text weights, white accent, red errors only, one easing, radii,
-dock/titlebar/sidebar dimensions, glass/scrollbar utilities. Component styles are
-scoped in each `.svelte` file.
+`src/renderer/styles/global.css` defines the near-monochrome design tokens: near-black
+surfaces, three text weights, a white accent plus one green active-state accent,
+red errors only, one easing, radii, dock/titlebar/sidebar dimensions, glass/scrollbar
+utilities. Component styles are scoped in each `.svelte` file.
 
 ---
 
@@ -682,8 +692,8 @@ user files.
 1. `SearchBar`/`SearchView` calls `player.playItem(item)`.
 2. Player builds a one-track queue and calls `api.player.resolve({ input: id })`.
 3. Main follows the playback pipeline (§4.3), returns `ResolveResult`.
-4. Player sets `audio.src`, metadata/mediaSession, records history on pause/end,
-   persists the session, and prefetches the next track/radio.
+4. Player sets `audio.src`, metadata/mediaSession, records a play after 30
+   seconds of listening, persists the session, and prefetches the next track/radio.
 
 ### Play an album/playlist
 1. Page builds a queue from catalog items; `player.playList(items, index)`.
@@ -813,7 +823,8 @@ Date-stamped; see [PLAN.md](PLAN.md) and [TESTING.md](TESTING.md) for details.
   events; position-only session persistence and incremental indexes are future
   work.
 - **Queue/Library list virtualization** is not done; CollectionView and DetailView
-  page at 120 rows, the queue still mounts every row.
+  page at 120 rows, the queue still mounts every row. Playlists also cannot be
+  reordered by dragging yet; the queue's pointer grip is the pattern to reuse.
 - **Downloads snapshots** are rebuilt in full and startup healing is synchronous;
   delta events and cached indexes are future work.
 - **Catalog→Track mapping** is duplicated between the renderer and import matcher.
@@ -833,8 +844,8 @@ This section is the complete file-level symbol index: every named function, clas
 method, constructor, getter and named arrow in the source, with its line and a
 one-line role.
 
-**Coverage:** 1,100+ rows across 149 source files, generated from the code on
-2026-10-30. Constructors, getters and the preload `window.viby` object arrows are
+**Coverage:** 1,150+ rows across 151 source files, generated from the code on
+2026-11-04. Constructors, getters and the preload `window.viby` object arrows are
 included even where a basic AST pass would miss them.
 
 **How to use it:** find the area, then the file, then the symbol. The line number
@@ -961,7 +972,7 @@ Local-first favorites, history, saved albums and playlists, with validation and 
 | 88 | Library.favorites | method | Returns valid favorites, persisting a healed list when entries were dropped. |
 | 101 | Library.isFavorite | method | Reports whether a track id is in favorites. |
 | 105 | Library.toggleFavorite | method | Adds or removes a favorite, persists it, and returns the new state and list. |
-| 121 | Library.addHistory | method | Prepends a history entry and caps stored history at 5000. |
+| 121 | Library.addHistory | method | Updates the entry for the same track and `playedAt`, otherwise prepends it and caps history at 5000. |
 | 131 | Library.removeHistory | method | Drops history entries whose titles match, returning the removed count. |
 | 144 | Library.history | method | Returns validated history entries up to a limit, newest first. |
 | 150 | Library.playCount | method | Counts history occurrences of a track id for cache-worthiness. |
@@ -1997,7 +2008,8 @@ Listening history shared by the Home card and the side panel.
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
 | 10 | HistoryStore | class | Holds history entries, a loading flag and request counters. |
-| 17 | HistoryStore.load | method | Loads the last 100 entries, skipping fresh data and discarding stale responses. |
+| 20 | HistoryStore.notify | method | Marks the cached list stale and bumps a revision so open readers refetch. |
+| 25 | HistoryStore.load | method | Loads the last 100 entries, skipping fresh data and discarding stale responses. |
 
 #### src/renderer/lib/keyboard.ts
 Application-wide keyboard shortcut installer.
@@ -2154,7 +2166,14 @@ The app-wide audio player: one element, queue, playback state and OS media integ
 | 1102 | Player.failPlayback | method | Shows a stopped state, detaches the dead source and clears the stream. |
 | 1119 | Player.advance | method | Computes the next index, grows the tail before repeating or going to radio. |
 | 1170 | Player.extendWithRadio | method | Appends up to 25 fresh radio tracks for autoplay. |
-| 1194 | Player.recordHistory | method | Sends playback history with completion ratio and credits to main. |
+| 1253 | Player.historyThreshold | method | Returns 30 seconds of listening, capped at the track length for short tracks. |
+| 1259 | Player.beginPlay | method | Starts a play and its listening clock for a track. |
+| 1271 | Player.samplePlayed | method | Accumulates heard seconds from the audio clock, ignoring seeks and jumps. |
+| 1285 | Player.maybeRecordHistory | method | Writes the history entry once the play crosses its threshold. |
+| 1292 | Player.updateHistory | method | Refreshes the entry written for the current play with its latest completion. |
+| 1297 | Player.writeHistory | method | Sends one history entry with completion and credits, reusing its `playedAt` for updates, and refreshes open history readers on the first write. |
+| 1335 | Player.finalizePlay | method | Settles the play's entry on end, skip, track change or quit, then clears it. |
+| 1344 | Player.resetPlay | method | Clears the listening clock and the current play's history state. |
 | 1219 | Player.setMediaHandlers | method | Registers media session action handlers once. |
 | 1222 | bind | arrow | Wraps `setActionHandler` in a try/catch for unsupported actions. |
 | 1249 | Player.setTaskbarHandlers | method | Subscribes once to Windows taskbar button commands. |
@@ -2894,7 +2913,7 @@ Builds the sandboxed `viby` bridge object and exposes it to the renderer via con
 | 82 | api.catalog.radio | arrow | Invokes main for related tracks seeded by a video id. |
 | 83 | api.catalog.audioTrack | arrow | Invokes main to find the released audio track for a music video. |
 | 85 | api.catalog.artistImage | arrow | Invokes main to resolve an artist portrait by id or name. |
-| 89 | api.history.add | arrow | Invokes main to append a play to history. |
+| 89 | api.history.add | arrow | Invokes main to write or update a play's history entry. |
 | 90 | api.history.list | arrow | Invokes main for recent history, optionally limited. |
 | 91 | api.history.summary | arrow | Invokes main for the seven-day listening summary. |
 | 94 | api.favorites.list | arrow | Invokes main for the liked tracks. |

@@ -4,6 +4,8 @@
 
 **Status (2026-10-27):** superseded as a plan. The 1 Hz clock throttle, the measurement-harness fixes and the Electron 45 baseline below all shipped; [PLAN.md](PLAN.md) §6 is the canonical record. This file is kept for the harness gotchas and the attribution evidence.
 
+**Build note (2026-11-11):** macOS builds are now ad-hoc signed rather than unsigned. References below to an "unsigned build" describe the 0.2.x build used for these measurements.
+
 **Branch note:** this was written on `main`, which has since moved to 0.2.4. `home-redesign` diverged at `7f06952` and does **not** contain `main`'s newer commits — including the taskbar-preview playback controls (`d698227`), mouse back/forward navigation, wheel volume, the repeat-mode icon and the 0.2.3–0.2.4 releases. Do not read the branch/push state below as current.
 
 **Goal (historical):** reduce resource use of the packaged app. The immediate target was <5% CPU while playing.

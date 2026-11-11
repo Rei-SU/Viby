@@ -47,13 +47,14 @@ The build is ad-hoc signed but not notarized. Gatekeeper may report it as damage
 - **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a cache that makes a replay instant. Quality is either best available or a 64 kbps data saver, and it is never silently downgraded.
 - **A queue you can shape.** The queue docks beside the page: reorder it with the grip or the keyboard, or drag any song from search, an album or your history straight into it.
 - **A home that remembers.** Recently played rows, the last 100 plays in a side panel, a weekly listening snapshot with your top artists, and mood pages that open YouTube Music's own Focus, Energize, Chill and Decades collections.
-- **A library that stays yours.** Liked songs, playlists, saved albums and EPs, history and downloads live on your disk, fully usable signed out. No account, no cloud, no "syncing…" spinner.
-- **Downloads that belong to the library.** Download songs, albums, playlists or Liked Songs; badges and progress rings show what is on disk. Viby follows your connection and can be switched offline by hand, with an Offline Home for what you kept.
+- **A library that stays yours.** Liked songs, playlists, saved albums and EPs, history and downloads live on your disk, fully usable signed out. Artist pages open a full discography — Popular releases, Albums, and Singles and EPs — with a Show all page in list or grid. No account, no cloud, no "syncing…" spinner.
+- **Downloads that belong to the library.** Download songs, albums, playlists or Liked Songs; badges and progress rings show what is on disk, and a docked panel groups active work by album or playlist with pause, resume and cancel. Viby follows your connection and can be switched offline by hand, with an Offline Home for what you kept.
 - **Lyrics that keep up.** Time-synced lyrics from LRCLIB, plain text from lyrics.ovh as a backup, click any line to seek, and a docked panel that leaves the page usable.
 - **Your music on Discord.** Friends see what's playing while the Discord desktop app is running. On by default; pausing clears it, and one switch in Settings turns it off.
 - **Your playlists, not a fresh start.** Paste a public Spotify, Apple Music, Deezer, YouTube Music or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is offered for review, never silently swapped.
+- **Actions where you are.** Right-click any song or release for Play next, Add to queue, Add to playlist, Like, Download and Go to artist or album. The menu works from the keyboard and flips at the window edge.
 - **Small things that add up.** Search from the titlebar (`⌘K` / `Ctrl K` or `/`), a full set of player shortcuts, launch at login with an optional minimized start, optional close-to-tray playback, Windows taskbar controls, and a What's New sheet after an update.
-- **Quiet by design.** A monochrome interface, a slim icon rail, and a light footprint — under 400 MB at idle in our macOS tests.
+- **Quiet by design.** A near-monochrome interface with one green active-state accent, a slim icon rail, and a light footprint — under 400 MB at idle in our macOS tests.
 
 ## A closer look
 

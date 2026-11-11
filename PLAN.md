@@ -2,7 +2,7 @@
 
 A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
 
-Last updated: 2026-10-27 (rev 16)
+Last updated: 2026-11-11 (rev 17)
 
 ---
 
@@ -28,7 +28,7 @@ Every decision below came from you, with the technical consequence I derived fro
 | 14 | Shell | Slim sidebar + art-forward heroes | Apple Music feel, still navigable |
 | 15 | OS integration | Media keys + Now Playing, no tray/mini-player | `navigator.mediaSession` — no native code |
 | 16 | Quality | User-selectable, default best, **never auto-downgrade** | Honour the setting exactly; buffer rather than reduce bitrate |
-| 17 | Delivery | Auto-update via GitHub Releases | Release builds are automated: pushing a `v*` tag builds macOS (Intel + Apple Silicon) and Windows and publishes to GitHub Releases. Windows installs updates silently in place and relaunches itself; macOS notifies, downloads and opens the DMG because an unsigned build cannot self-update (see §2.1). |
+| 17 | Delivery | Auto-update via GitHub Releases | Release builds are automated: pushing a `v*` tag builds macOS (Intel + Apple Silicon) and Windows and publishes to GitHub Releases. Windows installs updates silently in place and relaunches itself; macOS notifies, downloads and opens the DMG because an ad-hoc-signed build cannot self-update (see §2.1). |
 | 18 | Distribution | Public beta on GitHub; built for me and a few friends first | Installers, first-run setup, graceful upstream failure |
 | 19 | Name | Viby | Bundle ID, installers, window title |
 | 20 | Deferred | No EQ, gapless, crossfade, sleep timer, scrobbling, Discord, stats, sync, mobile | Kept out of v1 deliberately; accounts/sync and mobile are planned post-v1, not abandoned. |
@@ -37,6 +37,8 @@ Every decision below came from you, with the technical consequence I derived fro
 | 23 | Player-client rotation | Don't pin clients; let `yt-dlp` choose, pin only as fallback | Measured 2026-10-18: every pinned set was SABR-only or failed. See §2.4. |
 | 24 | Accounts (later) | Optional, local-first, for backup and sync | Never a prerequisite for listening or the local library. Built only after the core is polished, and designed alongside the planned mobile client. See §9 P6 and §10. |
 | 25 | Offline & downloads | Explicit downloads + a first-class offline mode; cache stays invisible | Downloads live in app-managed storage, are never auto-evicted, and belong to the user. Offline mode is automatic with a manual override. See §17. |
+
+Decisions 15 and 20 changed after v1: tray/menu-bar background playback, Discord Rich Presence and the listening snapshot shipped in later releases (§13, §18). The rows above record the v1 answer, not a current limitation.
 
 ## 2. Reality checks that shaped the design
 
@@ -162,7 +164,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 - Resume where you left off on relaunch; restore queue.
 - Sleep prevention while playing (Electron `powerSaveBlocker`).
 - Media keys + OS Now Playing via `mediaSession`, with artwork.
-- Settings: quality (best available / data saver ~64kbps, honoured exactly — no auto-downgrade), autoplay, background playback (close hides to the tray/menu bar), launch at login (on by default) with an optional minimized start, cache cap and clear cache, offline mode, and downloads storage.
+- Settings: quality (best available / data saver ~64kbps, honoured exactly — no auto-downgrade), autoplay, background playback (close hides to the tray/menu bar), launch at login (on by default) with an optional minimized start, cache cap and clear cache, offline mode, downloads storage, and Discord presence.
 - On a slow network: buffer, never silently reduce quality. If it can't keep up we tell you, we don't decide for you.
 
 ### 5.2 Search
@@ -174,18 +176,19 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 
 ### 5.3 Browse & categories
 - Home shelves from YouTube Music, including chart and mood carousels when they are surfaced.
-- Dedicated moods/genres browsing is deferred (see §9 P4); only the shelves YouTube Music surfaces on Home are present.
+- Mood tiles open YouTube Music's own Focus, Energize, Chill and Decades collections; there is no separate genre index. See §13.
 - Home: recently played plus YouTube Music's home shelves; artist, album, playlist and song pages open from any card or row.
+- Artist pages group releases as Popular releases, Albums, and Singles and EPs, with a Show all discography page (list or grid) and a Play all queue that continues through every release.
 
 ### 5.4 Library
 - **Favorites** and **playlists** are local-first and never vanish when upstream changes. They stay on the machine by default; optional accounts (later) back them up and sync them across devices.
-- **History**: every played track with timestamp and completion ratio, capped at the last 5,000 plays; feeds "recently played" and lets the cache policy promote repeatedly-played tracks.
+- **History**: a play counts after 30 seconds of actual listening (Spotify's rule; a shorter track counts when it finishes), then one entry with timestamp and completion ratio, updated when the play pauses or ends, capped at the last 5,000 plays; the entry appears in Recently played and the open history panel as soon as it is written, and feeds the cache policy that promotes repeatedly-played tracks.
 - Playlist cover = first track's artwork; user-picked cover art is not in v1.
-- **Downloads** are part of Library, not a separate page: badges, partial-progress rings, a Downloaded filter, and a standalone-songs section. See §17.
-- Every track row: play, queue-next, add to playlist, favorite, download, go to album, go to artist.
+- **Downloads** are part of Library, not a separate page: badges, partial-progress rings, a Downloaded filter, and a standalone-songs section. A docked Downloads panel groups active work by album, playlist or EP and offers pause, resume and cancel. See §17.
+- Every track row: play, queue-next, add to playlist, favorite, download, go to album, go to artist. Right-clicking a row or release opens the same actions in one app-wide menu, including Play next and Add to queue. See §19.
 
 ### 5.5 Lyrics
-Layered, in this order, each result cached permanently:
+Layered, in this order, each result cached (misses are retried after 24 hours):
 1. LRCLIB `/api/get` with title, artist, album and duration.
 2. LRCLIB `/api/search` with cleaned title and artist, choosing the closest duration and preferring synced lyrics.
 3. `lyrics.ovh` plain text when LRCLIB has nothing.
@@ -208,7 +211,7 @@ Import is link-only by decision: no CSV or plain-text floor in v1, and only play
 **Matcher behaviour** (#8): exact title+artist match on YouTube Music search → auto-accept. Low confidence (fuzzy-only match, duration mismatch >10s, or several close candidates) → the review screen shows candidate choices with artist and duration, and lets you pick, skip, or leave the row unmatched. Nothing is silently wrong. YouTube playlists bypass matching and use their exact ids; album-level import is not in v1.
 
 ### 5.7 Not in v1
-Equalizer, gapless, crossfade, sleep timer, scrobbling, mini-player, tray, listening stats, device sync, i18n, mobile, local file playback. Each is a clean addition later; none blocks the core. Accounts and cross-device sync are also post-v1: local-first stays the default, and listening never requires signing in.
+Equalizer, gapless, crossfade, sleep timer, scrobbling, mini-player, device sync, i18n, mobile, local file playback. Each is a clean addition later; none blocks the core. Accounts and cross-device sync are also post-v1: local-first stays the default, and listening never requires signing in.
 
 ## 6. Performance budget
 
@@ -235,7 +238,7 @@ The budget is a hard constraint, not an aspiration. If a change breaks it, the c
 | Playing + lyrics | 466 MB (451–474) | **12–18%** (renderer 8.4%, GPU 7.4% in the 17.7% sample) |
 | Paused after playback | 455 MB | 0.77% |
 
-- **Startup:** page 560–731 ms, shell 755–1106 ms, Home cards 755–1238 ms on warm launches. The first launch after a fresh unsigned build can take ~4 s while macOS scans the bundle.
+- **Startup:** page 560–731 ms, shell 755–1106 ms, Home cards 755–1238 ms on warm launches. The first launch after a fresh build can take ~4 s while macOS scans the bundle.
 - **Bundle (Electron 45):** 425 KB JS + 92 KB CSS raw = **100 KB gzip**.
 - **Soak:** 452 → 455 MB over 2 minutes (+3 MB), no leak. CPU 11.61% with the lyrics panel open.
 - **What was eating the CPU:** hiding the player dock cut playing CPU from ~12.0% to ~6.2%; hiding just the scrubber got ~6.3%, while hiding only the seek input or only the time labels changed nothing. The JS profile was almost entirely idle: the cost was layout, style recalc and compositing triggered by `timeupdate` firing ~4×/s (`RecalcStyleCount` 39 → 10 and `LayoutCount` 21 → 10 per sample once throttled). `backdrop-filter`, animations, layer containment, `will-change` and moving the scrubber out of the dock made no meaningful difference.
@@ -262,7 +265,7 @@ Cache-worthiness rule (keeps the cache useful instead of full): a track is cache
 | R1 | YouTube PO-token / SABR enforcement blocks anonymous stream URLs | Playback fails for affected tracks | Prefer `yt-dlp`'s default client selection (measured best on 2026-10-18); pin clients only as fallback; accept `https` progressive formats only and fall back to download-to-cache for SABR-only tracks; bundle the `bgutil` PO-token provider so tokens are generated locally; keep `yt-dlp` auto-updating; **break-glass**: optional cookie import in Advanced settings | Medium-high. **Verified working 2026-10-18** with no PO token and no cookies (see §2.4) — but only via the default client selection, and `m3u8_native` audio had to be rejected to keep playback honest. Note the managed resolver tracks the bundled zipapp (2026.10.26 as of 2026-10-28) and refreshes on launch; it is newer than the 2026.03.17 on `PATH`. Expect occasional multi-day windows needing a plugin update — the provider slot in `resources/yt-dlp-plugins/` is pre-wired for exactly that. Still the single biggest existential risk. |
 | R2 | InnerTube constants (API key, client version) rotate | Search/browse errors | All constants in one patchable config file; fall back to `yt-dlp` metadata for search; overridable without a new build | Low |
 | R3 | IP rate-limiting / bot checks from heavy use | Throttled or blocked | Aggressive caching (2h URL cache, bounded audio cache), a resolve only when playback needs one, prefetch limited to the single next track, polite user agent, request pacing with exponential backoff, concurrency cap | Low for personal use |
-| R4 | macOS auto-update impossible unsigned | No silent updates on your main machine | Wired: Windows checks, downloads, silently installs and relaunches; macOS checks GitHub Releases, downloads the matching DMG and opens it. Silent macOS updates remain blocked until Developer ID signing/notarization. | Accepted |
+| R4 | macOS auto-update impossible without Developer ID signing | No silent updates on your main machine | Wired: Windows checks, downloads, silently installs and relaunches; macOS checks GitHub Releases, downloads the matching DMG and opens it. Silent macOS updates remain blocked until Developer ID signing/notarization. | Accepted |
 | R5 | Apple Music import depends on scraping | Import breaks | Keep each adapter isolated; failures are per-track and the rest of the import continues. | Accepted |
 | R6 | Spotify embed truncates long playlists | Partial import | Anonymous-token bootstrap pages past the embed limit; the review screen reports the track count, and the embed's first 100 remain a fallback. | Low |
 | R7 | SoundCloud `client_id` rotation | Import breaks | Re-extract from the web-player JS on failure; per-track failures continue the batch. | Low |
@@ -339,7 +342,7 @@ Shipped after the first pass: likes, playlists and history built on the atomic J
 *Acceptance:* find a song, play it, favourite it, build a playlist, restart, everything is still there. **Met.**
 
 **P3 — Lyrics. Shipped.**
-Full fallback chain, synced auto-scroll, click-to-seek, permanent caching.
+Full fallback chain, synced auto-scroll, click-to-seek, cached results (misses retried after 24 hours).
 
 *Acceptance:* a synced track highlights the correct line throughout playback and still works offline from cache.
 
@@ -348,12 +351,12 @@ Full fallback chain, synced auto-scroll, click-to-seek, permanent caching.
 *Acceptance:* paste a public Spotify/Apple Music/Deezer/YouTube Music/SoundCloud playlist; the source
 appears, tracks are matched or visibly flagged, and the playlist is created in source order. Verified:
 Today's Top Hits (50) → 48 auto / 2 review / 0 missing; a 951-track YouTube playlist imports in ~11s.
-Deferred beyond this slice: moods/genres browsing, private/collaborative Spotify playlists, and Liked Songs. The CSV/text floor was dropped by decision (link-only interaction).
+Deferred beyond this slice: private/collaborative Spotify playlists and importing a service's Liked Songs. Moods/genres browsing shipped later (§13). The CSV/text floor was dropped by decision (link-only interaction).
 
 **P5 — Ship. Shipped, with macOS signing deferred.**
-Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies, silently installs in place (NSIS, per-user) and relaunches itself; macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. After an update, the first launch shows the release notes for the new version once, from the same annotated tag that becomes the GitHub release body (§2.1c). Windows 11 manual checks pass on Electron 45, including in-client updates; Windows 10 uses the same x64 build and is covered by that pass by maintainer decision. macOS signing/notarization is deferred because it requires a paid Apple Developer account, so unsigned DMGs remain the current release path. The update-signing key is generated and pinned in `src/main/update-key.ts`; CI must provide its private half as `VIBY_UPDATE_KEY`, or the release workflow refuses to publish.
+Installers (DMG + NSIS), bundled runtime with no system Python, first-run provisioning, error states for upstream and offline failures, release automation (GitHub Actions on `v*` tags) and in-app updates are in place. Windows checks, downloads, verifies, silently installs in place (NSIS, per-user) and relaunches itself; macOS checks, downloads the matching DMG, verifies it and opens it, because an ad-hoc-signed build cannot satisfy Squirrel.Mac (§2.1). Checks never download on their own, transfers can be cancelled, a stalled transfer times out, and skipped versions are remembered. After an update, the first launch shows the release notes for the new version once, from the same annotated tag that becomes the GitHub release body (§2.1c). Windows 11 manual checks pass on Electron 45, including in-client updates; Windows 10 uses the same x64 build and is covered by that pass by maintainer decision. macOS signing/notarization is deferred because it requires a paid Apple Developer account, so ad-hoc-signed DMGs remain the current release path. The update-signing key is generated and pinned in `src/main/update-key.ts`; CI must provide its private half as `VIBY_UPDATE_KEY`, or the release workflow refuses to publish.
 
-*Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. The unsigned DMG needs the documented right-click → Open first launch; this has not been formally verified with an external user.
+*Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. The ad-hoc-signed DMG needs the documented `xattr -dr com.apple.quarantine /Applications/Viby.app` first launch; this has not been formally verified with an external user.
 
 **P6 — Accounts and sync. Deferred on purpose.**
 Not started. Begins only once P5 is done and the core experience is fully polished — playback correct, the look and feel settled, and no open fundamentals. Until then the profile avatar stays a placeholder.
@@ -376,6 +379,9 @@ No blocking product questions remain. P5 is shipped with macOS signing deferred;
 ### Known debt
 
 - **Customisable keyboard shortcuts.** The player key set in §13 is fixed by the build. Settings should eventually let each action be rebound, flag conflicting bindings, offer a reset to defaults, and persist the map with the other settings; labels need to follow the platform (`⌘` on macOS, `Ctrl` on Windows). Deferred until the fixed set has seen real use, so the defaults are informed by it rather than guessed up front.
+- **Playlist drag-to-reorder.** The queue reorders with a pointer grip; playlists still do not. The same pattern should move there, with keyboard reordering.
+- **List virtualization.** CollectionView and DetailView page at 120 rows, but the queue still mounts every row. Virtualize before very long queues become common.
+- **Manual search in the importer.** Rows that match nothing can be skipped, but not searched by hand. Album and single links are also not accepted yet.
 
 ## 11. Build notes and gotchas
 
@@ -449,7 +455,7 @@ New harness: `tests/behaviour.mjs` (with `tests/cdp.mjs`) drives the real player
 | B16 | Volume slider wrote `settings.json` on every input event | No debounce on `settings.set` | 300ms debounce (`persistSettings`) |
 | B17 | Lookahead prefetch wasted a resolve under shuffle / repeat-one | It warmed the sequential next track, which those modes ignore | Skip prefetch in both modes |
 
-Verified behaviour (all passing): remove a later track, remove the current track, clear; repeat-one restarts; repeat-all wraps; shuffle stays in range and varies; favourites persist and the heart reflects them; pausing records history with a thumbnail; `mediaSession` publishes title/artist/artwork; cached streams show the badge.
+Verified behaviour (all passing): remove a later track, remove the current track, clear; repeat-one restarts; repeat-all wraps; shuffle stays in range and varies; favourites persist and the heart reflects them; a play is recorded after 30 seconds of listening with a thumbnail; `mediaSession` publishes title/artist/artwork; cached streams show the badge.
 
 ### Round five — view state
 
@@ -815,7 +821,7 @@ A track credited to several artists only linked the first one. A search row knew
 - `Track.artistParts` (`SubtitlePart[]`) is the source's credited run, separators included (`Stormy`, `, `, `Manal`). `artist` remains the display string. `HistoryEntry.artistParts` and `ImportTrack.artistParts` carry the same shape into history and YouTube imports.
 - `src/shared/artist-credits.ts` is the single parser. `creditParts()` takes the leading run from a row's parts and stops at the album, a play counter or a duration; `artistPartsFor()` prefers stored parts and otherwise splits the display string; `isArtistName()` keeps connector words (`feat.`, `with`, `x`) out of the links.
 - The fallback split is deliberately conservative: comma, spaced `&`/`+`, `feat.`/`ft.`/`featuring`/`with`, and spaced `x`. `R&B`, `AC/DC` and a trailing `X` stay whole. A split part carries no id, so clicking it searches that exact name — `openArtist()` now requires an exact normalized match before accepting the first result.
-- Structured credits win everywhere: `toTrack`, the audio-swap path, the import matcher, YouTube playlist imports, downloads (`patchTrack`/`repairCredits`) and the history backfill keep or restore them. Old history and yt-dlp-resolved tracks are split at render time, and `recordHistory` stores the split so a replay from Recently played rows keeps every link.
+- Structured credits win everywhere: `toTrack`, the audio-swap path, the import matcher, YouTube playlist imports, downloads (`patchTrack`/`repairCredits`) and the history backfill keep or restore them. Old history and yt-dlp-resolved tracks are split at render time, and `writeHistory` stores the split so a replay from Recently played rows keeps every link.
 - The dock, song page and queue render `ArtistLinks`, which links each name inline with the original separators and truncates the line. Track rows already rendered `CatalogItem.parts`; `trackToItem` now rebuilds them from `artistParts`, so playlists, downloads and Liked songs behave the same.
 
 **B42 — "An object could not be cloned."** Adding `artistParts` made `Track` nested for the first time. Svelte 5 state is a deep proxy, and every IPC call structured-clones its arguments; the shallow `{ ...track }` snapshot from B14 now carried a proxied array, so favouriting, adding to a playlist, downloading, creating an imported playlist and the 3-second session save all threw. The session save failed silently as an unhandled rejection and repeated on every save during playback. `plainTrack()`/`plainParts()` (`src/renderer/lib/track.ts`) copy the credit array at every boundary — session, history, favourites, playlists, downloads, import — and `creditParts()` returns copies so catalog-derived tracks are plain to begin with. The `links` e2e toggles a favourite on a collaboration, and the `import` e2e creates a playlist, which both fail without this.
@@ -1140,10 +1146,37 @@ Viby shows what is playing as Discord Rich Presence over Discord's local RPC soc
 
 **Decisions (2026-10-28).** On by default, opt-out in Settings. Presence is cleared when paused or stopped. Album art is the track's YouTube thumbnail (falling back to the app icon when none is usable), the activity reads "Listening to Viby" with the song and artist underneath, and a single "Get Viby" button links the releases page. Zero new runtime dependencies: the IPC client is owned here rather than adding a library.
 
-**Design.** Main owns the socket (`src/main/discord/`); the renderer sends a plain `PresenceSnapshot` only on track, play/pause and seek changes (Svelte proxies never cross IPC). `buildActivity` projects the position forward from `updatedAt`, so a rate-limited send still shows an accurate progress bar. Discord allows 5 updates per 20 seconds, so the manager coalesces to the newest state and spaces sends 4 s apart; it reconnects with 30 s → 60 s → 2 m → 5 m backoff and answers pings with pongs. Pausing or clearing sends a null activity; disabling or quitting closes the socket, which removes the presence.
+**Design.** Main owns the socket (`src/main/discord/`); the renderer sends a plain `PresenceSnapshot` only on track, play/pause and seek changes (Svelte proxies never cross IPC). `buildActivity` projects the position forward from `updatedAt`, so a rate-limited send still shows an accurate progress bar. Discord allows 5 updates per 20 seconds; sends inside the cap are immediate, a 250 ms coalescing window merges the burst around a track change, and the manager waits only when the budget is exhausted. It reconnects with 30 s → 60 s → 2 m → 5 m backoff and answers pings with pongs. Pausing or clearing sends a null activity; disabling or quitting closes the socket, which removes the presence.
 
 **Activity.** type `Listening` (2), name `Viby`, details = title, state = artist, `status_display_type = state` so the member list shows the artist under the music note, start/end timestamps for the progress bar, large image = artwork URL (or omitted so Discord shows the app icon), large text = album, a small spinning-record badge with the stream's codec/bitrate on hover, click-through links on the title, artist and artwork, and one **Get Viby** button. Text truncates to 128 characters and the image URL falls back to a short `i.ytimg.com` thumbnail past Discord's 313-character limit. The badge is an external GIF because Discord does not animate uploaded assets; it lives at `assets/discord-vinyl.gif` and is served from `main` (dev runs can override `VIBY_DISCORD_BADGE_URL`).
 
 **Settings.** `discordPresence` (default true). The row explains that the Discord desktop app and its Activity Privacy setting control visibility, and that only the current song leaves Viby.
 
 **Verified.** Unit `discord` covers the frame codec, activity mapping, rate limiter and a live-socket client against a fake Discord server; a silent probe against the real Discord client confirmed the handshake and a null activity. The visible card was checked in the running app on 2026-10-28 (Listening label and album art); the Get Viby button is only visible to other users and still needs a second account to confirm.
+
+## 19. Post-0.5.2 releases (shipped)
+
+The releases after 0.5.2 are recorded here in their current form; the annotated tags carry the user-facing wording.
+
+### 19.1 Downloads panel (0.5.4)
+
+The titlebar download indicator is one icon: it drifts while a file downloads, stays static when the queue is paused, becomes a check when the queue drains, and turns into a warning when jobs fail. Opening it docks `DownloadPanel` in the right-hand panel, grouping jobs by album, playlist or EP (loose songs form one group) with per-item and per-collection pause, resume and cancel. A user pause is stored on the job (`pausedByUser`), so a restart or reconnect does not resume it. Cancelling a collection aborts the active child, removes only jobs with no other owner and keeps completed songs. The same pause/resume toggle and a compact cancel control sit on album and playlist headers.
+
+### 19.2 Update card (0.5.5)
+
+The settings icon shows a dot while an update is pending. Opening Settings from that icon scrolls to the Updates card and flashes it; the card shows the version transition, a status badge and one solid action.
+
+### 19.3 Artist discography (0.5.6)
+
+Artist pages group releases as Popular releases, Albums, and Singles and EPs. Show all opens `DiscographyView` with All/Albums/Singles filters, newest first, in a persisted list or grid layout; list rows expand to their tracks lazily and cache them. Play all queues the full popular list, then walks the discography newest-first through a lazy queue tail (`artist-queue.ts`), deduped against what is already queued. Release rows borrow the release header's cover, album, id and type. Autoplay radio starts only after the tail is exhausted; repeat-all loops the artist queue, and shuffle grows the pool a batch at a time. The session stores the remaining release ids, so a relaunch mid-album continues the discography. Release track rows without credits inherit the page artist (`withFallbackArtist`).
+
+### 19.4 Right-click action menu (0.5.7)
+
+One app-wide `ContextMenu` opens from a track row, media card, quick-search row, top result, queue row, player-bar title or release header. Song menus offer Play, Play next, Add to queue, Add to playlist, Like, Download and Go to artist/album; release menus load the track list for Play, queue, playlist and download, and reuse Save to Library. Add to playlist opens a searchable flyout with Create playlist; release tracks load only when an entry is chosen. The menu is portal-rendered, flips at viewport edges, supports Context Menu/Shift+F10, arrow keys, Home/End and Escape, and closes on outside click, scroll or navigation.
+
+### 19.5 Smaller fixes in the same span
+
+- 0.5.4: synced lyrics sample the audio clock; durations over an hour format correctly; large collections no longer stall; external HTTP bodies are bounded and every redirect is rechecked.
+- 0.5.5: name-only artist and album links verify the title and credited artist; song titles open the album at the matching row; Discord keeps the previous card through a track switch.
+- 0.5.6: Best quality replaces a Data saver copy; damaged saved audio is re-fetched; clearing the cache cannot be undone by an in-flight download.
+- 0.5.7: active shuffle and repeat use the single green accent; clicking the active rail tab returns from a detail page to that view.

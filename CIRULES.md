@@ -526,8 +526,11 @@ never the same `latest.yml` that stable clients poll.
 
 ### 4.6 Signing status (known limitation)
 
-macOS builds are unsigned (`identity: null`). Users must right-click → Open on
-first launch, and in-place macOS updates stay disabled until a Developer ID
+macOS builds are ad-hoc signed (`identity: '-'`) but not notarized. Apple Silicon
+users must remove the download quarantine once with
+`xattr -dr com.apple.quarantine /Applications/Viby.app`; a quarantined build whose
+signature cannot be validated is reported as "damaged" and that dialog has no
+Open Anyway path. In-place macOS updates stay disabled until a Developer ID
 certificate and notarization are in place; installed builds still check GitHub
 Releases and open the matching DMG manually. Windows updates install in place
 while unsigned.
@@ -632,7 +635,7 @@ these is ordinary work, not an emergency.
 | No PR CI workflow (only `release.yml`) | typecheck/tests can regress on `main` | add `ci.yml`: `npm ci`, `npm run typecheck`, targeted suites |
 | Actions pinned to `@v4`, not SHAs | supply-chain drift | pin SHAs, let Dependabot bump |
 | No `commitlint` hook | malformed subjects reach `main` | §8 |
-| macOS unsigned | Gatekeeper friction, no auto-update | Developer ID + notarization (PLAN §2.1) |
+| macOS ad-hoc signed, not notarized | Gatekeeper friction, no auto-update | Developer ID + notarization (PLAN §2.1) |
 | Pre-releases publish as stable | a beta reaches every client | `--prerelease` support before using suffixes |
 
 ---

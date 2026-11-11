@@ -10,6 +10,11 @@ Scope: things that do not work, look wrong, or are unverified on Windows. macOS 
 
 Severity: **Blocker** (prevents running/building), **Major** (feature broken or visibly wrong), **Minor** (cosmetic/ergonomic), **Unverified** (design claim not yet checked on real hardware).
 
+Docs refreshed 2026-11-11 against 0.5.7. No new Windows-specific findings have been
+recorded since the 0.5.2 screenshot pass. The friend-visible Discord card and the
+OS login-item launch still need a second account or a packaged install and are
+tracked in [TESTING.md](TESTING.md).
+
 ---
 
 ## 1. Build & packaging
