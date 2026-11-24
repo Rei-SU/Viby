@@ -190,20 +190,23 @@ Find the row for what you changed; run what it lists.
 | `src/main/recording-alias.ts`, `src/main/safe-name.ts` | unit `recording-alias`, `audio-cache`, `downloads-store` · e2e `offline`, `playback` |
 | `src/main/settings.ts`, `src/renderer/components/SettingsView.svelte` | unit `startup` · e2e `settings`, `playback` (volume restore) · behaviour · visual check: marked settings icon opens the update card, scrolled and flashed |
 | `src/main/startup.ts`, `src/main/index.ts`, `src/main/windows.ts` | unit `startup` · e2e `settings` |
-| `src/main/updater*.ts`, `release-feed.ts`, `update-manifest.ts`, `src/renderer/lib/updates.svelte.ts` | unit `version`, `updates` · manual update smoke test (Windows) |
+| `src/main/background.ts`, `src/main/lifecycle.ts` | e2e `settings` · manual: close-to-tray hides the window and keeps playback, tray Quit exits |
+| `src/main/taskbar.ts` | manual Windows: taskbar previous/play/next, progress and overlay controls |
+| `src/main/updater*.ts`, `updater-manual.ts`, `update-key.ts`, `release-feed.ts`, `update-manifest.ts`, `src/renderer/lib/updates.svelte.ts` | unit `version`, `updates` · manual update smoke test (Windows) |
 | `.github/workflows/release.yml`, `scripts/check-release-notes.mjs` | unit `release-notes` · inspect the draft release body on the next tag |
 | `src/main/json-store.ts` | unit `library` · e2e `library`, `resume` |
 | `src/main/downloads/**`, `src/main/network.ts` | unit `downloads-store`, `downloads-manager`, `network` · e2e `offline`, `playback` |
-| `src/renderer/lib/download-jobs.ts`, `DownloadPanel.svelte`, `SidePanel.svelte` | unit `download-jobs` · e2e `queue`, `lyrics` (shared panel shell) · visual check of the downloads panel |
+| `src/renderer/lib/download-jobs.ts`, `download-groups.ts`, `DownloadPanel.svelte`, `SidePanel.svelte` | unit `download-jobs`, `download-groups` · e2e `queue`, `lyrics` (shared panel shell) · visual check of the downloads panel |
+| `src/renderer/components/DownloadIndicator.svelte` | e2e `playback`, `offline` · visual check: the titlebar indicator appears while work is active |
 | `src/renderer/lib/downloads.svelte.ts`, `src/renderer/lib/network.svelte.ts`, `OfflineHome` | e2e `offline`, `playback`, `navigation` · unit `download-groups` |
-| `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
+| `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `DownloadCollectionView.svelte`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts`, `private-address.ts`, `image-extension.ts` | unit `images`, `main-guards` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/renderer/lib/player.svelte.ts`, `player-source.ts`, `queue-session.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening`, `queue-session`, `player-source` · manual: relaunch mid-discography restores the right track and keeps the artist tail |
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
 | `src/main/changelog.ts`, `src/renderer/lib/changelog.svelte.ts`, `ChangelogDialog`, `scripts/build-changelog.mjs` | unit `changelog`, `release-notes` · e2e `changelog`, `settings` |
 | `src/shared/version.ts`, `src/main/version.ts` | unit `version`, `updates`, `changelog` |
-| `src/renderer/lib/nav.svelte.ts`, `release.ts`, `album.ts`, `artist.ts`, `entity-lookup.ts`, `src/shared/entity-identity.ts`, `src/shared/track-match.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title`, `track-match`, `entity-lookup`, `audio-track-pick` · visual check: search and history titles open the album, scroll to the row and flash it |
+| `src/renderer/lib/nav.svelte.ts`, `release.ts`, `album.ts`, `artist.ts`, `entity-lookup.ts`, `entity-search.ts`, `EntityLink.svelte`, `src/shared/entity-identity.ts`, `src/shared/track-match.ts` | e2e `navigation`, `links`, `release-focus` · unit `track-title`, `track-match`, `entity-lookup`, `audio-track-pick` · visual check: search and history titles open the album, scroll to the row and flash it |
 | `src/renderer/components/SearchBar.svelte`, `src/renderer/components/SearchView.svelte`, `src/renderer/lib/search.svelte.ts` | e2e `quick-search`, `navigation`, `links`, `shortcuts`, `release-focus` |
 | `src/renderer/lib/context-menu.svelte.ts`, `context-menu-entries.ts`, `context-item.ts`, `collection-tracks.ts`, `components/ContextMenu.svelte`, `src/shared/release-context.ts` | e2e `context-menu`, `quick-search`, `navigation` · visual check: song and release menus at the pointer, Escape/arrows, edge flipping |
 | `src/renderer/lib/lyrics.svelte.ts`, `lyrics-sync.ts`, `LyricsPanel.svelte` | e2e `lyrics`, `lyrics-change` · unit `lyrics-sync` |
@@ -214,17 +217,17 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/artist.ts` | e2e `links`, `navigation` |
 | `src/shared/artist-credits.ts`, `ArtistLinks`, `src/renderer/lib/track.ts`, `src/main/track-metadata.ts` | unit `artist-credits`, `entity-lookup`, `track-metadata`, `listening`, `import`, `downloads-store` · e2e `links`, `playback` |
 | `src/shared/track-title.ts`, title navigation metadata | unit `track-title`, `innertube`, `listening` · e2e `release-focus` |
-| `src/renderer/components/TrackRow.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts`, `release-focus`, `queue`, `context-menu` · visual check |
+| `src/renderer/components/TrackRow.svelte`, `SubtitleParts.svelte` | e2e `links`, `navigation`, `lyrics`, `home`, `shortcuts`, `release-focus`, `queue`, `context-menu` · visual check |
 | `src/renderer/lib/track-drag.svelte.ts`, `toast.svelte.ts`, `QueueDropBar` | e2e `queue` · native drag via CDP `Input.setInterceptDrags` |
-| `src/renderer/components/PlayerBar.svelte` | e2e `playback`, `links`, `lyrics`, `queue`, `context-menu` |
-| `src/renderer/lib/rail-fit.ts` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
+| `src/renderer/components/PlayerBar.svelte`, `src/renderer/lib/format.ts`, `quality.ts` | e2e `playback`, `links`, `lyrics`, `queue`, `context-menu` |
+| `src/renderer/lib/rail-fit.ts`, `Rail.svelte` | unit `rail-fit` · e2e `carousel`, `images`, `home` |
 | `src/renderer/lib/keyboard.ts` | e2e `shortcuts` · behaviour |
-| `src/renderer/components/HomeView.svelte`, `MediaCard` | e2e `navigation`, `images`, `carousel`, `release-focus`, `context-menu` |
-| `src/renderer/components/DetailView.svelte`, `DiscographyView.svelte`, `src/renderer/lib/artist-releases.ts`, `src/renderer/lib/artist-queue.ts`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening`, `artist-releases`, `artist-queue` · visual check: Popular 5→10, Play all queues the popular set plus the lazy discography tail, Discography tabs, Show all defaults to list with lazy tracks, grid toggle persists, filters and Back |
+| `src/renderer/components/HomeView.svelte`, `MediaCard`, `src/renderer/lib/catalog-cache.svelte.ts` | e2e `navigation`, `images`, `carousel`, `home`, `release-focus`, `context-menu` |
+| `src/renderer/components/DetailView.svelte`, `DiscographyView.svelte`, `DiscographyRelease.svelte`, `InlineAlert.svelte`, `src/renderer/lib/artist-releases.ts`, `src/renderer/lib/artist-queue.ts`, `ListeningDashboard.svelte` | e2e `navigation`, `home`, `carousel`, `library`, `release-focus` · unit `listening`, `artist-releases`, `artist-queue` · visual check: Popular 5→10, Play all queues the popular set plus the lazy discography tail, Discography tabs, Show all defaults to list with lazy tracks, grid toggle persists, filters and Back |
 | `src/renderer/components/PixelClock.svelte`, `src/renderer/lib/pixel-scramble.ts` | unit `pixel-scramble` · e2e `home` |
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |
-| `src/renderer/App.svelte` | all e2e (layout, routes, panels) |
+| `src/renderer/App.svelte`, `main.ts` | all e2e (layout, routes, panels) |
 | `src/main/discord/**`, `App.svelte` presence effect | unit `discord` · manual Discord check (Listening label, album art, Get Viby button, pause clears, switching tracks never blanks the card) |
 | `src/renderer/styles/global.css` | visual check · e2e `images` as a sanity pass |
 | `src/shared/**`, `src/preload/**`, `src/renderer/lib/api.ts` | **everything** (contract) |
@@ -251,6 +254,9 @@ Find the row for what you changed; run what it lists.
   can see) and pause-clears need a real Discord client and a second account.
 - **Window drag/resize** — needs a human (the drag strip's computed style is
   asserted, but not that the window moves).
+- **Close-to-tray** — with background playback on, closing the window must hide
+  it and keep audio going; the tray/menu **Quit** must exit for real. Needs a
+  packaged or dev window and a human.
 - **Memory/CPU budget** — `npm run measure` against the packaged app (run `npm run dist:dir` first). It samples RSS/CPU per process across idle, playback, lyrics and a 2-minute soak.
 - **Login-item registration and a minimized login launch** — need a packaged build. Check Login Items (macOS) or Startup apps (Windows), sign out/in, and confirm Viby starts (minimized when that toggle is on). Dev runs never touch the OS login items.
 - **Packaging** — run `npm run dist:dir`, launch the app in `dist/mac/`, play a

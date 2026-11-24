@@ -597,6 +597,8 @@ Home/End and Escape work, and it closes on outside click, scroll or navigation.
 - session persistence (throttled, exact saves on pause/seek/end/quit): a
   100-row window around the current track plus its queue offset, and the lazy
   tail descriptor, so a long queue restores the right song and keeps loading;
+- play counting: a play is recorded after 30 seconds of actual listening (a
+  shorter track counts when it ends), ignoring seeks and jumps;
 - `mediaSession` metadata/actions/position;
 - a throttled reactive clock for the bar and OS UI, plus an exact `currentTime`
   getter the synced lyrics panel samples each frame;
@@ -830,7 +832,7 @@ Date-stamped; see [PLAN.md](PLAN.md) and [TESTING.md](TESTING.md) for details.
 - **Downloads snapshots** are rebuilt in full and startup healing is synchronous;
   delta events and cached indexes are future work.
 - **Catalog→Track mapping** is duplicated between the renderer and import matcher.
-- **`registerIpc` is one ~900-line function** registering every channel; splitting it
+- **`registerIpc` is one ~730-line function** registering every channel; splitting it
   by domain is mechanical wiring work rather than a behavioural change.
 - **Coverage gaps** remain around media range/traversal, updater-native, image
   cache redirects and full download-manager state transitions.
@@ -846,9 +848,9 @@ This section is the complete file-level symbol index: every named function, clas
 method, constructor, getter and named arrow in the source, with its line and a
 one-line role.
 
-**Coverage:** 1,150+ rows across 151 source files, generated from the code on
-2026-11-04. Constructors, getters and the preload `window.viby` object arrows are
-included even where a basic AST pass would miss them.
+**Coverage:** 1,150+ rows across 151 source files, generated from the code and
+refreshed on 2026-11-11. Constructors, getters and the preload `window.viby`
+object arrows are included even where a basic AST pass would miss them.
 
 **How to use it:** find the area, then the file, then the symbol. The line number
 points at the declaration in this revision; if code has shifted, search the symbol

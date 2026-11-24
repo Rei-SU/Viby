@@ -6,7 +6,11 @@
 
 **Build note (2026-11-11):** macOS builds are now ad-hoc signed rather than unsigned. References below to an "unsigned build" describe the 0.2.x build used for these measurements.
 
-**Branch note:** this was written on `main`, which has since moved to 0.2.4. `home-redesign` diverged at `7f06952` and does **not** contain `main`'s newer commits — including the taskbar-preview playback controls (`d698227`), mouse back/forward navigation, wheel volume, the repeat-mode icon and the 0.2.3–0.2.4 releases. Do not read the branch/push state below as current.
+**Branch note:** this was written on `main` when it was around 0.2.1. By
+2026-11-25 `main` is on 0.5.7 plus later fixes, and both commits mentioned below
+(`efd434f`, `46f5739`) are part of `origin/main`. The `home-redesign` branch
+diverged at `7f06952` and is obsolete. Do not read the branch/push state below
+as current.
 
 **Goal (historical):** reduce resource use of the packaged app. The immediate target was <5% CPU while playing.
 
@@ -30,7 +34,7 @@ c67211d fix(measure): keep the display awake and count CPU per PID
 d795804 perf(player): throttle clock and media-session updates to 1 Hz
 ```
 
-Pre-existing and still unpushed: `efd434f`, `46f5739`.
+Pre-existing and now pushed: `efd434f`, `46f5739`.
 
 ## What changed
 
