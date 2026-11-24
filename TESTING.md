@@ -50,6 +50,7 @@ ones that touch main-process modules.
 | `library` | favourites, saved releases and playlists CRUD, persistence, self-healing |
 | `lyrics` | LRCLIB synced/plain, lyrics.ovh backup, cache, miss |
 | `lyrics-sync` | synced line selection at timestamp boundaries, duplicates and past the end |
+| `bounded-body` | capped external responses: oversize rejection, JSON/text decoding, interrupted streams |
 | `spotify` | Anonymous Spotify pathfinder: 200-track pagination, fields, non-playlist rejection |
 | `import` | Link detection, all four non-Spotify adapters, matcher scoring, YouTube exact path |
 | `downloads-store` | downloads index: references, shared-file survival, pruning, source-aware collection cancellation, healing, orphan sweep, pinned lyrics, path safety |
@@ -70,8 +71,10 @@ ones that touch main-process modules.
 | `artist-releases` | discography grouping: year parsing, missing release labels, Popular interleave, newest-first order, dedupe and missing shelves |
 | `artist-queue` | artist Play all tail: newest-first release loading, popular/cross-release dedupe by id or title + duration, five-track batches, header/card cover and album fallback, page-artist fallback, failed-release skip, cancellation, offline, and saved release ids |
 | `queue-session` | session windows: short queues, 20-before/100-row caps, absolute index mapping, last-track inclusion, legacy sessions without an offset, round trips |
+| `player-source` | source ownership when the player changes tracks or a resolve fails: reuse, detach, keep |
 | `audio-track-pick` | audio-first selection never crosses artists: exact artist match, version penalty, no guessing without an artist, page-artist fallback for credit-less rows |
 | `pixel-scramble` | dot-matrix boot: random digits, fixed colon, left-to-right lock order and the final landed value |
+| `rail-fit` | whole-card rail sizing: column count and card width at real viewport widths |
 | `images` | saved-library artwork cache: content addressing, dedupe, bulk resolution, stats, clear |
 | `main-guards` | private-address blocking (IPv4/IPv6/mapped) and image extension selection |
 | `network` | connectivity state machine with injected link/probe: offline, unreachable debounce, recovery, manual mode, dev override |
@@ -154,7 +157,7 @@ the app while they run — they own the queue.
 | `library` | playlists and saved releases appear, open, and delete cleanly |
 | `resume` | session save → reload → restored paused at the timestamp |
 | `navigation` | drag strip, full-bleed artist banner, titlebar back/forward, artist page from search, history restore |
-| `quick-search` | centered titlebar field, recents, grouped songs/artists/playlists, show-more filters, Enter routing, song click, arrow navigation |
+| `quick-search` | centered titlebar field, recents, grouped songs/artists/playlists, show-more filters, Enter routing, song click, arrow navigation, right-click keeps the palette open |
 | `context-menu` | right-click menus from quick search, song top result and album cards; song and release actions; Escape dismissal; Add to queue; Add to playlist hover flyout with search/create/list; Save to Library toggles |
 | `settings` | sidebar entry, quality/autoplay/cache-cap persist, clear control |
 | `offline` | manual offline: local-first Home, titlebar pill, gated Import, Charts page stays gone, Library stays and opens, separate Downloads page is gone, auto restores |
@@ -178,6 +181,7 @@ Find the row for what you changed; run what it lists.
 | `src/main/ytdlp/**` | unit `resolver` (incl. the data-saver ceiling) · e2e `playback` |
 | `src/main/innertube/**` | unit `innertube`, `catalog`, `thumbs`, `audio-track-pick` · e2e `images`, `navigation`, `home` |
 | `src/main/lyrics.ts` | unit `lyrics` · e2e `lyrics` |
+| `src/main/bounded-body.ts` | unit `bounded-body` · e2e `lyrics`, `import` |
 | `src/main/import/**` | unit `import`, `spotify`, `main-guards` · e2e `import` |
 | `src/renderer/components/ImportView.svelte` | e2e `import` |
 | `src/main/library.ts` | unit `library` · e2e `library` · behaviour |
@@ -195,7 +199,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts`, `private-address.ts`, `image-extension.ts` | unit `images`, `main-guards` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
-| `src/renderer/lib/player.svelte.ts`, `queue-session.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening`, `queue-session` · manual: relaunch mid-discography restores the right track and keeps the artist tail |
+| `src/renderer/lib/player.svelte.ts`, `player-source.ts`, `queue-session.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening`, `queue-session`, `player-source` · manual: relaunch mid-discography restores the right track and keeps the artist tail |
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
 | `src/main/changelog.ts`, `src/renderer/lib/changelog.svelte.ts`, `ChangelogDialog`, `scripts/build-changelog.mjs` | unit `changelog`, `release-notes` · e2e `changelog`, `settings` |
 | `src/shared/version.ts`, `src/main/version.ts` | unit `version`, `updates`, `changelog` |

@@ -1,8 +1,8 @@
 # Viby — Architecture
 
-Status: current as of **0.5.7** (2026-11-11). This document describes how the code is
-organized and how data moves. Product decisions, history and performance measurements
-live in [PLAN.md](PLAN.md); this is the map for finding and changing code.
+Status: current as of **main after 0.5.7** (2026-11-25). This document describes how
+the code is organized and how data moves. Product decisions, history and performance
+measurements live in [PLAN.md](PLAN.md); this is the map for finding and changing code.
 
 Suggested reading order: [README.md](README.md) (what Viby is) → this file (how it
 fits together, including the full function/symbol map) → [PLAN.md](PLAN.md) (why
@@ -637,7 +637,9 @@ The titlebar `SearchBar` is always mounted. It debounces, cancels stale
 requests, shows recents on focus and grouped quick results; Enter opens the full
 Search page, clicking a song plays it alone (radio follows), artists/playlists
 open their pages. The Search page reuses the same per-category calls and adds a
-Top result plus category grids.
+Top result plus category grids. Right-clicking a quick result opens the shared
+context menu; the palette stays open behind it and regains focus when an action
+runs, so typing and Escape keep working.
 
 ### 5.8 Interaction details
 
