@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { AccountCredentials } from '@shared/account'
-  import { account, syncSummary } from '../lib/account.svelte'
+  import type { AccountCredentials, SyncConflict } from '@shared/account'
+  import { account, relativeTime, syncSummary } from '../lib/account.svelte'
   import SignInForm from './SignInForm.svelte'
   import Icon from './Icon.svelte'
 
@@ -23,6 +23,9 @@
   let signOutError = $state('')
 
   let syncBusy = $state(false)
+  let conflictsOpen = $state(false)
+  let conflictList = $state<SyncConflict[]>([])
+  let conflictsBusy = $state(false)
 
   let exportBusy = $state(false)
   let exportNote = $state('')
@@ -74,6 +77,9 @@
     confirmPassword = ''
     passwordError = ''
     passwordNotice = ''
+    conflictsOpen = false
+    conflictList = []
+    conflictsBusy = false
 
     const first = panel.querySelector<HTMLInputElement>('input:not(:disabled)')
     ;(first ?? panel).focus()
@@ -241,6 +247,33 @@
       await account.syncNow()
     } finally {
       syncBusy = false
+    }
+  }
+
+  async function toggleConflicts(): Promise<void> {
+    if (conflictsBusy) return
+    if (conflictsOpen) {
+      conflictsOpen = false
+      return
+    }
+    conflictsBusy = true
+    try {
+      conflictList = await account.conflicts()
+      conflictsOpen = true
+    } finally {
+      conflictsBusy = false
+    }
+  }
+
+  async function clearConflicts(): Promise<void> {
+    if (conflictsBusy) return
+    conflictsBusy = true
+    try {
+      await account.clearConflicts()
+      conflictList = []
+      conflictsOpen = false
+    } finally {
+      conflictsBusy = false
     }
   }
 
@@ -519,6 +552,44 @@
             {syncBusy || sync.phase === 'syncing' ? 'Syncing…' : 'Sync now'}
           </button>
         </div>
+
+        {#if sync.conflicts > 0}
+          <div class="action">
+            <div class="action-copy">
+              <span>Replaced changes</span>
+              <span class="hint">
+                {sync.conflicts}
+                {sync.conflicts === 1 ? 'edit was' : 'edits were'} replaced by a newer copy from
+                another device. The local library now holds the winning version.
+              </span>
+            </div>
+            <div class="actions">
+              <button class="ghost" onclick={toggleConflicts} disabled={conflictsBusy}>
+                {conflictsOpen ? 'Hide' : 'View'}
+              </button>
+              <button class="ghost" onclick={clearConflicts} disabled={conflictsBusy}>
+                Clear
+              </button>
+            </div>
+          </div>
+          {#if conflictsOpen}
+            {#if conflictList.length === 0}
+              <p class="hint">No conflict details are left.</p>
+            {:else}
+              <ul class="conflict-list">
+                {#each conflictList as conflict (conflict.at + conflict.kind + conflict.recordId)}
+                  <li>
+                    <span class="conflict-kind">{conflict.kind}</span>
+                    <span class="conflict-id truncate" title={conflict.recordId}>
+                      {conflict.recordId}
+                    </span>
+                    <span class="conflict-at">{relativeTime(conflict.at)}</span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          {/if}
+        {/if}
 
         <div class="action">
           <div class="action-copy">
@@ -842,6 +913,40 @@
 
   .sync.offline {
     border-color: rgba(240, 196, 119, 0.24);
+  }
+
+  .conflict-list {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 4px 0;
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius-sm);
+    background: var(--glass);
+  }
+
+  .conflict-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .conflict-kind {
+    flex: none;
+    text-transform: capitalize;
+    color: var(--text-faint);
+  }
+
+  .conflict-id {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .conflict-at {
+    flex: none;
+    color: var(--text-faint);
   }
 
   .sync.offline p {
