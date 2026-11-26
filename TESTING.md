@@ -83,6 +83,12 @@ ones that touch main-process modules.
 | `updates` | update state machine with fake adapters: offline, macOS manual download, Windows download/install, overlapping checks, cancel, skipped versions, Ed25519 manifest verification, signed-hash hand-off |
 | `release-notes` | release-notes lint: allowed sections, empty/missing/duplicate sections, internal jargon, CRLF |
 | `changelog` | baking release notes from tags (sections, plain text, ordering, never ahead of the running version, release links) and which notes a launch shows (first install, upgrade from before the sheet, seen-but-never-shown catch-up, seen/shown baselines) |
+| `account-compare` | last-writer-wins ordering: timestamps, device tie-break, tombstone on an exact tie |
+| `account-bootstrap` | empty-install attach: no default settings queued, server settings win, later local changes still sync |
+| `account-outbox` | per-account queues: replacement, in-flight edits kept, drain and scoping |
+| `account-records` | local↔record mapping (playlist metadata plus one record per entry), first-account adoption, diff and tombstones, payload validation, pull application |
+| `account-sync` | pull-before-push, batching, rev cursor, merges, tombstones, losing writes reported as conflicts, error recovery, account isolation (fake PostgREST) |
+| `account-tokens` | `safeStorage` encryption at rest, memory-only fallback, corrupt and foreign-keyring files |
 
 ### Manual update smoke test (Windows, real hardware)
 
@@ -202,6 +208,8 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `DownloadCollectionView.svelte`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts`, `private-address.ts`, `image-extension.ts` | unit `images`, `main-guards` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
+| `src/main/account/**`, `src/shared/account.ts`, `src/preload/index.ts` account bridge | unit `account-compare`, `account-bootstrap`, `account-outbox`, `account-records`, `account-sync`, `account-tokens` · the live account checklist below |
+| `src/renderer/lib/account.svelte.ts`, `AccountSheet`, `SignInForm`, `SettingsView` account row | no automated e2e (needs a live mailbox) · manual account checklist · `npm run typecheck` |
 | `src/renderer/lib/player.svelte.ts`, `player-source.ts`, `queue-session.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening`, `queue-session`, `player-source` · manual: relaunch mid-discography restores the right track and keeps the artist tail |
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
 | `src/main/changelog.ts`, `src/renderer/lib/changelog.svelte.ts`, `ChangelogDialog`, `scripts/build-changelog.mjs` | unit `changelog`, `release-notes` · e2e `changelog`, `settings` |
@@ -265,3 +273,33 @@ Find the row for what you changed; run what it lists.
 - **Audio actually audible** — tests mute; a human must listen.
 - **In-place Windows updates** — the state machine is unit-tested with fakes;
   NSIS replacing a running install needs the manual smoke test above.
+- **Live accounts** — email delivery, deep links, two-device merge, password reset
+  and account deletion touch a real Supabase project and a real inbox. Use the
+  checklist below; the unit suites only prove the local engine.
+
+### Live account smoke test
+
+1. Supabase dashboard → Authentication → URL Configuration: add
+   `https://pnemhyszhbgmhnaudpze.supabase.co/functions/v1/auth-open` (and keep
+   `viby://auth/callback`). For mail, either enable the deployed `send-email`
+   Send Email hook with a Resend key (recommended; see `supabase/README.md`) and
+   raise the email rate limit, or turn **Confirm email** off for sync-only
+   testing (sign-up then returns a session immediately). The built-in mail
+   service only sends a couple of messages per hour for the whole project.
+2. Sign up in the app; the confirmation email carries a 6-digit code. Enter it
+   in the account sheet and you must land signed in. `select count(*) from
+   public.sync_records;` should then grow after the first sync.
+3. Favourite a song, create a playlist and play a track past 30 seconds; wait for
+   "Last synced …" in the account sheet. The rows for that user must carry the
+   same kinds.
+4. Sign in on a second install of the same account; its empty library must merge
+   the server copy. Add a different track to the same playlist on each device:
+   both entries must survive in order. Sign out and back in: no duplicates and no
+   backlog. A deliberately conflicting setting edit must show that a change was
+   replaced by another device.
+5. Request a password reset, enter the 6-digit code from the email, and set a new
+   password. The old password must fail and the new one must work; sync starts
+   only after the new password is saved.
+6. Delete the account. The auth user and its `sync_records` rows disappear; local
+   files stay. With the app signed out, the network log must show no Supabase
+   request at all.

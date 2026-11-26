@@ -1,8 +1,8 @@
 # Viby — Implementation Plan
 
-A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account (later) backs up and syncs the library across devices.
+A no-ads, no-subscription, no-quality-cap desktop music client. Ad-free by construction (we own the client), no artificial bitrate ceiling. Listening never requires an account; an optional account backs up and syncs the library across devices.
 
-Last updated: 2026-11-11 (rev 17)
+Last updated: 2026-11-25 (rev 18)
 
 ---
 
@@ -181,7 +181,7 @@ Lean on purpose. Every dependency is justified against the RAM/CPU budget.
 - Artist pages group releases as Popular releases, Albums, and Singles and EPs, with a Show all discography page (list or grid) and a Play all queue that continues through every release.
 
 ### 5.4 Library
-- **Favorites** and **playlists** are local-first and never vanish when upstream changes. They stay on the machine by default; optional accounts (later) back them up and sync them across devices.
+- **Favorites** and **playlists** are local-first and never vanish when upstream changes. They stay on the machine by default; an optional account backs them up and syncs them across devices.
 - **History**: a play counts after 30 seconds of actual listening (Spotify's rule; a shorter track counts when it finishes), then one entry with timestamp and completion ratio, updated when the play pauses or ends, capped at the last 5,000 plays; the entry appears in Recently played and the open history panel as soon as it is written, and feeds the cache policy that promotes repeatedly-played tracks.
 - Playlist cover = first track's artwork; user-picked cover art is not in v1.
 - **Downloads** are part of Library, not a separate page: badges, partial-progress rings, a Downloaded filter, and a standalone-songs section. A docked Downloads panel groups active work by album, playlist or EP and offers pause, resume and cancel. See §17.
@@ -358,10 +358,8 @@ Installers (DMG + NSIS), bundled runtime with no system Python, first-run provis
 
 *Acceptance:* a friend installs Viby from a DMG on their own Mac, imports a playlist, and plays music without you touching their machine. The ad-hoc-signed DMG needs the documented `xattr -dr com.apple.quarantine /Applications/Viby.app` first launch; this has not been formally verified with an external user.
 
-**P6 — Accounts and sync. Deferred on purpose.**
-Not started. Begins only once P5 is done and the core experience is fully polished — playback correct, the look and feel settled, and no open fundamentals. Until then the profile avatar stays a placeholder.
-
-Scope: optional accounts with end-to-end encrypted backup and sync of favorites, playlists, history and settings across devices, designed alongside the planned Android client. Local-first remains the source of truth; signed-out use is unchanged. Sync must support export, account deletion and transparent conflict handling.
+**P6 — Accounts and sync. Shipped (2026-11-25).**
+The profile avatar is the account button. Scope: optional accounts syncing favourites, playlists, saved albums, history and five playback settings across devices. The backend is encrypted at rest, not end-to-end encrypted — the server can read the mirror to merge devices, and no copy may claim otherwise. Local-first remains the source of truth; signed-out use is unchanged. Export, password reset and account deletion (server-side edge function) are implemented; the engine and data model are in §20. Remaining verification is the live two-machine/inbox pass described in `TESTING.md`.
 
 *Acceptance:* two machines signed into the same account converge on the same library after an offline edit, and signing out leaves a complete, usable local library. Export and account deletion need no support ticket.
 
@@ -1180,3 +1178,54 @@ One app-wide `ContextMenu` opens from a track row, media card, quick-search row,
 - 0.5.5: name-only artist and album links verify the title and credited artist; song titles open the album at the matching row; Discord keeps the previous card through a track switch.
 - 0.5.6: Best quality replaces a Data saver copy; damaged saved audio is re-fetched; clearing the cache cannot be undone by an in-flight download.
 - 0.5.7: active shuffle and repeat use the single green accent; clicking the active rail tab returns from a detail page to that view.
+
+## 20. Optional accounts and sync (shipped)
+
+Signed out, the app is exactly the local music player it was: no account call is
+made. Signing in is optional and only mirrors a whitelisted slice of the library
+through Viby's Supabase project; listening never requires it.
+
+**Identity and links.** Email/password, magic links and confirmation links all
+use PKCE. Links come back as `viby://auth/callback`: macOS delivers them through
+`open-url`, Windows through a second instance's argv. Only the main process talks
+to Supabase; the renderer sees a status object and never a token. The session is
+stored with Electron `safeStorage` and falls back to memory-only when no keyring
+is available; there is no plaintext fallback. A reset link signs the session in
+and puts the account into `recovery` until a new password is set, so the reset
+actually replaces the password instead of just logging in.
+
+**What syncs.** Favourites, saved albums, history, five settings
+(`audioQuality`, `shuffle`, `repeat`, `autoplay`, `discordPresence`) and
+playlists. A playlist is metadata plus one record per entry with a stable
+position, so adding or removing one song does not replace the whole list on
+another device. Downloads, cache, session, stream URLs and lyrics never leave
+the device. Each record is versioned by `(updated_at, device_id, deleted)`;
+higher wins, an equal timestamp falls to the higher device id, and an exact tie
+is won by the tombstone. Pulls use a monotonic `rev` cursor, pushes go through
+the `sync_push` RPC, and tombstones are kept for 90 days. The RPC returns only
+accepted writes; a losing edit is pulled back and reported as a conflict, and
+future client clocks are clamped to server time plus five minutes. The local
+JSON stores stay authoritative and are merged through the same comparator.
+
+**Isolation.** Pending writes live in a per-account outbox. The first account to
+sign in on an install adopts the local library; a second account on the same
+machine starts from its own server copy and never uploads the first account's
+records. A library that failed to load is never read as "the user deleted
+everything". An empty install attaching to an existing account seeds nothing and
+suppresses its default settings until the first pull, so the server copy wins.
+A recovery session does not start sync until the password is set.
+
+**Backend.** `supabase/migrations/20261125052234_sync_records.sql` creates
+`sync_records` (one row per user, kind and record id), RLS policies, and the
+`sync_push` function. `supabase/functions/delete-account` verifies the caller's
+JWT and deletes the auth user with the service role, cascading the mirror.
+Both were applied/deployed to project `pnemhyszhbgmhnaudpze` on 2026-11-25.
+`supabase/functions/send-email` is a Send Email hook that verifies Supabase's
+signature and delivers auth mail through Resend, so the project is not limited to
+the built-in mailer's couple-per-hour cap; it needs the Resend key and the hook
+enabled in the dashboard. The backend is encrypted at rest, **not** end-to-end
+encrypted: the server can read the mirror in order to merge devices, and no copy
+may claim otherwise.
+Auth redirect URLs (`viby://auth/callback`) and SMTP still need to be configured
+in the Supabase dashboard; the manual checklist lives in `supabase/README.md`
+and `TESTING.md`.

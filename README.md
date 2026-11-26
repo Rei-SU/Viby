@@ -6,7 +6,8 @@
 
 <p align="center">
   <strong>Music first. Everything else can wait.</strong><br />
-  An ad-free, account-free desktop music player for macOS and Windows.
+  An ad-free desktop music player for macOS and Windows. Local by default,
+  with an optional account that keeps your library in step.
 </p>
 
 <p align="center">
@@ -47,10 +48,11 @@ The build is ad-hoc signed but not notarized. Gatekeeper may report it as damage
 - **A player that behaves.** Queue, shuffle, repeat, media keys, resume where you left off, and a cache that makes a replay instant. Quality is either best available or a 64 kbps data saver, and it is never silently downgraded.
 - **A queue you can shape.** The queue docks beside the page: reorder it with the grip or the keyboard, or drag any song from search, an album or your history straight into it.
 - **A home that remembers.** Recently played rows, the last 100 plays in a side panel, a weekly listening snapshot with your top artists, and mood pages that open YouTube Music's own Focus, Energize, Chill and Decades collections.
-- **A library that stays yours.** Liked songs, playlists, saved albums and EPs, history and downloads live on your disk, fully usable signed out. Artist pages open a full discography — Popular releases, Albums, and Singles and EPs — with a Show all page in list or grid. No account, no cloud, no "syncing…" spinner.
+- **A library that stays yours.** Liked songs, playlists, saved albums and EPs, history and downloads live on your disk, fully usable signed out. Artist pages open a full discography — Popular releases, Albums, and Singles and EPs — with a Show all page in list or grid. The local copy stays authoritative; an optional account mirrors it across devices.
 - **Downloads that belong to the library.** Download songs, albums, playlists or Liked Songs; badges and progress rings show what is on disk, and a docked panel groups active work by album or playlist with pause, resume and cancel. Viby follows your connection and can be switched offline by hand, with an Offline Home for what you kept.
 - **Lyrics that keep up.** Time-synced lyrics from LRCLIB, plain text from lyrics.ovh as a backup, click any line to seek, and a docked panel that leaves the page usable.
 - **Your music on Discord.** Friends see what's playing while the Discord desktop app is running. On by default; pausing clears it, and one switch in Settings turns it off.
+- **Optional across devices.** Create an account to keep favourites, playlists, saved albums, history and a few playback settings in step. Viby's server stores that mirror encrypted at rest and can read it to merge devices — there is no end-to-end encryption. Signed out, nothing is sent and nothing is required to listen.
 - **Your playlists, not a fresh start.** Paste a public Spotify, Apple Music, Deezer, YouTube Music or SoundCloud playlist. Tracks are matched by title, artist and duration; anything uncertain is offered for review, never silently swapped.
 - **Actions where you are.** Right-click any song or release for Play next, Add to queue, Add to playlist, Like, Download and Go to artist or album. The menu works from the keyboard and flips at the window edge.
 - **Small things that add up.** Search from the titlebar (`⌘K` / `Ctrl K` or `/`), a full set of player shortcuts, launch at login with an optional minimized start, optional close-to-tray playback, Windows taskbar controls, and a What's New sheet after an update.
@@ -80,13 +82,12 @@ Viby is small on purpose and still early. The version badge at the top always sh
 
 - **macOS builds are ad-hoc signed and not notarized.** The first launch needs the `xattr` command above. Updates download the matching DMG; in-place macOS updates wait for Developer ID signing.
 - **Windows updates install in place.** Windows 11 is verified on Electron 45. Windows 10 uses the same x64 build and is expected to behave the same; no separate hardware pass is planned.
-- **No accounts, no sync, no telemetry.** Your liked songs, playlists, history and downloads are local files. Optional, end-to-end encrypted backup and sync is planned, and it will never be required to listen.
+- **Optional sync, no telemetry.** Your liked songs, playlists, history and downloads are local files. An account is optional and only mirrors the library for your other devices; nothing is required to listen.
 
 ## What's next
 
 - Manual search for import rows that don't match on their own, plus album and single links in the importer
 - Drag-to-reorder playlists and virtualized lists for very long playlists
-- Optional accounts: private, end-to-end encrypted backup and sync across devices
 
 ## Build from source
 
@@ -111,7 +112,9 @@ Packaged builds need no Python install, no configuration file and no first-run s
 
 ## Privacy
 
-No account is required. No analytics, no telemetry, no ad tracking. Your library, playlists, history, downloads and cache live in your user data folder, and the app only talks to the network to browse and search the catalogue, play music, fetch lyrics and artist images, download music, import a link you paste, and check for updates. Discord presence (optional) sends the current song to the Discord app on your computer; Discord shows it according to your own Activity Privacy settings. If optional accounts ship later, they will only back up and sync your library; listening will never require one.
+No account is required. No analytics, no telemetry, no ad tracking. Your library, playlists, history, downloads and cache live in your user data folder, and the app only talks to the network to browse and search the catalogue, play music, fetch lyrics and artist images, download music, import a link you paste, and check for updates. Discord presence (optional) sends the current song to the Discord app on your computer; Discord shows it according to your own Activity Privacy settings.
+
+Signing in is optional. While signed in, favourites, playlists, saved albums, history and a few playback settings are mirrored to Viby's Supabase project so other devices can merge them; the mirror is encrypted at rest and the server can read it — there is no end-to-end encryption. Signing out stops sync and clears the local session; local files stay. Account deletion removes the server copy. Listening never requires an account.
 
 ## Contributing
 
@@ -120,7 +123,7 @@ Viby is intentionally small and opinionated, and contributions are welcome.
 - Open an issue before a large feature or refactor; small fixes can go straight to a PR.
 - Keep PRs focused, match the existing Svelte/TypeScript style, and keep the UI monochrome.
 - Run `npm run typecheck` and the suites in [TESTING.md](TESTING.md) for the files you changed.
-- No ads, paywalls, tracking, telemetry or bundled credentials — ever. Accounts, when they ship, will exist only as an optional home for backup and sync.
+- No ads, paywalls, tracking, telemetry or bundled credentials — ever. Accounts are optional and exist only as a home for backup and sync; they never unlock playback.
 - Don't commit `.env` files, cookies, downloaded audio or the vendored runtime.
 
 The full rules live in [CONTRIBUTING.md](CONTRIBUTING.md). Be decent to each other.

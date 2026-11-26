@@ -36,7 +36,8 @@ Viby is an Electron desktop music player:
 - **Playback:** `yt-dlp` resolves direct audio URLs; a bounded local cache and
   explicit downloads make replays instant and offline playback possible.
 - **Library:** favorites, playlists, saved releases, history, downloads and settings
-  are local JSON files. No account is required.
+  are local JSON files. An optional account mirrors a whitelisted subset across
+  devices; signed out, nothing leaves the machine.
 - **Lyrics:** LRCLIB first, `lyrics.ovh` as plain-text backup, cached locally.
 - **Import:** Spotify, Apple Music, Deezer, YouTube Music and SoundCloud playlist
   links; tracks are matched against the YouTube Music catalog.
@@ -95,6 +96,7 @@ contract is [`src/shared/ipc.ts`](src/shared/ipc.ts).
 | `src/main/taskbar.ts` | Windows thumbnail toolbar (previous/play/next), taskbar progress/overlay. |
 | `src/main/ipc.ts` | Every IPC handler, the playback pipeline, singleton service instances, media protocol handler, download broadcasts. |
 | `src/main/media.ts` | `viby-media://` URL helpers, MIME mapping. |
+| `src/main/account/` | Optional Supabase auth, deep links, encrypted token vault, per-account outbox and sync engine; signed out, none of it runs. |
 
 ### Preload
 
@@ -133,6 +135,7 @@ element for the whole app.
 ```
 src/
 ├── main/                 main process (see §4)
+│   ├── account/          optional Supabase auth, outbox and sync engine
 │   ├── cache/            audio LRU + image cache + cache policy
 │   ├── discord/          Rich Presence IPC client
 │   ├── downloads/        store + manager + art
@@ -457,7 +460,10 @@ is on by default and can be disabled in Settings.
   image data URLs are image-only and size-capped.
 - External HTTP is bounded and redirect-validated hop-by-hop; update manifests are
   signed and fail closed.
-- No accounts, telemetry, analytics, cookies or bundled credentials.
+- Optional accounts use PKCE; tokens are encrypted with `safeStorage` and never
+  reach the renderer; the Supabase service-role key exists only in the
+  `delete-account` edge function. No telemetry, analytics, cookies or bundled
+  credentials.
 
 ### 4.16 Performance invariants
 
@@ -474,6 +480,39 @@ is on by default and can be disabled in Settings.
 - Cache eviction runs on startup reconciliation, cap/quality changes and track
   changes (which release the previous track's keep protection); image cache cap
   scans run once per batch; resolver URL cache is pruned/capped.
+
+### 4.17 Accounts and sync (`src/main/account/`)
+
+Optional; signed out the app makes no account network call. `auth.ts` owns the
+Supabase client (PKCE, session restore), deep links exchange
+`viby://auth/callback` in main, and `tokens.ts` stores the session with
+`safeStorage` (memory-only when no keyring is available). The renderer receives
+`AccountStatus` only.
+
+`records.ts` maps favourites, saved albums, history, five settings and playlists
+to versioned records `(updated_at, device_id, deleted)`. A playlist is metadata
+only; each entry is its own `playlist_track` record (`playlistId:trackId` with a
+stable `position`), so two devices can add or remove different songs without
+replacing the whole list. `outbox.ts` persists pending writes per account;
+`sync.ts` pulls by a `rev` cursor before the first push, pushes through the
+`sync_push` RPC, merges with last-writer-wins and keeps tombstones 90 days.
+`sync_push` returns only the writes it accepted; a missing row is pulled back
+and reported as a conflict, and future client clocks are clamped to server time
+plus five minutes. Conflicts are appended to a capped
+`account-conflicts-<userId>.json` and summarised in `SyncStatus.conflicts`.
+`compare.ts` is the shared comparator, `export.ts` writes a JSON copy, and
+`device.ts` stores the tie-break id. The first account on an install adopts the
+local library; later accounts start from their server copy.
+An empty install attaching to an existing account seeds nothing and suppresses
+its default settings until the first pull completes, so the server's library and
+settings win instead of being overwritten by defaults.
+A recovery code sets the `recovery` state and pauses sync until `updatePassword`
+replaces the password.
+
+Backend sources live in `supabase/`: the migration creates `sync_records` with
+RLS and `sync_push`, and `functions/delete-account` erases the auth user with the
+service role. The backend is encrypted at rest, **not** end-to-end encrypted —
+the server can read the mirror in order to merge devices.
 
 ---
 
@@ -516,6 +555,7 @@ through `nav`, never through callback chains.
 | `search.svelte.ts` | Debounced search, cancellation, recents, grouping. |
 | `network.svelte.ts` | Renderer view of connectivity/offline. |
 | `updates.svelte.ts` / `changelog.svelte.ts` | Update state and What’s New. |
+| `account.svelte.ts` | Renderer mirror of auth/sync status, sheet open state and account actions. |
 | `moods.svelte.ts` | Mood/genre tiles and pages. |
 | `side-panel.svelte.ts` | `'lyrics' | 'queue' | 'history' | null`; shared docked panel. |
 | `playlist-picker.svelte.ts` | Single app-wide add-to-playlist popover. |
@@ -540,7 +580,7 @@ through `nav`, never through callback chains.
 
 | Group | Files |
 |---|---|
-| Shell | `PlayerBar`, `SidePanel`, `QueuePanel`, `LyricsPanel`, `HistoryPanel`, `DownloadPanel`, `DownloadIndicator`, `Rail`, `SearchBar`, `PlaylistPicker`, `ContextMenu`, `QueueDropBar`, `ChangelogDialog` |
+| Shell | `PlayerBar`, `SidePanel`, `QueuePanel`, `LyricsPanel`, `HistoryPanel`, `DownloadPanel`, `DownloadIndicator`, `Rail`, `SearchBar`, `PlaylistPicker`, `ContextMenu`, `AccountSheet`, `SignInForm`, `QueueDropBar`, `ChangelogDialog` |
 | Views | `HomeView`, `OfflineHome`, `SearchView`, `LibraryView`, `CollectionView`, `DownloadCollectionView`, `DetailView`, `DiscographyView`, `TrackView`, `MoodView`, `ImportView`, `SettingsView` |
 | Rows/cards | `TrackRow`, `MediaCard`, `Cover`, `DownloadBadge`, `CollectionDownloadButton`, `DiscographyRelease`, `EntityLink`, `ArtistLinks`, `SubtitleParts` |
 | Home extras | `ListeningDashboard`, `PixelClock`, `MoodGrid` |
@@ -682,6 +722,15 @@ utilities. Component styles are scoped in each `.svelte` file.
 | `bin/` | `ytdlp/binary.ts` | Managed yt-dlp zipapp/runtime copy. |
 | `pycache/` | `ytdlp/binary.ts` | Python bytecode cache. |
 | `logs/updater.log` | updater | Update diagnostics on Windows. |
+| `account-state.json` | `account/auth.ts` | Pending verification email and the recovery flag. |
+| `account-tokens.bin` | `account/tokens.ts` | Session encrypted by `safeStorage`; never plaintext. |
+| `account-device.json` | `account/device.ts` | Stable device id for same-timestamp tie-breaking. |
+| `account-library.json` | `account/records.ts` | Which account adopted this install's library. |
+| `account-records.json` | `account/records.ts` | Last agreed version per record for the bound account. |
+| `account-sync.json` | `account/sync.ts` | Pull cursor and last sync per account. |
+| `account-conflicts-<userId>.json` | `account/sync.ts` | Capped log of local edits replaced by a newer remote copy. |
+| `account-outbox-<userId>.json` | `account/outbox.ts` | Pending writes for one account. |
+| `account-outbox.json` | `account/outbox.ts` | Signed-out queue file (kept empty). |
 | `resources/changelog.json` (app bundle) | `scripts/build-changelog.mjs` | Release notes baked from annotated tags. |
 
 All JSON stores use temp-file + rename. Corrupt/structurally invalid data is
@@ -741,6 +790,19 @@ user files.
    local Discord socket.
 3. Pause/stop sends null; disable/quit closes the socket.
 
+### Sign in and sync
+1. Account calls go through IPC to the Supabase client in main; the renderer only
+   sees `AccountStatus` and `SyncStatus`.
+2. A mailed 6-digit code is verified in main and the session lands in the
+   encrypted vault; Supabase-generated links, when used, still return through
+   `viby://auth/callback`.
+3. The sync engine binds to the account: the tracker adopts or records the local
+   library, then pulls, merges and pushes; a recovery session waits for the new
+   password.
+4. Local edits enqueue records; focus, reconnect and a debounce nudge run the
+   same engine. Pulled settings run the normal side effects, and pulled playlist
+   or favourite changes reach the download manager through the remote sink.
+
 ---
 
 ## 8. Testing map
@@ -750,6 +812,7 @@ user files.
 | Unit/integration | `node tests/unit.mjs [suite]` | Pure logic and real-socket/protocol integration; some suites are live network tests. |
 | E2E | `VIBY_DEBUG_PORT=9222 npm run dev`, then `node tests/e2e/run.mjs [scenario]` | Structure, state and routing in the running app via CDP. |
 | Behaviour | `node tests/behaviour.mjs` | Queue editing, repeat/shuffle, favourites, history, media session. |
+| Accounts | `node tests/unit.mjs account-compare account-bootstrap account-outbox account-records account-sync account-tokens` | Version ordering, per-account outboxes, adoption and empty-install attach, playlist item records, conflicts, pull/push against a fake PostgREST server, encrypted-at-rest vault; live email/multi-device checks stay manual. |
 | Typecheck | `npm run typecheck` | Main/preload/shared `tsc` + Svelte diagnostics. |
 | Build | `npm run build` | Production main/preload/renderer bundles. |
 | Packaging/measure | `npm run dist:dir`, `npm run measure` | Installer/bundle behavior and CPU/RSS (macOS measurement). |
@@ -768,7 +831,10 @@ before running while someone is listening.
 - `electron-builder.yml` packages `out/**`, `resources/changelog.json`, and
   `extraResources`: yt-dlp, vendored CPython, PO-token plugins, tray and thumbar
   art. macOS is ad-hoc signed (DMG only); Windows is per-user NSIS with in-place
-  updates backed by the signed manifest.
+  updates backed by the signed manifest. It also registers the `viby://` scheme
+  so account links reach the app.
+- The optional account backend lives in `supabase/` (migration + edge function)
+  and is deployed separately from the app; see `supabase/README.md`.
 - `npm run runtime` / `runtime:mac` provision the pinned CPython + yt-dlp zipapp.
 - `scripts/build-changelog.mjs` bakes release notes from annotated tags;
   `scripts/check-release-notes.mjs` lints the user-facing sections.
@@ -850,7 +916,9 @@ one-line role.
 
 **Coverage:** 1,150+ rows across 151 source files, generated from the code and
 refreshed on 2026-11-11. Constructors, getters and the preload `window.viby`
-object arrows are included even where a basic AST pass would miss them.
+object arrows are included even where a basic AST pass would miss them. The
+optional account layer (`src/main/account/**`, `shared/account.ts` and its
+renderer surfaces) is described in §4.17 but is not part of this generated map.
 
 **How to use it:** find the area, then the file, then the symbol. The line number
 points at the declaration in this revision; if code has shifted, search the symbol
@@ -3078,4 +3146,8 @@ roles accurate rather than exhaustive about every branch.
    unrequested controls.
 9. Every new user-facing behavior needs matching coverage and an update to the
    TESTING.md impact map.
-10. No ads, telemetry, accounts or bundled credentials.
+10. No ads, telemetry or bundled credentials. Accounts are optional and never
+    unlock playback; signed out, no account request is made.
+11. Account tokens never leave main; the renderer only sees status. The sync
+    mirror is server-readable and must never be described as end-to-end
+    encrypted.

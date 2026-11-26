@@ -152,7 +152,7 @@ The end-to-end runs use the real app and play audio muted. They need a desktop s
 
 ## Rules
 
-- No ads, paywalls, tracking, analytics or telemetry. Accounts, when they ship, will exist only for backup and sync — never to unlock playback.
+- No ads, paywalls, tracking, analytics or telemetry. Accounts are optional and exist only for backup and sync — never to unlock playback.
 - No bundled credentials, cookies, tokens, signing keys or downloaded media.
 - Keep user data local; don't add network calls that aren't needed for a feature the user asked for.
 - Don't commit `.env` files, `resources/python/`, caches or build output.
