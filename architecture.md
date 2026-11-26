@@ -504,7 +504,9 @@ After a pull, main broadcasts `library:changed` with the affected domains; open
 views reload their stores and the player applies pulled settings, so no
 navigation is needed to see remote changes.
 `compare.ts` is the shared comparator, `export.ts` writes a JSON copy, and
-`device.ts` stores the tie-break id. The first account on an install adopts the
+`device.ts` stores the tie-break id. While signed in, the engine also checks for
+remote changes on a one-minute timer (plus window focus and reconnect), so an
+idle device still converges without a local edit. The first account on an install adopts the
 local library; later accounts start from their server copy.
 An empty install attaching to an existing account seeds nothing and suppresses
 its default settings until the first pull completes, so the server's library and

@@ -22,6 +22,8 @@ const PAGE = 500
 const DEBOUNCE_MS = 2000
 const STARTUP_DELAY_MS = 1500
 const FOCUS_MIN_INTERVAL_MS = 30_000
+/** Signed-in devices also check for remote changes on a slow timer. */
+const PULL_INTERVAL_MS = 60_000
 const PUSH_PAGES = 100
 const PULL_PAGES = 200
 
@@ -295,6 +297,8 @@ export class SyncEngine {
         }
       } else {
         this.followUp = false
+        // Another device may have changed something while this one was idle.
+        this.schedule(PULL_INTERVAL_MS)
       }
     } catch (error) {
       if (this.user?.id !== userId) return

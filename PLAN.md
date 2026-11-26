@@ -1202,7 +1202,8 @@ another device. Downloads, cache, session, stream URLs and lyrics never leave
 the device. Each record is versioned by `(updated_at, device_id, deleted)`;
 higher wins, an equal timestamp falls to the higher device id, and an exact tie
 is won by the tombstone. Pulls use a monotonic `rev` cursor, pushes go through
-the `sync_push` RPC, and tombstones are kept for 90 days. The RPC returns only
+the `sync_push` RPC, and tombstones are kept for 90 days. While signed in, the
+engine also polls for remote changes once a minute, and on focus or reconnect. The RPC returns only
 accepted writes; a losing edit is pulled back and reported as a conflict, and
 future client clocks are clamped to server time plus five minutes. The local
 JSON stores stay authoritative and are merged through the same comparator.
