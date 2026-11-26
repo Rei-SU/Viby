@@ -21,6 +21,12 @@ export type Track = {
   videoType?: 'audio' | 'video' | 'ugc'
   /** Original catalog id when playback was swapped to the audio release. */
   sourceId?: string
+  /**
+   * Order inside a playlist. Set for playlist entries only; other track copies
+   * ignore it. Sync keeps one order value per entry so adding a song on one
+   * device never rewrites the whole playlist.
+   */
+  playlistPosition?: number
 }
 
 /** A user-created playlist. Stored locally, like everything else in the library. */

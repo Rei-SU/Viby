@@ -141,6 +141,33 @@ export function setSettings(patch: Partial<Settings>): Settings {
   return settings().set(sanitizePatch(patch))
 }
 
+/**
+ * Side effects that make a setting take effect in the main process (cache
+ * eviction, Discord presence, login item, network mode). Main registers one so
+ * a value pulled from another device runs the same path as a local change.
+ */
+export type SettingsEffect = (previous: Settings, next: Settings, patch: Partial<Settings>) => void
+
+let settingsEffect: SettingsEffect | null = null
+
+export function setSettingsEffect(effect: SettingsEffect | null): void {
+  settingsEffect = effect
+}
+
+/** Write settings that came from sync, then apply their process-wide effects. */
+export function applyRemoteSettings(patch: Partial<Settings>): Settings {
+  const previous = settings().get()
+  const next = setSettings(patch)
+  if (settingsEffect) {
+    try {
+      settingsEffect(previous, next, patch)
+    } catch {
+      // A side effect must not make a pull fail halfway.
+    }
+  }
+  return next
+}
+
 /** Bitrate ceiling for the current quality setting, or undefined for best. */
 export function qualityCapKbps(): number | undefined {
   return settings().get().audioQuality === 'data-saver' ? 64 : undefined

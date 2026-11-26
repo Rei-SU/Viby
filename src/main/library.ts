@@ -12,6 +12,26 @@ type LibraryData = {
 const MAX_HISTORY = 5000
 
 /**
+ * A batch of remote changes, applied in one store write. Account sync uses this
+ * so a pull of five hundred records does not rewrite library.json five hundred
+ * times.
+ */
+export type RemoteLibraryOps = {
+  favorites?: { upsert?: Track[]; remove?: string[] }
+  playlists?: { upsert?: Playlist[]; remove?: string[] }
+  /**
+   * One playlist entry. A playlist's tracks sync as individual records so two
+   * devices can add or remove different songs without replacing the whole list.
+   */
+  playlistItems?: {
+    upsert?: Array<{ playlistId: string; track: Track; position: number }>
+    remove?: Array<{ playlistId: string; trackId: string }>
+  }
+  albums?: { upsert?: SavedAlbum[]; remove?: string[] }
+  history?: { upsert?: HistoryEntry[]; remove?: Array<{ trackId: string; playedAt: number }> }
+}
+
+/**
  * A single malformed stored entry used to break every favourite toggle: the
  * lookup callback does `t.id`, so one `null` in the array throws for all calls.
  * Validate on the way in and heal on the way out.
@@ -42,6 +62,19 @@ function isValidPlaylist(value: unknown): value is Playlist {
     typeof (value as Playlist).name === 'string' &&
     Array.isArray((value as Playlist).tracks)
   )
+}
+
+/** Give every entry a distinct order value, using the current array order. */
+function normalizeTrackPositions(playlist: Playlist): void {
+  const missing = playlist.tracks.some(
+    (track) =>
+      typeof track.playlistPosition !== 'number' || !Number.isFinite(track.playlistPosition)
+  )
+  const unique = new Set(playlist.tracks.map((track) => track.playlistPosition)).size
+  if (!missing && unique === playlist.tracks.length) return
+  playlist.tracks.forEach((track, index) => {
+    track.playlistPosition = index
+  })
 }
 
 function isValidSavedAlbum(value: unknown): value is SavedAlbum {
@@ -83,6 +116,15 @@ export class Library {
         if (!Array.isArray(next.albums)) next.albums = []
       })
     }
+  }
+
+  /**
+   * True when library.json could not be parsed and this run is on empty
+   * defaults. Sync must never read that emptiness as "the user deleted
+   * everything"; the file is kept for recovery instead.
+   */
+  get loadFailed(): boolean {
+    return this.store.loadFailed
   }
 
   favorites(): Track[] {
@@ -211,7 +253,25 @@ export class Library {
       .filter(isValidPlaylist)
       .map((playlist) => ({ ...playlist, tracks: playlist.tracks.filter(isValidTrack) }))
 
+    // Older libraries have no order values. Give each entry its array index
+    // once; later adds keep using values so the order survives sync.
+    let normalized = false
+    for (const playlist of clean) {
+      const missing = playlist.tracks.some(
+        (track) =>
+          typeof track.playlistPosition !== 'number' || !Number.isFinite(track.playlistPosition)
+      )
+      const unique = new Set(playlist.tracks.map((track) => track.playlistPosition)).size
+      if (missing || unique !== playlist.tracks.length) {
+        playlist.tracks.forEach((track, index) => {
+          track.playlistPosition = index
+        })
+        normalized = true
+      }
+    }
+
     const changed =
+      normalized ||
       clean.length !== stored.length ||
       clean.some((playlist, i) => playlist.tracks.length !== (stored[i]?.tracks?.length ?? 0))
 
@@ -273,8 +333,14 @@ export class Library {
     this.store.update((data) => {
       const playlist = (data.playlists ?? []).find((p) => p.id === playlistId)
       if (!playlist) return
+      normalizeTrackPositions(playlist)
       if (!playlist.tracks.some((t) => t.id === track.id)) {
-        playlist.tracks.unshift({ ...track })
+        const min = playlist.tracks.reduce(
+          (lowest, t) => Math.min(lowest, t.playlistPosition ?? 0),
+          0
+        )
+        const position = playlist.tracks.length > 0 ? min - 1 : 0
+        playlist.tracks.unshift({ ...track, playlistPosition: position })
       }
       playlist.updatedAt = Date.now()
       updated = { ...playlist, tracks: [...playlist.tracks] }
@@ -294,12 +360,16 @@ export class Library {
     this.store.update((data) => {
       const playlist = (data.playlists ?? []).find((p) => p.id === playlistId)
       if (!playlist) return
+      normalizeTrackPositions(playlist)
 
       const seen = new Set(playlist.tracks.map((track) => track.id))
+      let next =
+        playlist.tracks.reduce((max, track) => Math.max(max, track.playlistPosition ?? 0), -1) + 1
       for (const track of valid) {
         if (seen.has(track.id)) continue
         seen.add(track.id)
-        playlist.tracks.push({ ...track })
+        playlist.tracks.push({ ...track, playlistPosition: next })
+        next += 1
       }
       playlist.updatedAt = Date.now()
       updated = { ...playlist, tracks: [...playlist.tracks] }
@@ -317,6 +387,106 @@ export class Library {
       updated = { ...playlist, tracks: [...playlist.tracks] }
     })
     return updated
+  }
+
+  // ---- account sync -------------------------------------------------------
+
+  /**
+   * Merge a page of pulled records in one write. Additions are upserted by id;
+   * deletions are applied only to the exact record named, never to a whole
+   * collection. Invalid payloads are ignored rather than allowed to break the
+   * file.
+   */
+  applyRemote(ops: RemoteLibraryOps): void {
+    this.store.update((data) => {
+      if (!Array.isArray(data.favorites)) data.favorites = []
+      if (!Array.isArray(data.history)) data.history = []
+      if (!Array.isArray(data.playlists)) data.playlists = []
+      if (!Array.isArray(data.albums)) data.albums = []
+
+      const dropFavorites = new Set(ops.favorites?.remove ?? [])
+      const favorites = data.favorites.filter(isValidTrack).filter((t) => !dropFavorites.has(t.id))
+      for (const track of ops.favorites?.upsert ?? []) {
+        if (!isValidTrack(track)) continue
+        const at = favorites.findIndex((t) => t.id === track.id)
+        if (at >= 0) favorites[at] = { ...track }
+        else favorites.unshift({ ...track })
+      }
+      data.favorites = favorites
+
+      const dropPlaylists = new Set(ops.playlists?.remove ?? [])
+      const playlists = data.playlists.filter(isValidPlaylist).filter((p) => !dropPlaylists.has(p.id))
+      for (const playlist of ops.playlists?.upsert ?? []) {
+        if (!isValidPlaylist(playlist)) continue
+        const at = playlists.findIndex((p) => p.id === playlist.id)
+        if (at >= 0) {
+          // Metadata only: tracks arrive as individual playlist items.
+          playlists[at] = {
+            ...playlists[at],
+            name: playlist.name,
+            createdAt: playlist.createdAt,
+            updatedAt: playlist.updatedAt
+          }
+        } else {
+          playlists.unshift({ ...playlist, tracks: [] })
+        }
+      }
+      data.playlists = playlists
+
+      const touchedPlaylists = new Set<string>()
+      for (const entry of ops.playlistItems?.remove ?? []) {
+        const playlist = playlists.find((p) => p.id === entry.playlistId)
+        if (!playlist) continue
+        playlist.tracks = playlist.tracks.filter((track) => track.id !== entry.trackId)
+        touchedPlaylists.add(playlist.id)
+      }
+      for (const entry of ops.playlistItems?.upsert ?? []) {
+        const playlist = playlists.find((p) => p.id === entry.playlistId)
+        if (!playlist || !isValidTrack(entry.track)) continue
+        normalizeTrackPositions(playlist)
+        const position = Number.isFinite(entry.position) ? entry.position : 0
+        const track: Track = { ...entry.track, playlistPosition: position }
+        const at = playlist.tracks.findIndex((t) => t.id === track.id)
+        if (at >= 0) playlist.tracks[at] = track
+        else playlist.tracks.push(track)
+        touchedPlaylists.add(playlist.id)
+      }
+      for (const id of touchedPlaylists) {
+        const playlist = playlists.find((p) => p.id === id)
+        if (!playlist) continue
+        playlist.tracks.sort(
+          (a, b) => (a.playlistPosition ?? 0) - (b.playlistPosition ?? 0) || a.id.localeCompare(b.id)
+        )
+      }
+
+      const dropAlbums = new Set(ops.albums?.remove ?? [])
+      const albums = data.albums.filter(isValidSavedAlbum).filter((a) => !dropAlbums.has(a.id))
+      for (const album of ops.albums?.upsert ?? []) {
+        if (!isValidSavedAlbum(album)) continue
+        const at = albums.findIndex((a) => a.id === album.id)
+        if (at >= 0) albums[at] = { ...album }
+        else albums.unshift({ ...album })
+      }
+      data.albums = albums
+
+      const dropHistory = new Set(
+        (ops.history?.remove ?? []).map((row) => `${row.trackId}\u0000${row.playedAt}`)
+      )
+      let history = data.history
+        .filter(isValidHistoryEntry)
+        .filter((entry) => !dropHistory.has(`${entry.trackId}\u0000${entry.playedAt}`))
+      for (const entry of ops.history?.upsert ?? []) {
+        if (!isValidHistoryEntry(entry)) continue
+        const at = history.findIndex(
+          (row) => row.trackId === entry.trackId && row.playedAt === entry.playedAt
+        )
+        if (at >= 0) history[at] = { ...entry }
+        else history.push({ ...entry })
+      }
+      history.sort((a, b) => b.playedAt - a.playedAt)
+      if (history.length > MAX_HISTORY) history = history.slice(0, MAX_HISTORY)
+      data.history = history
+    })
   }
 }
 
