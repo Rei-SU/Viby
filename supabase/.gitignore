@@ -1,0 +1,6 @@
+# Supabase CLI scratch output and local secrets. Never commit these.
+.branches/
+.temp/
+.env
+.env.*
+!.env.example
