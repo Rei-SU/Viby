@@ -21,6 +21,7 @@
     "measure": "node scripts/measure.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.2",
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {

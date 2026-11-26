@@ -6,6 +6,12 @@ directories:
   output: dist
   buildResources: resources
 
+# Account links come back as viby://auth/callback; the OS routes them here.
+protocols:
+  - name: Viby
+    schemes:
+      - viby
+
 files:
   - out/**/*
   - package.json
