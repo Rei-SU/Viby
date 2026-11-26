@@ -45,7 +45,7 @@ import type {
 import { auth } from './account/auth'
 import { exportAccount } from './account/export'
 import { noteSyncChange, syncEngine } from './account/sync'
-import { setRemoteLibrarySink, SYNCED_SETTINGS } from './account/records'
+import { setRemoteApplyListener, setRemoteLibrarySink, SYNCED_SETTINGS } from './account/records'
 import { summarizeHistory } from '@shared/listening'
 import { setTaskbarState } from './taskbar'
 import { changelogInfo } from './changelog'
@@ -393,6 +393,10 @@ let importResolveController: AbortController | null = null
       )
     }
   })
+
+  // Main has already written the pulled data; tell the window so open views
+  // re-read their stores instead of waiting for a navigation.
+  setRemoteApplyListener((change) => broadcast(CH.libraryChanged, change))
 
   networkMonitor.onChange((state: NetworkState) => {
     broadcast(CH.networkChanged, state)

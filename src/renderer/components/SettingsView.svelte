@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, tick } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
   import type { CacheStats, Settings, UpdateState, YtDlpInfo } from '@shared/types'
   import { api } from '../lib/api'
   import { artwork } from '../lib/artwork.svelte'
@@ -38,6 +38,17 @@
     if (flashTimer) clearTimeout(flashTimer)
     if (scrollTimer) clearTimeout(scrollTimer)
   })
+
+  // A pull can change synced settings while this page is open.
+  onMount(() =>
+    api.library.onChange((change) => {
+      if (!change.settings) return
+      void api.settings.get().then((next) => {
+        current = next
+        player.applySettings(next)
+      })
+    })
+  )
 
   /**
    * Settings rows load asynchronously and change height right after mount,

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   CH,
+  type LibraryChange,
   type LyricsRequest,
   type NavCommand,
   type PlayerCommand,
@@ -106,7 +107,12 @@ const api: VibyApi = {
     removeFromPlaylist: (id: string, trackId: string) =>
       ipcRenderer.invoke(CH.libraryPlaylistRemove, id, trackId),
     albums: () => ipcRenderer.invoke(CH.libraryAlbums),
-    toggleAlbum: (album: SavedAlbum) => ipcRenderer.invoke(CH.libraryAlbumToggle, album)
+    toggleAlbum: (album: SavedAlbum) => ipcRenderer.invoke(CH.libraryAlbumToggle, album),
+    onChange: (callback: (change: LibraryChange) => void) => {
+      const handler = (_event: unknown, change: LibraryChange): void => callback(change)
+      ipcRenderer.on(CH.libraryChanged, handler)
+      return () => ipcRenderer.removeListener(CH.libraryChanged, handler)
+    }
   },
   cache: {
     stats: () => ipcRenderer.invoke(CH.cacheStats),

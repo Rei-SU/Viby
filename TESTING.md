@@ -296,7 +296,8 @@ Find the row for what you changed; run what it lists.
    the server copy. Add a different track to the same playlist on each device:
    both entries must survive in order. Sign out and back in: no duplicates and no
    backlog. A deliberately conflicting setting edit must show that a change was
-   replaced by another device.
+   replaced by another device. Remote changes must appear in open views without
+   navigating away and back.
 5. Request a password reset, enter the 6-digit code from the email, and set a new
    password. The old password must fail and the new one must work; sync starts
    only after the new password is saved.

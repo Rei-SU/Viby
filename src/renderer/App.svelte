@@ -35,6 +35,8 @@
   import { downloads } from './lib/downloads.svelte'
   import { favorites } from './lib/favorites.svelte'
   import { savedAlbums } from './lib/saved-albums.svelte'
+  import { playlists } from './lib/playlists.svelte'
+  import { history } from './lib/history.svelte'
   import { installShortcuts } from './lib/keyboard'
   import { artwork } from './lib/artwork.svelte'
   import { searchState } from './lib/search.svelte'
@@ -274,10 +276,22 @@
     const offSettings = api.app.onOpenSettings(openSettings)
     const offNavigate = api.app.onNavigate(navigate)
     const offShortcuts = installShortcuts()
+    // A pull merges remote data in main; re-read the affected stores so open
+    // views update without a navigation.
+    const offLibrary = api.library.onChange((change) => {
+      if (change.favorites) void favorites.load(true)
+      if (change.playlists.length > 0) void playlists.load(true)
+      if (change.albums) void savedAlbums.load(true)
+      if (change.history) void history.load(true)
+      if (change.settings) {
+        void api.settings.get().then((next) => player.applySettings(next))
+      }
+    })
     return () => {
       offSettings()
       offNavigate()
       offShortcuts()
+      offLibrary()
       account.dispose()
     }
   })

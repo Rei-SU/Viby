@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { HistoryEntry, Playlist, SavedAlbum, Settings, Track } from '@shared/types'
+import type { LibraryChange } from '@shared/ipc'
 import { JsonStore, userDataFile } from '../json-store'
 import { lib, type RemoteLibraryOps } from '../library'
 import { applyRemoteSettings, settings } from '../settings'
@@ -411,6 +412,22 @@ export function setRemoteLibrarySink(sink: ((ops: RemoteLibraryOps) => void) | n
   remoteLibrarySink = sink
 }
 
+let remoteApplyListener: ((change: LibraryChange) => void) | null = null
+
+/** Main registers one to tell the renderer which stores a pull changed. */
+export function setRemoteApplyListener(listener: ((change: LibraryChange) => void) | null): void {
+  remoteApplyListener = listener
+}
+
+function notifyApplied(change: LibraryChange): void {
+  if (!remoteApplyListener) return
+  try {
+    remoteApplyListener(change)
+  } catch {
+    // A renderer notification must not abort a pull.
+  }
+}
+
 function notifySink(ops: RemoteLibraryOps): void {
   if (!remoteLibrarySink) return
   try {
@@ -557,6 +574,23 @@ export function applyRemoteRecordsTracked(records: OutboxRecord[]): {
   if (accepted.some((value) => value.kind === 'history' && !value.deleted)) {
     const kept = new Set(lib().history(HISTORY_LIMIT).map(historyRecordId))
     final = accepted.filter((value) => value.kind !== 'history' || value.deleted || kept.has(value.recordId))
+  }
+
+  const changedPlaylists = new Set<string>()
+  for (const playlist of ops.playlists?.upsert ?? []) changedPlaylists.add(playlist.id)
+  for (const id of ops.playlists?.remove ?? []) changedPlaylists.add(id)
+  for (const entry of ops.playlistItems?.upsert ?? []) changedPlaylists.add(entry.playlistId)
+  for (const entry of ops.playlistItems?.remove ?? []) changedPlaylists.add(entry.playlistId)
+
+  const change: LibraryChange = {
+    favorites: Boolean(ops.favorites?.upsert?.length || ops.favorites?.remove?.length),
+    albums: Boolean(ops.albums?.upsert?.length || ops.albums?.remove?.length),
+    history: Boolean(ops.history?.upsert?.length || ops.history?.remove?.length),
+    playlists: [...changedPlaylists],
+    settings: Object.keys(patch).length > 0
+  }
+  if (change.favorites || change.albums || change.history || change.playlists.length > 0 || change.settings) {
+    notifyApplied(change)
   }
 
   return { applied: final.length, accepted: final }

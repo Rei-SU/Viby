@@ -70,6 +70,7 @@ export const CH = {
   libraryPlaylistRemove: 'library:playlist-remove',
   libraryAlbums: 'library:albums',
   libraryAlbumToggle: 'library:album-toggle',
+  libraryChanged: 'library:changed',
 
   catalogSearch: 'catalog:search',
   catalogBrowse: 'catalog:browse',
@@ -124,6 +125,16 @@ export const CH = {
 
   ...ACCOUNT_CH
 } as const
+
+/** What a pull changed, so the renderer can re-read only the affected stores. */
+export type LibraryChange = {
+  favorites: boolean
+  albums: boolean
+  history: boolean
+  /** Playlist ids whose metadata or entries changed. */
+  playlists: string[]
+  settings: boolean
+}
 
 export type LyricsRequest = {
   trackId: string
@@ -244,6 +255,8 @@ export interface VibyApi {
     /** Saved releases, newest first. Metadata only; audio lives in Downloads. */
     albums(): Promise<SavedAlbum[]>
     toggleAlbum(album: SavedAlbum): Promise<{ saved: boolean; albums: SavedAlbum[] }>
+    /** A pull merged remote changes; affected stores should reload. */
+    onChange(callback: (change: LibraryChange) => void): () => void
   }
   cache: {
     stats(): Promise<CacheStats>

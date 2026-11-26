@@ -500,6 +500,9 @@ replacing the whole list. `outbox.ts` persists pending writes per account;
 and reported as a conflict, and future client clocks are clamped to server time
 plus five minutes. Conflicts are appended to a capped
 `account-conflicts-<userId>.json` and summarised in `SyncStatus.conflicts`.
+After a pull, main broadcasts `library:changed` with the affected domains; open
+views reload their stores and the player applies pulled settings, so no
+navigation is needed to see remote changes.
 `compare.ts` is the shared comparator, `export.ts` writes a JSON copy, and
 `device.ts` stores the tie-break id. The first account on an install adopts the
 local library; later accounts start from their server copy.

@@ -15,7 +15,8 @@ import {
   applyRemoteRecords,
   historyRecordId,
   parseHistoryRecordId,
-  readLocalRecords
+  readLocalRecords,
+  setRemoteApplyListener
 } from '../src/main/account/records'
 import { lib } from '../src/main/library'
 import { setSettings, settings } from '../src/main/settings'
@@ -260,6 +261,31 @@ console.log('\napplying pulled records:')
   check('an album tombstone deletes it', !book.isAlbumSaved('rr-alb'))
 
   check('a malformed record is skipped', applyRemoteRecords([rec('album', 'rr-bad-alb', { id: 'rr-bad-alb', title: '', savedAt: 1 })]) === 0)
+}
+
+console.log('\nremote apply notifications:')
+{
+  let change: { favorites: boolean; albums: boolean; history: boolean; playlists: string[]; settings: boolean } | null = null
+  setRemoteApplyListener((next) => (change = next))
+
+  applyRemoteRecords([rec('favorite', 'notify-fav', track('notify-fav', 'Notify'))])
+  check('a pulled favourite is reported', change?.favorites === true)
+
+  applyRemoteRecords([
+    rec('playlist', 'notify-pl', { id: 'notify-pl', name: 'Notify', createdAt: 1, updatedAt: 1, tracks: [] }, 1),
+    rec(
+      'playlist_track',
+      'notify-pl:notify-track',
+      { playlistId: 'notify-pl', track: track('notify-track', 'Entry'), position: 0 },
+      1
+    )
+  ])
+  check('a pulled playlist is reported', change?.playlists.includes('notify-pl') === true)
+
+  applyRemoteRecords([rec('setting', 'audioQuality', { value: 'best' }, 1)])
+  check('a pulled setting is reported', change?.settings === true)
+
+  setRemoteApplyListener(null)
 }
 
 console.log('\nhistory union:')
