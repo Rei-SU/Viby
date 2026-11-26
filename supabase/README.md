@@ -24,6 +24,7 @@ the app makes no Supabase call at all.
 | `migrations/20261125052234_sync_records.sql` | `sync_records` table, pull index, RLS, `sync_push` RPC |
 | `migrations/20261126220939_playlist_items_clock_clamp.sql` | Per-entry playlist records, backfill, future-clock clamp |
 | `migrations/20261126221541_sync_push_accepted_only.sql` | Returns only accepted writes so losing edits are reconciled, not dropped |
+| `migrations/20261126231617_prune_sync_tombstones.sql` | `prune_sync_tombstones()` for 90-day server cleanup |
 | `functions/delete-account/index.ts` | Verifies the caller's JWT, deletes the auth user with the service role |
 | `functions/send-email/index.ts` | Auth Send Email hook: verifies Supabase's signature and sends through Resend |
 | `functions/auth-open/index.ts` | HTTPS landing page that hands the verified code to `viby://auth/callback` |
@@ -220,18 +221,16 @@ the auth user with the service role, and `sync_records` follows through the
    with a valid token → `{ "deleted": true }`, and the user's `sync_records`
    rows are gone.
 
-## Optional housekeeping (not applied)
+## Optional housekeeping
 
-Tombstones are meant to live 90 days. The client drops its own on that
-schedule; the server never prunes, so the table grows slowly. If you want the
-server to trim too, run this by hand or on a schedule (pg_cron), again as a
-manual decision:
+Tombstones are meant to live 90 days. The client drops its own on that schedule;
+the server exposes `prune_sync_tombstones()` for the same window. It is
+`service_role` only, so run it by hand or schedule it with pg_cron:
 
 ```sql
--- Rows deleted more than 90 days ago (server clock) are no longer needed.
-delete from public.sync_records
-where deleted
-  and updated_server_at < now() - interval '90 days';
+select public.prune_sync_tombstones();
+-- or, once pg_cron is enabled:
+select cron.schedule('viby-prune-tombstones', '15 4 * * *', 'select public.prune_sync_tombstones()');
 ```
 
 History is capped at 5,000 entries in the app. The server stores what it is
