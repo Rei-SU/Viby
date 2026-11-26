@@ -49,7 +49,13 @@ const suites = {
   'main-guards': { file: 'main-guards.test.ts' },
   updates: { file: 'updates.test.ts' },
   'release-notes': { file: 'release-notes.test.ts' },
-  changelog: { file: 'changelog.test.ts' }
+  changelog: { file: 'changelog.test.ts' },
+  'account-compare': { file: 'account-compare.test.ts' },
+  'account-bootstrap': { file: 'account-bootstrap.test.ts', electron: true },
+  'account-outbox': { file: 'account-outbox.test.ts', electron: true },
+  'account-records': { file: 'account-records.test.ts', electron: true },
+  'account-sync': { file: 'account-sync.test.ts', electron: true },
+  'account-tokens': { file: 'account-tokens.test.ts', electron: true }
 }
 
 const requested = process.argv.slice(2)

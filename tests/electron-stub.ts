@@ -13,6 +13,10 @@ export const app = {
   getAppPath: (): string => process.cwd(),
   getPath: (name: string): string => {
     if (name !== 'userData') return process.cwd()
+    // Account suites point this at a throwaway directory so their stores never
+    // touch the real library. Other suites leave it unset.
+    const isolated = process.env.VIBY_TEST_USERDATA
+    if (isolated) return isolated
     // Development runs pin userData before app.setName('Viby'), so the
     // directory stays lowercase on every platform. Match that here; this stub
     // represents a development app (isPackaged is false), not a packaged one.
@@ -23,6 +27,24 @@ export const app = {
       return join(homedir(), 'Library', 'Application Support', 'viby')
     }
     return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'viby')
+  }
+}
+
+/**
+ * Stand-in for safeStorage. The token-vault suite flips `available` and can
+ * replace `encryptString`/`decryptString` to simulate a missing keyring or a
+ * write failure. The payload is reversible so a restart can be simulated.
+ */
+export const safeStorage = {
+  available: true,
+  isEncryptionAvailable: (): boolean => safeStorage.available,
+  encryptString: (value: string): Buffer =>
+    Buffer.from(`viby-test-enc:${Buffer.from(value, 'utf8').toString('base64')}`, 'utf8'),
+  decryptString: (value: Buffer): string => {
+    const raw = value.toString('utf8')
+    const prefix = 'viby-test-enc:'
+    if (!raw.startsWith(prefix)) throw new Error('not encrypted by this stub')
+    return Buffer.from(raw.slice(prefix.length), 'base64').toString('utf8')
   }
 }
 

@@ -26,7 +26,7 @@ export async function run(app, check) {
     JSON.stringify(layout)
   )
   check(
-    'profile placeholder sits on the right',
+    'account button sits on the right',
     Boolean(layout) && layout.profile && layout.profileRadius === '50%',
     JSON.stringify(layout)
   )
@@ -417,12 +417,39 @@ export async function run(app, check) {
   `)
   check('Escape closes, a click reopens, and Cmd/Ctrl+K focuses', keys.escaped && keys.reopenedByClick && keys.focused && keys.reopened, JSON.stringify(keys))
 
-  const profile = await app.evaluate(`
+  const accountSheet = await app.evaluate(`
     (async () => {
-      document.querySelector('.profile')?.click()
+      const trigger = document.querySelector('[data-account-trigger]')
+      const label = trigger?.getAttribute('aria-label') ?? ''
+      trigger?.click()
+      await new Promise((r) => setTimeout(r, 300))
+      const sheet = document.querySelector('[role="dialog"][aria-label="Account"]')
+      const buttons = [...(sheet?.querySelectorAll('button') ?? [])].map((node) =>
+        node.textContent.trim()
+      )
+      const opened = Boolean(sheet)
+      const signIn = buttons.includes('Sign in')
+      const create = buttons.includes('Create account')
+      sheet?.querySelector('[aria-label="Close account panel"]')?.click()
       await new Promise((r) => setTimeout(r, 200))
-      return { note: document.querySelector('.profile-note')?.textContent?.trim() ?? null }
+      return {
+        trigger: Boolean(trigger),
+        label,
+        opened,
+        signIn,
+        create,
+        closed: !document.querySelector('[role="dialog"][aria-label="Account"]')
+      }
     })()
   `)
-  check('profile placeholder is present and explains itself', profile.note === 'Profiles are coming later.', JSON.stringify(profile))
+  check(
+    'the account button opens the signed-out account sheet',
+    accountSheet.trigger &&
+      accountSheet.opened &&
+      accountSheet.signIn &&
+      accountSheet.create &&
+      accountSheet.closed &&
+      /account/i.test(accountSheet.label),
+    JSON.stringify(accountSheet)
+  )
 }
