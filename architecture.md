@@ -498,21 +498,24 @@ replacing the whole list. `outbox.ts` persists pending writes per account;
 `sync_push` RPC, merges with last-writer-wins and keeps tombstones 90 days.
 `sync_push` returns only the writes it accepted; a missing row is pulled back
 and reported as a conflict, and future client clocks are clamped to server time
-plus five minutes. Conflicts are appended to a capped
-`account-conflicts-<userId>.json` and summarised in `SyncStatus.conflicts`.
+plus five minutes. Replaced local edits are stored per account, listed in the
+account sheet (kind, record id, time) and can be cleared there.
 After a pull, main broadcasts `library:changed` with the affected domains; open
 views reload their stores and the player applies pulled settings, so no
 navigation is needed to see remote changes.
 `compare.ts` is the shared comparator, `export.ts` writes a JSON copy, and
-`device.ts` stores the tie-break id. While signed in, the engine also checks for
-remote changes on a one-minute timer (plus window focus and reconnect), so an
-idle device still converges without a local edit. The first account on an install adopts the
-local library; later accounts start from their server copy.
-An empty install attaching to an existing account seeds nothing and suppresses
-its default settings until the first pull completes, so the server's library and
-settings win instead of being overwritten by defaults.
-A recovery code sets the `recovery` state and pauses sync until `updatePassword`
-replaces the password.
+`device.ts` stores the tie-break id. Each account has its own local library root
+(`accounts/<userId>/`); signing out returns to the signed-out library, and the
+first account copies the legacy library once. Switching roots clears the player
+queue, so no account reads another's data. Downloads, cache and device settings
+stay device-level. While signed in, the engine also checks for remote changes on
+a one-minute timer (plus window focus and reconnect), so an idle device still
+converges without a local edit.
+A new empty account or install seeds nothing and suppresses its default settings
+until the first pull completes, so the server's library and settings win instead
+of being overwritten by defaults. Account deletion removes that account's local
+root. A recovery code sets the `recovery` state and pauses sync until
+`updatePassword` replaces the password.
 
 Backend sources live in `supabase/`: the migration creates `sync_records` with
 RLS and `sync_push`, and `functions/delete-account` erases the auth user with the
@@ -714,15 +717,16 @@ utilities. Component styles are scoped in each `.svelte` file.
 | Path | Owner | Contents |
 |---|---|---|
 | `settings.json` | `settings.ts` | Audio quality, volume/mute/modes, autoplay, background/tray, login, offline, updates, Discord, changelog baselines. |
-| `library.json` | `library.ts` | Favorites, history (5,000 cap), playlists, saved albums. |
-| `session.json` | `session.ts` | Current track, a 100-row queue window with `queueStart`, the artist tail descriptor, index and position. |
+| `library.json` | `library.ts` | Signed-out (local) favourites, history, playlists, saved albums. |
+| `accounts/<userId>/library.json` | `library.ts` | The same library for one account; `lib()` swaps roots on sign-in/out. |
+| `session.json` | `session.ts` | Current track, a 100-row queue window with `queueStart`, the artist tail descriptor, index and position. Device-level; playback clears on an account change. |
 | `tracks.json` | `ipc.ts` | Metadata snapshot for every played/cached track; offline metadata and bitrate estimation. |
 | `stream-urls.json` | `ytdlp/resolver.ts` | Resolved URLs with 2h expiry; bounded. |
 | `lyrics.json` | `lyrics.ts` | Cached lyrics and 24h misses. |
-| `cache/audio/index.json` + files | `cache/audio.ts` | Bounded LRU audio cache with snapshots, quality tags and a reconciled index. |
-| `cache/art/` | `cache/images.ts` | Content-addressed artwork cache. |
+| `cache/audio/index.json` + files | `cache/audio.ts` | Bounded LRU audio cache with snapshots, quality tags and a reconciled index. Device-level. |
+| `cache/art/` | `cache/images.ts` | Content-addressed artwork cache. Device-level. |
 | `recording-aliases.json` | `recording-alias.ts` | Capped catalog-row ↔ released-audio id map. |
-| `downloads/index.json` | `downloads/store.ts` | Entries, collections, jobs. |
+| `downloads/index.json` | `downloads/store.ts` | Entries, collections, jobs. Download files are device-level. |
 | `downloads/audio/`, `art/`, `lyrics/`, `tmp/` | `downloads/` | Explicit downloads and their assets. |
 | `bin/` | `ytdlp/binary.ts` | Managed yt-dlp zipapp/runtime copy. |
 | `pycache/` | `ytdlp/binary.ts` | Python bytecode cache. |
@@ -730,10 +734,10 @@ utilities. Component styles are scoped in each `.svelte` file.
 | `account-state.json` | `account/auth.ts` | Pending verification email and the recovery flag. |
 | `account-tokens.bin` | `account/tokens.ts` | Session encrypted by `safeStorage`; never plaintext. |
 | `account-device.json` | `account/device.ts` | Stable device id for same-timestamp tie-breaking. |
-| `account-library.json` | `account/records.ts` | Which account adopted this install's library. |
-| `account-records.json` | `account/records.ts` | Last agreed version per record for the bound account. |
-| `account-sync.json` | `account/sync.ts` | Pull cursor and last sync per account. |
-| `account-conflicts-<userId>.json` | `account/sync.ts` | Capped log of local edits replaced by a newer remote copy. |
+| `account-library.json` | `account/library-root.ts` | Which account adopted the legacy local library (one-time copy). |
+| `accounts/<userId>/sync-records.json` | `account/records.ts` | Last agreed version per record for that account. |
+| `accounts/<userId>/sync-cursor.json` | `account/sync.ts` | Pull cursor and last sync for that account. |
+| `accounts/<userId>/conflicts.json` | `account/sync.ts` | Capped log of local edits replaced by a newer remote copy. |
 | `account-outbox-<userId>.json` | `account/outbox.ts` | Pending writes for one account. |
 | `account-outbox.json` | `account/outbox.ts` | Signed-out queue file (kept empty). |
 | `resources/changelog.json` (app bundle) | `scripts/build-changelog.mjs` | Release notes baked from annotated tags. |

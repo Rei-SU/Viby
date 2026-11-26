@@ -89,6 +89,7 @@ ones that touch main-process modules.
 | `account-records` | local↔record mapping (playlist metadata plus one record per entry), first-account adoption, diff and tombstones, payload validation, pull application |
 | `account-sync` | pull-before-push, batching, rev cursor, merges, tombstones, losing writes reported as conflicts, error recovery, account isolation (fake PostgREST) |
 | `account-tokens` | `safeStorage` encryption at rest, memory-only fallback, corrupt and foreign-keyring files |
+| `library-root` | per-account roots: first-account legacy copy, empty second root, sign-out returns to local |
 
 ### Manual update smoke test (Windows, real hardware)
 
@@ -208,7 +209,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/library-items.ts`, `LibraryView`, `DownloadBadge`, `DownloadCollectionView.svelte`, `saved-albums.svelte.ts` | unit `library-items` · e2e `offline`, `library` |
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts`, `private-address.ts`, `image-extension.ts` | unit `images`, `main-guards` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
-| `src/main/account/**`, `src/shared/account.ts`, `src/preload/index.ts` account bridge | unit `account-compare`, `account-bootstrap`, `account-outbox`, `account-records`, `account-sync`, `account-tokens` · the live account checklist below |
+| `src/main/account/**`, `src/shared/account.ts`, `src/preload/index.ts` account bridge | unit `account-compare`, `account-bootstrap`, `account-outbox`, `account-records`, `account-sync`, `account-tokens`, `library-root` · the live account checklist below |
 | `src/renderer/lib/account.svelte.ts`, `AccountSheet`, `SignInForm`, `SettingsView` account row | no automated e2e (needs a live mailbox) · manual account checklist · `npm run typecheck` |
 | `src/renderer/lib/player.svelte.ts`, `player-source.ts`, `queue-session.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening`, `queue-session`, `player-source` · manual: relaunch mid-discography restores the right track and keeps the artist tail |
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
@@ -296,11 +297,14 @@ Find the row for what you changed; run what it lists.
    the server copy. Add a different track to the same playlist on each device:
    both entries must survive in order. Sign out and back in: no duplicates and no
    backlog. A deliberately conflicting setting edit must show that a change was
-   replaced by another device. Remote changes must appear in open views without
-   navigating away and back.
-5. Request a password reset, enter the 6-digit code from the email, and set a new
+   replaced by another device, and the account sheet must list it. Remote changes
+   must appear in open views without navigating away and back.
+5. Sign out and sign in with a **different** account on the same machine: its own
+   root starts empty and pulls only that account's data; the first account's
+   library returns when you sign back in. Downloads/cache are device-level.
+6. Request a password reset, enter the 6-digit code from the email, and set a new
    password. The old password must fail and the new one must work; sync starts
    only after the new password is saved.
-6. Delete the account. The auth user and its `sync_records` rows disappear; local
+7. Delete the account. The auth user and its `sync_records` rows disappear; local
    files stay. With the app signed out, the network log must show no Supabase
    request at all.

@@ -1208,12 +1208,16 @@ accepted writes; a losing edit is pulled back and reported as a conflict, and
 future client clocks are clamped to server time plus five minutes. The local
 JSON stores stay authoritative and are merged through the same comparator.
 
-**Isolation.** Pending writes live in a per-account outbox. The first account to
-sign in on an install adopts the local library; a second account on the same
-machine starts from its own server copy and never uploads the first account's
-records. A library that failed to load is never read as "the user deleted
-everything". An empty install attaching to an existing account seeds nothing and
-suppresses its default settings until the first pull, so the server copy wins.
+**Isolation.** Pending writes live in a per-account outbox, and each account has
+its own local library root (`accounts/<userId>/`). The first account copies the
+legacy local library once; a second account starts from an empty root and pulls
+its own server copy, so accounts never read each other's data. Signing out
+returns to the local library, and an account change clears the player queue.
+Downloads, cache and device settings stay device-level. A library that failed to
+load is never read as "the user deleted everything". An empty install attaching
+to an existing account seeds nothing and suppresses its default settings until
+the first pull, so the server copy wins. Replaced edits are listed in the account
+sheet and can be cleared. Account deletion removes that account's local root.
 A recovery session does not start sync until the password is set.
 
 **Backend.** `supabase/migrations/20261125052234_sync_records.sql` creates
