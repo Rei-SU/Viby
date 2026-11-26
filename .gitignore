@@ -20,6 +20,9 @@ resources/bin/*.exe
 # It also contains absolute symlinks into the build machine's temp directory.
 resources/python/
 
+# Agent scratch space: throwaway scripts and notes, never committed
+.context/
+
 # Local secrets, credentials and signing material
 .env
 .env.*
