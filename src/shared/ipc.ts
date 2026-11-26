@@ -1,3 +1,5 @@
+import type { AccountApi, SyncApi } from './account'
+import { ACCOUNT_CH } from './account'
 import type { ListeningSummary } from './listening'
 import type {
   BrowseResult,
@@ -118,7 +120,9 @@ export const CH = {
   importMatch: 'import:match',
   importCancel: 'import:cancel',
   importCreate: 'import:create',
-  importProgress: 'import:progress'
+  importProgress: 'import:progress',
+
+  ...ACCOUNT_CH
 } as const
 
 export type LyricsRequest = {
@@ -312,6 +316,9 @@ export interface VibyApi {
     /** Progress events for the currently matching import. */
     onProgress(callback: (progress: ImportProgress) => void): () => void
   }
+  /** Optional account service. Signed out means no network call at all. */
+  account: AccountApi
+  sync: SyncApi
   /**
    * Only present when VIBY_DEBUG_PORT is set. Used by the e2e harness to keep
    * synthetic titles ("Track A", "Seed") out of real listening history.

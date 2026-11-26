@@ -8,6 +8,7 @@ import {
   type TaskbarState,
   type VibyApi
 } from '@shared/ipc'
+import type { AccountCredentials, AccountStatus, SyncStatus } from '@shared/account'
 import type {
   DownloadCollectionInput,
   DownloadProgress,
@@ -179,6 +180,33 @@ const api: VibyApi = {
       const handler = (_event: unknown, progress: ImportProgress): void => callback(progress)
       ipcRenderer.on(CH.importProgress, handler)
       return () => ipcRenderer.removeListener(CH.importProgress, handler)
+    }
+  },
+  account: {
+    status: () => ipcRenderer.invoke(CH.accountStatus),
+    signUp: (input: AccountCredentials) => ipcRenderer.invoke(CH.accountSignUp, input),
+    signIn: (input: AccountCredentials) => ipcRenderer.invoke(CH.accountSignIn, input),
+    verifyCode: (code: string) => ipcRenderer.invoke(CH.accountVerifyCode, code),
+    resend: () => ipcRenderer.invoke(CH.accountResend),
+    sendMagicLink: (email: string) => ipcRenderer.invoke(CH.accountMagicLink, email),
+    resetPassword: (email: string) => ipcRenderer.invoke(CH.accountResetPassword, email),
+    signOut: () => ipcRenderer.invoke(CH.accountSignOut),
+    deleteAccount: () => ipcRenderer.invoke(CH.accountDelete),
+    updatePassword: (password: string) => ipcRenderer.invoke(CH.accountUpdatePassword, password),
+    export: () => ipcRenderer.invoke(CH.accountExport),
+    onChange: (callback: (status: AccountStatus) => void) => {
+      const handler = (_event: unknown, status: AccountStatus): void => callback(status)
+      ipcRenderer.on(CH.accountChanged, handler)
+      return () => ipcRenderer.removeListener(CH.accountChanged, handler)
+    }
+  },
+  sync: {
+    status: () => ipcRenderer.invoke(CH.syncStatus),
+    now: () => ipcRenderer.invoke(CH.syncNow),
+    onChange: (callback: (status: SyncStatus) => void) => {
+      const handler = (_event: unknown, status: SyncStatus): void => callback(status)
+      ipcRenderer.on(CH.syncChanged, handler)
+      return () => ipcRenderer.removeListener(CH.syncChanged, handler)
     }
   },
   ...(process.env.VIBY_DEBUG_PORT

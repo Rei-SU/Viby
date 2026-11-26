@@ -37,10 +37,25 @@ import {
   type ResolveRequest,
   type TaskbarState
 } from '@shared/ipc'
+import type {
+  AccountCredentials,
+  AccountExport,
+  AccountStatus
+} from '@shared/account'
+import { auth } from './account/auth'
+import { exportAccount } from './account/export'
+import { noteSyncChange, syncEngine } from './account/sync'
+import { setRemoteLibrarySink, SYNCED_SETTINGS } from './account/records'
 import { summarizeHistory } from '@shared/listening'
 import { setTaskbarState } from './taskbar'
 import { changelogInfo } from './changelog'
-import { qualityCapKbps, setSettings, settings } from './settings'
+import {
+  qualityCapKbps,
+  setSettings,
+  setSettingsEffect,
+  settings,
+  type SettingsEffect
+} from './settings'
 import { session } from './session'
 import { mergeTrackMetadata } from './track-metadata'
 import { cachedLyrics, getLyrics } from './lyrics'
@@ -161,6 +176,161 @@ let importResolveController: AbortController | null = null
     }
   }
 
+  // ---- account + sync (optional; signed out makes no network call) --------
+  const account = auth()
+  const sync = syncEngine()
+
+  const parseEmail = (input: unknown): string | null => {
+    if (typeof input !== 'string') return null
+    const email = input.trim().toLowerCase()
+    if (email.length < 3 || email.length > 254) return null
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null
+  }
+
+  const parseCredentials = (input: unknown): AccountCredentials | null => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+    const value = input as Partial<AccountCredentials>
+    const email = parseEmail(value.email)
+    if (!email) return null
+    if (typeof value.password !== 'string') return null
+    if (value.password.length < 8 || value.password.length > 200) return null
+    return { email, password: value.password }
+  }
+
+  const applyAccount = (status: AccountStatus): void => {
+    broadcast(CH.accountChanged, status)
+    sync.useAccount(status.state === 'signed-in' ? { id: status.userId } : null)
+  }
+
+  account.subscribe(applyAccount)
+  sync.subscribe((status) => broadcast(CH.syncChanged, status))
+  // Seed the current value: auth may have restored a session before this
+  // listener existed.
+  applyAccount(account.status())
+
+  ipcMain.handle(CH.accountStatus, (): AccountStatus => account.status())
+
+  ipcMain.handle(
+    CH.accountSignUp,
+    async (_e, input: unknown): Promise<Result<AccountStatus>> => {
+      const credentials = parseCredentials(input)
+      if (!credentials) {
+        return fail(new Error('Enter a valid email address and a password of at least 8 characters.'))
+      }
+      try {
+        return ok(await account.signUp(credentials))
+      } catch (error) {
+        return fail(error)
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CH.accountSignIn,
+    async (_e, input: unknown): Promise<Result<AccountStatus>> => {
+      const credentials = parseCredentials(input)
+      if (!credentials) {
+        return fail(new Error('Enter a valid email address and a password of at least 8 characters.'))
+      }
+      try {
+        return ok(await account.signIn(credentials))
+      } catch (error) {
+        return fail(error)
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CH.accountVerifyCode,
+    async (_e, input: unknown): Promise<Result<AccountStatus>> => {
+      if (typeof input !== 'string' || !/^\d{6}$/.test(input.trim())) {
+        return fail(new Error('Enter the 6-digit code from the email.'))
+      }
+      try {
+        return ok(await account.verifyCode(input.trim()))
+      } catch (error) {
+        return fail(error)
+      }
+    }
+  )
+
+  ipcMain.handle(CH.accountResend, async (): Promise<Result<void>> => {
+    try {
+      await account.resend()
+      return ok(undefined)
+    } catch (error) {
+      return fail(error)
+    }
+  })
+
+  ipcMain.handle(
+    CH.accountMagicLink,
+    async (_e, input: unknown): Promise<Result<void>> => {
+      const email = parseEmail(input)
+      if (!email) return fail(new Error('Enter a valid email address.'))
+      try {
+        await account.sendMagicLink(email)
+        return ok(undefined)
+      } catch (error) {
+        return fail(error)
+      }
+    }
+  )
+
+  ipcMain.handle(
+    CH.accountResetPassword,
+    async (_e, input: unknown): Promise<Result<void>> => {
+      const email = parseEmail(input)
+      if (!email) return fail(new Error('Enter a valid email address.'))
+      try {
+        await account.resetPassword(email)
+        return ok(undefined)
+      } catch (error) {
+        return fail(error)
+      }
+    }
+  )
+
+  ipcMain.handle(CH.accountSignOut, async (): Promise<Result<AccountStatus>> => {
+    try {
+      return ok(await account.signOut())
+    } catch (error) {
+      return fail(error)
+    }
+  })
+
+  ipcMain.handle(CH.accountDelete, async (): Promise<Result<void>> => {
+    try {
+      await account.deleteAccount()
+      return ok(undefined)
+    } catch (error) {
+      return fail(error)
+    }
+  })
+
+  ipcMain.handle(CH.accountExport, async (): Promise<Result<AccountExport>> => {
+    try {
+      return ok(await exportAccount(account.status()))
+    } catch (error) {
+      return fail(error)
+    }
+  })
+
+  ipcMain.handle(CH.accountUpdatePassword, async (_e, input: unknown): Promise<Result<void>> => {
+    if (typeof input !== 'string' || input.length < 8 || input.length > 200) {
+      return fail(new Error('Use a password of at least 8 characters.'))
+    }
+    try {
+      await account.updatePassword(input)
+      return ok(undefined)
+    } catch (error) {
+      return fail(error)
+    }
+  })
+
+  ipcMain.handle(CH.syncStatus, () => sync.status())
+  ipcMain.handle(CH.syncNow, () => sync.now())
+
   const downloadsStore = downloadStore()
   const manager = new DownloadManager(downloadsStore, {
     // Downloads need the upstream host, not just a local link. Treat
@@ -204,6 +374,25 @@ let importResolveController: AbortController | null = null
     }
   })
   downloadsManager = manager
+
+  // A pulled library changes ownership exactly like a local edit: keep the
+  // download references in step, or a playlist deleted on another device would
+  // keep its files pinned here forever.
+  setRemoteLibrarySink((ops) => {
+    if (ops.favorites) {
+      manager.syncCollection(
+        'liked',
+        lib().favorites().map((track) => track.id)
+      )
+    }
+    for (const id of ops.playlists?.remove ?? []) manager.removeCollection(`playlist:${id}`)
+    for (const playlist of ops.playlists?.upsert ?? []) {
+      manager.syncCollection(
+        `playlist:${playlist.id}`,
+        playlist.tracks.map((track) => track.id)
+      )
+    }
+  })
 
   networkMonitor.onChange((state: NetworkState) => {
     broadcast(CH.networkChanged, state)
@@ -283,10 +472,12 @@ let importResolveController: AbortController | null = null
     return true
   })
 
-  ipcMain.handle(CH.settingsSet, (_e, patch: Partial<Settings>): Settings => {
-    const previous = settings().get()
-    const next = setSettings(patch)
-
+  /**
+   * Process-wide consequences of a settings change. Main registers it so a
+   * value pulled from another device runs the same path as a local edit; the
+   * IPC handler below calls it directly.
+   */
+  const applySettingsSideEffects: SettingsEffect = (previous, next, patch) => {
     // Evict only when the cap changes; volume/mute/shuffle writes must not
     // delete cached audio as a side effect.
     if (patch.cacheCapBytes !== undefined || next.audioQuality !== previous.audioQuality) {
@@ -316,6 +507,18 @@ let importResolveController: AbortController | null = null
     if (next.audioQuality !== previous.audioQuality) resolver.clearUrlCache()
 
     if (patch.discordPresence !== undefined) setDiscordEnabled(next.discordPresence)
+  }
+  setSettingsEffect(applySettingsSideEffects)
+
+  ipcMain.handle(CH.settingsSet, (_e, patch: Partial<Settings>): Settings => {
+    const previous = settings().get()
+    const next = setSettings(patch)
+
+    // Only the whitelisted settings travel; volume, mute and cache writes must
+    // not wake the sync engine.
+    if (patch && SYNCED_SETTINGS.some((key) => key in patch)) noteSyncChange()
+
+    applySettingsSideEffects(previous, next, patch)
 
     return next
   })
@@ -632,10 +835,13 @@ let importResolveController: AbortController | null = null
 
   ipcMain.handle(CH.historyAdd, (_e, entry: HistoryEntry): void => {
     lib().addHistory(entry)
+    noteSyncChange()
   })
 
   ipcMain.handle(CH.historyForget, (_e, titles: string[]): number => {
-    return lib().removeHistory(Array.isArray(titles) ? titles : [])
+    const removed = lib().removeHistory(Array.isArray(titles) ? titles : [])
+    if (removed > 0) noteSyncChange()
+    return removed
   })
 
   const historyEntries = (limit: number): HistoryEntry[] => {
@@ -677,33 +883,39 @@ let importResolveController: AbortController | null = null
       'liked',
       result.favorites.map((favorite) => favorite.id)
     )
+    noteSyncChange()
     return result
   })
 
   // ---- playlists (PLAN §5.4) ----------------------------------------------
   ipcMain.handle(CH.libraryPlaylists, (): Playlist[] => lib().playlists())
 
-  ipcMain.handle(CH.libraryPlaylistCreate, (_e, name: unknown): Playlist =>
-    lib().createPlaylist(typeof name === 'string' ? name.slice(0, 120) : '')
-  )
+  ipcMain.handle(CH.libraryPlaylistCreate, (_e, name: unknown): Playlist => {
+    const playlist = lib().createPlaylist(typeof name === 'string' ? name.slice(0, 120) : '')
+    noteSyncChange()
+    return playlist
+  })
 
-  ipcMain.handle(CH.libraryPlaylistRename, (_e, id: unknown, name: unknown): Playlist | null =>
-    typeof id === 'string'
-      ? lib().renamePlaylist(id, typeof name === 'string' ? name.slice(0, 120) : '')
-      : null
-  )
+  ipcMain.handle(CH.libraryPlaylistRename, (_e, id: unknown, name: unknown): Playlist | null => {
+    if (typeof id !== 'string') return null
+    const playlist = lib().renamePlaylist(id, typeof name === 'string' ? name.slice(0, 120) : '')
+    if (playlist) noteSyncChange()
+    return playlist
+  })
 
   ipcMain.handle(CH.libraryPlaylistDelete, (_e, id: unknown): void => {
     if (typeof id !== 'string') return
     lib().deletePlaylist(id)
     // Delete the download references, not the files another source still owns.
     downloadsManager?.removeCollection(`playlist:${id}`)
+    noteSyncChange()
   })
 
   ipcMain.handle(CH.libraryPlaylistAdd, (_e, id: unknown, track: Track): Playlist | null => {
     if (typeof id !== 'string') return null
     const playlist = lib().addToPlaylist(id, track)
     if (playlist) downloadsManager?.syncCollection(`playlist:${id}`, playlist.tracks.map((t) => t.id))
+    if (playlist) noteSyncChange()
     return playlist
   })
 
@@ -714,6 +926,7 @@ let importResolveController: AbortController | null = null
       const playlist = lib().removeFromPlaylist(id, trackId)
       if (playlist) {
         downloadsManager?.pruneCollection(`playlist:${id}`, playlist.tracks.map((t) => t.id))
+        noteSyncChange()
       }
       return playlist
   })
@@ -721,7 +934,11 @@ let importResolveController: AbortController | null = null
   ipcMain.handle(CH.libraryAlbums, (): SavedAlbum[] => lib().albums())
   ipcMain.handle(
     CH.libraryAlbumToggle,
-    (_e, album: SavedAlbum): { saved: boolean; albums: SavedAlbum[] } => lib().toggleAlbum(album)
+    (_e, album: SavedAlbum): { saved: boolean; albums: SavedAlbum[] } => {
+      const result = lib().toggleAlbum(album)
+      noteSyncChange()
+      return result
+    }
   )
 
   ipcMain.handle(CH.importResolve, async (_e, url: string): Promise<Result<ImportSource>> => {
@@ -774,6 +991,7 @@ let importResolveController: AbortController | null = null
 
         const playlist = lib().createPlaylist(input.name?.trim() || 'Imported playlist')
         lib().addTracks(playlist.id, tracks)
+        noteSyncChange()
 
         return ok(lib().playlists().find((entry) => entry.id === playlist.id) ?? playlist)
       } catch (err) {

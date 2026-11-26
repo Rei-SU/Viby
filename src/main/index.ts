@@ -10,6 +10,9 @@ import { isQuitting, keepsAppAlive, markQuitting } from './lifecycle'
 import { settings } from './settings'
 import { applyLaunchAtLogin, launchedAtLogin } from './startup'
 import { initDiscord, stopDiscord } from './discord'
+import { handleAuthCallback, initAccount } from './account/auth'
+import { handleProtocolArgs, installDeepLinks } from './account/deep-link'
+import { disposeSync, installFocusSync, installNetworkSync } from './account/sync'
 
 // Dev-only: lets the app be driven and inspected over the DevTools protocol
 // (PLAN §12). Never enabled in a packaged build.
@@ -56,6 +59,11 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
+// Account links (`viby://auth/callback`) arrive before the app is ready on
+// macOS and through a second instance's argv on Windows. Both paths queue here
+// and are exchanged in the main process, so no token ever reaches the renderer.
+installDeepLinks(handleAuthCallback)
+
 process.on('uncaughtException', (error) => {
   console.error('[main] uncaught exception', error)
   try {
@@ -78,6 +86,8 @@ if (!gotLock) {
     markQuitting()
     // Closing the socket removes the activity from Discord immediately.
     stopDiscord()
+    // The outbox is already durable; this only drops the pending timer.
+    disposeSync()
   })
 
   /**
@@ -102,7 +112,9 @@ if (!gotLock) {
     })
   }
 
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    // A deep link on Windows/Linux opens a second copy whose argv carries it.
+    handleProtocolArgs(argv)
     if (app.isReady()) showMainWindow()
   })
 
@@ -131,6 +143,13 @@ if (!gotLock) {
       initTaskbar()
       createWindow({ startMinimized })
       applyBackgroundPlayback(current.backgroundPlayback)
+
+      // Account work is entirely optional and never blocks the window: session
+      // restore is async, and sync is scheduled rather than awaited.
+      initAccount()
+      installFocusSync()
+      installNetworkSync()
+      handleProtocolArgs(process.argv)
 
       app.on('activate', () => {
         showMainWindow()
