@@ -42,28 +42,36 @@ export function publicError(error: unknown): string {
   )
 }
 
+/** Supabase's machine-readable error code, when the error carries one. */
+function authErrorCode(error: unknown): string {
+  return error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string'
+    ? (error as { code: string }).code
+    : ''
+}
+
 /**
  * Supabase error codes that deserve a sentence instead of the raw server
  * wording. The default mail service and the test-address guard are the two a
  * new user hits first.
  */
 export function describeAuthError(error: unknown): string {
-  const code =
-    error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string'
-      ? (error as { code: string }).code
-      : ''
+  const code = authErrorCode(error)
   switch (code) {
     case 'email_address_invalid':
       return 'Supabase blocks addresses that look like test accounts (for example test…@gmail.com). Use a regular mailbox.'
     case 'email_address_not_authorized':
       return "Supabase's default email service only delivers to members of the project's Supabase organization. Use one of those addresses or set up custom SMTP."
     case 'over_email_send_rate_limit':
-      return "Supabase's built-in email service allows only a couple of messages per hour for the whole project. Connect custom SMTP, or turn off Confirm email while testing."
+      return 'Too many emails were requested recently. Wait a few minutes and try again.'
     case 'over_request_rate_limit':
       return 'Too many requests. Wait a few minutes and try again.'
     case 'user_already_exists':
     case 'email_exists':
       return 'An account already uses that address. Sign in instead.'
+    case 'email_not_confirmed':
+      return 'That address was never confirmed — enter the code from the email, or request a new one.'
+    case 'invalid_credentials':
+      return 'That email and password do not match.'
     case 'weak_password':
       return 'That password is too weak. Use at least 8 characters with a mix of letters and numbers.'
     case 'signup_disabled':
@@ -236,6 +244,13 @@ export class AuthManager {
     })
     if (error) throw new Error(describeAuthError(error))
 
+    // Supabase hides "already registered" by returning a user with no
+    // identities and sending nothing, which would leave the sheet waiting on a
+    // code that will never arrive.
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('An account already uses that address. Sign in instead.')
+    }
+
     if (data.session?.user) {
       this.pendingStore().set({ email: '', recovery: false, flow: 'signup' })
       this.setStatus(signedInStatus(data.session))
@@ -254,7 +269,18 @@ export class AuthManager {
       email: input.email,
       password: input.password
     })
-    if (error) throw new Error(describeAuthError(error))
+    if (error) {
+      // The password was right but the address was never confirmed. Sending
+      // the code again from the code screen is the only way forward, so go
+      // there instead of leaving the user on an error with no action.
+      if (authErrorCode(error) === 'email_not_confirmed') {
+        this.pendingStore().set({ email: input.email, recovery: false, flow: 'signup' })
+        this.setStatus({ state: 'pending-verification', email: input.email })
+        await this.resend().catch(() => {})
+        return this.state
+      }
+      throw new Error(describeAuthError(error))
+    }
     if (!data.session?.user) throw new Error('Sign-in did not return a session. Try again.')
 
     this.pendingStore().set({ email: '', recovery: false, flow: 'signup' })
@@ -297,13 +323,23 @@ export class AuthManager {
       pending.flow === 'recovery' ? 'recovery' : pending.flow === 'magiclink' ? 'email' : 'signup'
 
     const client = this.clientInstance()
-    const { data, error } = await client.auth.verifyOtp({
+    let verified = await client.auth.verifyOtp({
       email: pending.email,
       token,
       type
     })
-    if (error) throw new Error(describeAuthError(error))
-    const session = data.session
+    if (verified.error && type !== 'recovery' && authErrorCode(verified.error) === 'otp_expired') {
+      // An unconfirmed address receives a signup code even when the user asked
+      // for a sign-in code, and the token type must match what was sent.
+      const alternate = type === 'signup' ? 'email' : 'signup'
+      verified = await client.auth.verifyOtp({
+        email: pending.email,
+        token,
+        type: alternate
+      })
+    }
+    if (verified.error) throw new Error(describeAuthError(verified.error))
+    const session = verified.data.session
     if (!session?.user) throw new Error('That code did not sign in. Request a new one.')
 
     this.pendingStore().set({ email: '', recovery: pending.flow === 'recovery', flow: 'signup' })

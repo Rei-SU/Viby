@@ -308,3 +308,7 @@ Find the row for what you changed; run what it lists.
 7. Delete the account. The auth user and its `sync_records` rows disappear; local
    files stay. With the app signed out, the network log must show no Supabase
    request at all.
+8. Leave a sign-up unconfirmed, then sign in with its password: the sheet must
+   switch to code entry and send a fresh code, not show "Email not confirmed".
+   Signing up again with that same address must say the account already exists
+   instead of waiting on a code that never arrives.

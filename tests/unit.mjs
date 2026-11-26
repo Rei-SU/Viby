@@ -57,6 +57,7 @@ const suites = {
   'account-sync': { file: 'account-sync.test.ts', electron: true },
   'account-tokens': { file: 'account-tokens.test.ts', electron: true },
   'account-otp': { file: 'account-otp.test.ts' },
+  'account-auth-errors': { file: 'account-auth-errors.test.ts', electron: true },
   'library-root': { file: 'library-root.test.ts', electron: true }
 }
 
