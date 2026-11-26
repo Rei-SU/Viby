@@ -9,6 +9,7 @@
   import { nav } from '../lib/nav.svelte'
   import { updates } from '../lib/updates.svelte'
   import { changelog } from '../lib/changelog.svelte'
+  import { account, syncSummary } from '../lib/account.svelte'
   import Icon from './Icon.svelte'
 
   const CAPS = [
@@ -24,6 +25,9 @@
   let resolver = $state<YtDlpInfo | null>(null)
   let resolverBusy = $state(false)
   let resolverError = $state('')
+  let accountBusy = $state<'sync' | 'export' | 'signout' | ''>('')
+  let accountNote = $state('')
+  let accountError = $state('')
   let update = $derived(updates.state)
   let updateSection = $state<HTMLElement>()
   let updateFlash = $state(false)
@@ -155,6 +159,43 @@
     current = await api.settings.get()
   }
 
+  async function syncNow(): Promise<void> {
+    accountBusy = 'sync'
+    accountNote = ''
+    accountError = ''
+    try {
+      const result = await account.syncNow()
+      if (!result.ok) accountError = result.error
+    } finally {
+      accountBusy = ''
+    }
+  }
+
+  async function exportLibrary(): Promise<void> {
+    accountBusy = 'export'
+    accountNote = ''
+    accountError = ''
+    try {
+      const result = await account.exportLibrary()
+      if (result.ok) accountNote = `Exported to ${result.data.path}`
+      else accountError = result.error
+    } finally {
+      accountBusy = ''
+    }
+  }
+
+  async function signOut(): Promise<void> {
+    accountBusy = 'signout'
+    accountNote = ''
+    accountError = ''
+    try {
+      const result = await account.signOut()
+      if (!result.ok) accountError = result.error
+    } finally {
+      accountBusy = ''
+    }
+  }
+
   async function clearCache(): Promise<void> {
     try {
       stats = await api.cache.clear()
@@ -254,7 +295,7 @@
 <div class="view">
   <header class="head">
     <h1>Settings</h1>
-    <p>Everything here stays on this machine.</p>
+    <p>Everything here stays on this machine unless you turn on sync.</p>
   </header>
 
   <section>
@@ -408,6 +449,86 @@
         <span class="thumb"></span>
       </button>
     </div>
+  </section>
+
+  <section>
+    <h2>Account</h2>
+
+    {#if account.status.state === 'signed-in'}
+      <div class="row">
+        <div class="label">
+          <span>{account.status.email}</span>
+          <span class="hint">
+            Favourites, playlists, saved albums, history and a few playback settings sync through
+            Viby's server, which stores them encrypted at rest.
+          </span>
+        </div>
+        <button class="ghost" onclick={() => account.show()}>Manage</button>
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <span>Sync</span>
+          <span class:hint-error={!!accountError} class="hint">
+            {accountError || accountNote || syncSummary(account.sync)}
+          </span>
+        </div>
+        <div class="actions">
+          <button
+            class="ghost"
+            onclick={syncNow}
+            disabled={accountBusy === 'sync' || account.sync.phase === 'syncing'}
+          >
+            {accountBusy === 'sync' || account.sync.phase === 'syncing' ? 'Syncing…' : 'Sync now'}
+          </button>
+          <button class="ghost" onclick={exportLibrary} disabled={accountBusy === 'export'}>
+            {accountBusy === 'export' ? 'Exporting…' : 'Export'}
+          </button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">
+          <span>Sign out</span>
+          <span class="hint">Syncing stops on this device. Your library stays where it is.</span>
+        </div>
+        <button class="ghost" onclick={signOut} disabled={accountBusy === 'signout'}>
+          {accountBusy === 'signout' ? 'Signing out…' : 'Sign out'}
+        </button>
+      </div>
+    {:else if account.status.state === 'recovery'}
+      <div class="row">
+        <div class="label">
+          <span>Finish password reset</span>
+          <span class="hint">
+            The reset link signed {account.status.email} in. Set a new password to finish and
+            start syncing.
+          </span>
+        </div>
+        <button class="ghost" onclick={() => account.show()}>Open account</button>
+      </div>
+    {:else if account.status.state === 'pending-verification'}
+      <div class="row">
+        <div class="label">
+          <span>Waiting for confirmation</span>
+          <span class="hint">
+            Enter the 6-digit code sent to {account.status.email} to finish setting up sync.
+          </span>
+        </div>
+        <button class="ghost" onclick={() => account.show()}>Open account</button>
+      </div>
+    {:else}
+      <div class="row">
+        <div class="label">
+          <span>Sync across devices</span>
+          <span class="hint">
+            Optional. Sign in to keep favourites, playlists, saved albums, history and a few
+            playback settings in step. Viby's server stores them encrypted at rest.
+          </span>
+        </div>
+        <button class="ghost" onclick={() => account.show()}>Set up</button>
+      </div>
+    {/if}
   </section>
 
   <section
@@ -715,6 +836,11 @@
     font-size: 12px;
     color: var(--text-faint);
     line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .hint-error {
+    color: var(--danger);
   }
 
   .segmented {

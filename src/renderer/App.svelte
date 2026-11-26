@@ -18,6 +18,8 @@
   import QueueDropBar from './components/QueueDropBar.svelte'
   import SidePanel from './components/SidePanel.svelte'
   import ChangelogDialog from './components/ChangelogDialog.svelte'
+  import AccountSheet from './components/AccountSheet.svelte'
+  import { account } from './lib/account.svelte'
   import { sidePanel } from './lib/side-panel.svelte'
   import { toast } from './lib/toast.svelte'
   import { changelog } from './lib/changelog.svelte'
@@ -106,10 +108,6 @@
     return item.label
   }
 
-  // The profile avatar is an intentional placeholder until accounts exist.
-  let profileNote = $state(false)
-  let profileTimer: ReturnType<typeof setTimeout> | null = null
-
   let netMenu = $state(false)
   let backOnline = $state(false)
   let backOnlineTimer: ReturnType<typeof setTimeout> | null = null
@@ -161,12 +159,6 @@
       artwork.retry()
     }
   })
-
-  function showProfileNote(): void {
-    profileNote = true
-    if (profileTimer) clearTimeout(profileTimer)
-    profileTimer = setTimeout(() => (profileNote = false), 2600)
-  }
 
   async function goOnline(): Promise<void> {
     netMenu = false
@@ -274,6 +266,9 @@
     void favorites.load()
     void savedAlbums.load()
     void player.init()
+    // Optional and non-blocking: it subscribes and asks for the current state,
+    // and a missing or slow account service changes nothing about startup.
+    account.init()
     updates.init()
     void changelog.init()
     const offSettings = api.app.onOpenSettings(openSettings)
@@ -283,6 +278,7 @@
       offSettings()
       offNavigate()
       offShortcuts()
+      account.dispose()
     }
   })
 </script>
@@ -366,19 +362,30 @@
         </div>
       {/if}
 
-      <button
-        class="profile"
-        title="Profile — coming later"
-        aria-label="Profile — coming later"
-        onclick={showProfileNote}
-      >
-        <Icon name="user" size={15} />
-      </button>
-    </div>
+      <div class="account-wrap">
+        <button
+          class="profile"
+          class:on={account.open}
+          data-account-trigger
+          title={account.signedIn ? `Account — ${account.email}` : 'Account'}
+          aria-label={account.signedIn
+            ? `Account — signed in as ${account.email}`
+            : 'Account — sign in or create an account'}
+          aria-haspopup="dialog"
+          aria-expanded={account.open}
+          onclick={() => account.toggle()}
+        >
+          {#if account.signedIn}
+            <span class="avatar-initial" aria-hidden="true">{account.initial}</span>
+            <span class="account-dot" aria-hidden="true"></span>
+          {:else}
+            <Icon name="user" size={15} />
+          {/if}
+        </button>
 
-    {#if profileNote}
-      <div class="profile-note" role="status">Profiles are coming later.</div>
-    {/if}
+        <AccountSheet />
+      </div>
+    </div>
   </header>
 
   <!-- Fixed icon rail: the label doubles as the hover tooltip, and the button
@@ -704,7 +711,14 @@
     color: var(--text);
   }
 
+  .account-wrap {
+    position: relative;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+  }
+
   .profile {
+    position: relative;
     display: grid;
     place-items: center;
     width: 30px;
@@ -732,23 +746,27 @@
       var(--glass-hover);
   }
 
-  .profile-note {
+  .profile.on {
+    border-color: var(--text);
+    color: var(--text);
+  }
+
+  .avatar-initial {
+    font-size: 12.5px;
+    font-weight: 620;
+    line-height: 1;
+  }
+
+  /* A signed-in avatar carries a small live dot; the sheet explains it. */
+  .account-dot {
     position: absolute;
-    top: calc(100% + 8px);
-    right: 16px;
-    z-index: 60;
-    padding: 8px 11px;
-    border: 1px solid var(--stroke);
-    border-radius: 9px;
-    background: var(--glass-strong);
-    backdrop-filter: blur(26px) saturate(150%);
-    -webkit-backdrop-filter: blur(26px) saturate(150%);
-    color: var(--text-dim);
-    font-size: 11.5px;
-    box-shadow: var(--shadow-dock);
-    pointer-events: none;
-    -webkit-app-region: no-drag;
-    animation: note-in 130ms var(--ease);
+    right: -1px;
+    bottom: -1px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #7ddc9a;
+    box-shadow: 0 0 0 2px var(--bg);
   }
 
   @keyframes note-in {
