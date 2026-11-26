@@ -4,9 +4,11 @@ This directory is the whole server side of the optional account and sync
 feature: the database migration, the local CLI configuration and one edge
 function. It was applied and deployed to project `pnemhyszhbgmhnaudpze` on
 2026-11-25/26 through the Supabase MCP (`sync_records` and its `sync_push`
-ambiguity fix, `delete-account` v1, `send-email` and `auth-open`). The remaining
-manual steps — auth redirect URLs, the Send Email hook and Resend secrets — are
-sections 4–5 below.
+ambiguity fix, `delete-account` v1, `send-email` and `auth-open`). The Send Email
+hook, its secret and the Resend key are configured, and `ondavi.space` is
+verified in Resend (`send-email` v6 sends as `Viby <welcome@ondavi.space>`).
+The auth email rate limit is raised for the hook. The remaining manual step —
+redirect URLs for Supabase-generated links — is section 4 below.
 
 **Security model.** Records are encrypted at rest by Supabase, and that is all.
 The backend can read a user's library. There is no end-to-end encryption in
@@ -138,9 +140,11 @@ email cap does not apply).
 `send-email` is already deployed with `verify_jwt: false` (the hook signature is
 the authentication). Finish the wiring in the dashboard:
 
-1. Create a Resend account and API key. For quick testing, `onboarding@resend.dev`
-   can send to the Resend account's own address; for real users, verify a domain
-   and set `RESEND_FROM` to an address on it.
+1. Create a Resend account and API key. `ondavi.space` is verified in Resend
+   (2026-11-26) and the function sends as `Viby <welcome@ondavi.space>` by
+   default; set `RESEND_FROM` only to override it. `onboarding@resend.dev`
+   reaches the Resend account's own mailbox only, so it is not usable for real
+   users.
 2. Project Settings → Edge Functions → Secrets: add `RESEND_API_KEY` and,
    optionally, `RESEND_FROM` (for example `Viby <hello@yourdomain>`).
 3. Authentication → Hooks → **Send Email**: create the secret, set the URL to

@@ -12,7 +12,9 @@ import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const HOOK_SECRET = (Deno.env.get('SEND_EMAIL_HOOK_SECRET') ?? '').replace(/^v1,whsec_/, '')
-const FROM = Deno.env.get('RESEND_FROM') ?? 'Viby <onboarding@resend.dev>'
+// ondavi.space is verified in Resend; the onboarding address only reaches the
+// Resend account's own mailbox, so it must never be the default in production.
+const FROM = Deno.env.get('RESEND_FROM') ?? 'Viby <welcome@ondavi.space>'
 
 type EmailData = {
   token: string

@@ -1228,11 +1228,10 @@ A recovery session does not start sync until the password is set.
 JWT and deletes the auth user with the service role, cascading the mirror.
 Both were applied/deployed to project `pnemhyszhbgmhnaudpze` on 2026-11-25.
 `supabase/functions/send-email` is a Send Email hook that verifies Supabase's
-signature and delivers auth mail through Resend, so the project is not limited to
-the built-in mailer's couple-per-hour cap; it needs the Resend key and the hook
-enabled in the dashboard. The backend is encrypted at rest, **not** end-to-end
-encrypted: the server can read the mirror in order to merge devices, and no copy
-may claim otherwise.
-Auth redirect URLs (`viby://auth/callback`) and SMTP still need to be configured
-in the Supabase dashboard; the manual checklist lives in `supabase/README.md`
-and `TESTING.md`.
+signature and delivers auth mail through Resend from `welcome@ondavi.space`
+(the domain is verified; the key and hook secret live in the dashboard), so the
+project is not limited to the built-in mailer's couple-per-hour cap, and the
+auth email rate limit is raised for it. The backend is encrypted at rest,
+**not** end-to-end encrypted: the server can read the mirror in order to merge
+devices, and no copy may claim otherwise. The manual checklist lives in
+`supabase/README.md` and `TESTING.md`.
