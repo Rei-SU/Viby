@@ -279,6 +279,11 @@ export class RecordTracker {
         dirty = true
         continue
       }
+      // History has no delete action: a play missing from this device was
+      // evicted by the local 5,000 cap. Pushing that as a tombstone would erase
+      // it on every device that has not hit the cap yet, so the server keeps
+      // the union and each device caps its own copy.
+      if (parts.kind === 'history') continue
       records[key] = { updatedAt: now, deviceId: device, hash: '', deleted: true }
       changed.push({
         kind: parts.kind,

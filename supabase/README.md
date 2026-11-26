@@ -233,8 +233,10 @@ select public.prune_sync_tombstones();
 select cron.schedule('viby-prune-tombstones', '15 4 * * *', 'select public.prune_sync_tombstones()');
 ```
 
-History is capped at 5,000 entries in the app. The server stores what it is
-given and does not enforce that cap, so a client that ignores it can store more.
+History is capped at 5,000 entries per device in the app. The server stores
+what it is given and does not enforce that cap, so a client that ignores it can
+store more. A play the local cap evicts is not turned into a tombstone: it
+stays on the server and on devices that have not hit the cap.
 
 ## Known gaps
 

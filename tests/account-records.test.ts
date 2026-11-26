@@ -347,5 +347,30 @@ console.log('\nhistory cap:')
   check('record mapping also reads only the cap', readLocalRecords().size < HISTORY_LIMIT + 100)
 }
 
+console.log('\nhistory cap evictions stay local:')
+{
+  setActiveLibrary('cap-user')
+  const tracker = new RecordTracker()
+  tracker.begin('cap-user')
+  const agreed: OutboxRecord[] = []
+  for (let i = 1; i <= HISTORY_LIMIT; i++) {
+    agreed.push(rec('history', `ev-${i}:${i}`, history(`ev-${i}`, i), i))
+  }
+  applyRemoteRecords(agreed)
+  tracker.acceptAll(agreed)
+  check('the tracker is quiet at the cap', tracker.diff(1_000).length === 0)
+  lib().addHistory(history('ev-last', HISTORY_LIMIT + 1))
+  const next = tracker.diff(2_000)
+  check(
+    'a play the cap evicted is not pushed as a tombstone',
+    !next.some((record) => record.kind === 'history' && record.deleted)
+  )
+  check(
+    'the new play is still pushed',
+    next.some((record) => record.kind === 'history' && !record.deleted)
+  )
+  setActiveLibrary(null)
+}
+
 console.log(`\n${failures === 0 ? 'ALL PASSED' : `${failures} FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)

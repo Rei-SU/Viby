@@ -1207,6 +1207,8 @@ engine also polls for remote changes once a minute, and on focus or reconnect. T
 accepted writes; a losing edit is pulled back and reported as a conflict, and
 future client clocks are clamped to server time plus five minutes. The local
 JSON stores stay authoritative and are merged through the same comparator.
+History is capped at 5,000 plays per device: a play the local cap evicts stays
+on the server and on other devices, and is never synced as a deletion.
 
 **Isolation.** Pending writes live in a per-account outbox, and each account has
 its own local library root (`accounts/<userId>/`). The first account copies the
