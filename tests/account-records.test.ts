@@ -18,7 +18,7 @@ import {
   readLocalRecords,
   setRemoteApplyListener
 } from '../src/main/account/records'
-import { lib } from '../src/main/library'
+import { lib, setActiveLibrary } from '../src/main/library'
 import { setSettings, settings } from '../src/main/settings'
 import { recordKey } from '../src/main/account/compare'
 import type { OutboxRecord } from '../src/main/account/outbox'
@@ -30,7 +30,6 @@ function check(label: string, ok: boolean, detail = ''): void {
 }
 
 process.env.VIBY_TEST_USERDATA = mkdtempSync(join(tmpdir(), 'viby-records-'))
-const book = lib()
 
 const track = (id: string, title = id): Track => ({ id, title, artist: 'Artist', durationSec: 120 })
 const history = (trackId: string, playedAt: number, title = trackId): HistoryEntry => ({
@@ -75,12 +74,12 @@ console.log('\nthe settings whitelist:')
 console.log('\nlocal to record mapping:')
 {
   const favorite = track('map-fav', 'Favourite')
-  book.toggleFavorite(favorite)
-  const playlist = book.createPlaylist('Map list')
-  book.addToPlaylist(playlist.id, favorite)
+  lib().toggleFavorite(favorite)
+  const playlist = lib().createPlaylist('Map list')
+  lib().addToPlaylist(playlist.id, favorite)
   const saved = { id: 'map-alb', title: 'Album', savedAt: 2222 } as SavedAlbum
-  book.toggleAlbum(saved)
-  book.addHistory(history('map-hist', 1111, 'Played'))
+  lib().toggleAlbum(saved)
+  lib().addHistory(history('map-hist', 1111, 'Played'))
   setSettings({ audioQuality: 'data-saver', shuffle: true })
 
   const map = readLocalRecords()
@@ -89,7 +88,7 @@ console.log('\nlocal to record mapping:')
   check('favourites carry no natural timestamp', fav?.updatedAt === 0)
   check('favourite records are live', fav?.deleted === false)
 
-  const storedPlaylist = book.playlist(playlist.id)!
+  const storedPlaylist = lib().playlist(playlist.id)!
   const pl = map.get(recordKey('playlist', playlist.id))
   check('a playlist keeps its updatedAt', pl?.updatedAt === storedPlaylist.updatedAt)
   check(
@@ -103,7 +102,7 @@ console.log('\nlocal to record mapping:')
     (entry?.payload as { position?: number } | undefined)?.position === 0
   )
 
-  const storedAlbum = book.albums().find((album) => album.id === 'map-alb')!
+  const storedAlbum = lib().albums().find((album) => album.id === 'map-alb')!
   const album = map.get(recordKey('album', 'map-alb'))
   check('a saved album maps to the album kind', album?.kind === 'album')
   check('an album uses savedAt as its timestamp', album?.updatedAt === storedAlbum.savedAt)
@@ -122,6 +121,7 @@ console.log('\nlocal to record mapping:')
 
 console.log('\ntracker begin and backfill:')
 {
+  setActiveLibrary('user-a')
   const tracker = new RecordTracker()
   const seeded = tracker.begin('user-a')
   check('the account is bound', tracker.account === 'user-a')
@@ -129,9 +129,11 @@ console.log('\ntracker begin and backfill:')
   check('the seed includes favourites', seeded.some((record) => record.kind === 'favorite' && record.recordId === 'map-fav'))
   check('the seed includes settings', seeded.some((record) => record.kind === 'setting' && record.recordId === 'audioQuality'))
   check('a repeat begin seeds nothing', tracker.begin('user-a').length === 0)
-  check('a second account adopts no records', tracker.begin('user-b').length === 0)
+  setActiveLibrary('user-b')
+  check('a second account starts from an empty root', tracker.begin('user-b').length === 0)
   check('the second account has nothing to push', tracker.diff().length === 0)
   check('diff is quiet straight after begin', tracker.diff().length === 0)
+  setActiveLibrary(null)
 }
 
 console.log('\ndiff: edits, tombstones and pruning:')
@@ -140,7 +142,7 @@ console.log('\ndiff: edits, tombstones and pruning:')
   tracker.begin('diff-user')
   check('no changes means no work', tracker.diff().length === 0)
 
-  book.toggleFavorite(track('diff-add', 'Added'))
+  lib().toggleFavorite(track('diff-add', 'Added'))
   const now = 1_700_000_000_000
   const added = tracker.diff(now)
   check('an added favourite is detected', added.length === 1 && added[0]?.recordId === 'diff-add')
@@ -154,7 +156,7 @@ console.log('\ndiff: edits, tombstones and pruning:')
   check('changing volume produces no record', tracker.diff(now + 2).length === 0)
   check('volume still changed locally', settings().get().volume !== volumeBefore)
 
-  book.toggleFavorite(track('diff-add', 'Added'))
+  lib().toggleFavorite(track('diff-add', 'Added'))
   const at = 1_700_000_100_000
   const removed = tracker.diff(at)
   check('a removal becomes a tombstone', removed.length === 1 && removed[0]?.deleted === true)
@@ -192,10 +194,10 @@ console.log('\npulled records are not echoed:')
   )
   const pulled = [rec('playlist', 'echo-pl', remotePlaylist, 2000, 'device-z'), remoteItem]
   check('the pulled playlist is applied', applyRemoteRecords(pulled) === 2)
-  check('it is in the local store', book.playlist('echo-pl')?.name === 'From another device')
+  check('it is in the local store', lib().playlist('echo-pl')?.name === 'From another device')
   check(
     'its entry is in the local store',
-    book.playlist('echo-pl')?.tracks.some((entry) => entry.id === 'echo-track') === true
+    lib().playlist('echo-pl')?.tracks.some((entry) => entry.id === 'echo-track') === true
   )
   tracker.acceptAll(pulled)
   check('an accepted pull is not pushed back', tracker.diff().length === 0)
@@ -205,17 +207,17 @@ console.log('\npulled records are not echoed:')
 
 console.log('\napplying pulled records:')
 {
-  const before = book.favorites().length
+  const before = lib().favorites().length
   const favRecord = rec('favorite', 'rr-fav', track('rr-fav', 'Remote favourite'))
   const invalidFav = rec('favorite', 'rr-bad', { id: '', title: 'No id' })
   check('a live favourite applies', applyRemoteRecords([favRecord]) === 1)
-  check('the favourite is in the library', book.isFavorite('rr-fav') && book.favorites().length === before + 1)
+  check('the favourite is in the library', lib().isFavorite('rr-fav') && lib().favorites().length === before + 1)
   applyRemoteRecords([invalidFav])
-  check('an invalid favourite is skipped', !book.isFavorite('rr-bad'))
+  check('an invalid favourite is skipped', !lib().isFavorite('rr-bad'))
 
-  book.toggleFavorite(track('rr-drop', 'Drop me'))
+  lib().toggleFavorite(track('rr-drop', 'Drop me'))
   applyRemoteRecords([rec('favorite', 'rr-drop', null, 9, 'd', true)])
-  check('a favourite tombstone deletes it', !book.isFavorite('rr-drop'))
+  check('a favourite tombstone deletes it', !lib().isFavorite('rr-drop'))
 
   const playlist: Playlist = {
     id: 'rr-pl',
@@ -246,19 +248,19 @@ console.log('\napplying pulled records:')
     )
   ]
   check('a playlist applies', applyRemoteRecords(items) === 3)
-  check('invalid tracks are dropped from it', book.playlist('rr-pl')?.tracks.length === 2, String(book.playlist('rr-pl')?.tracks.length))
+  check('invalid tracks are dropped from it', lib().playlist('rr-pl')?.tracks.length === 2, String(lib().playlist('rr-pl')?.tracks.length))
   check(
     'entries keep their order',
-    book.playlist('rr-pl')?.tracks.map((entry) => entry.id).join(',') === 'rr-t1,rr-t2'
+    lib().playlist('rr-pl')?.tracks.map((entry) => entry.id).join(',') === 'rr-t1,rr-t2'
   )
   applyRemoteRecords([rec('playlist', 'rr-pl', null, 3, 'd', true)])
-  check('a playlist tombstone deletes it', book.playlist('rr-pl') === null)
+  check('a playlist tombstone deletes it', lib().playlist('rr-pl') === null)
 
   const album: SavedAlbum = { id: 'rr-alb', title: 'Remote album', savedAt: 1234 }
   applyRemoteRecords([rec('album', 'rr-alb', album, 1234)])
-  check('an album applies', book.isAlbumSaved('rr-alb'))
+  check('an album applies', lib().isAlbumSaved('rr-alb'))
   applyRemoteRecords([rec('album', 'rr-alb', null, 1235, 'd', true)])
-  check('an album tombstone deletes it', !book.isAlbumSaved('rr-alb'))
+  check('an album tombstone deletes it', !lib().isAlbumSaved('rr-alb'))
 
   check('a malformed record is skipped', applyRemoteRecords([rec('album', 'rr-bad-alb', { id: 'rr-bad-alb', title: '', savedAt: 1 })]) === 0)
 }
@@ -280,7 +282,7 @@ console.log('\nremote apply notifications:')
       1
     )
   ])
-  check('a pulled playlist is reported', change?.playlists.includes('notify-pl') === true)
+  check('a pulled playlist is reported', change?.playlists === true)
 
   applyRemoteRecords([rec('setting', 'audioQuality', { value: 'best' }, 1)])
   check('a pulled setting is reported', change?.settings === true)
@@ -290,7 +292,7 @@ console.log('\nremote apply notifications:')
 
 console.log('\nhistory union:')
 {
-  book.addHistory(history('union-local', 500, 'Local'))
+  lib().addHistory(history('union-local', 500, 'Local'))
   const remote = [
     rec('history', 'union-a:1000', history('union-a', 1000, 'A'), 1000),
     rec('history', 'union-b:3000', history('union-b', 3000, 'B'), 3000),
@@ -299,19 +301,19 @@ console.log('\nhistory union:')
   const applied = applyRemoteRecords(remote)
   check('all three remote plays apply', applied === 3, String(applied))
 
-  const times = book.history(100).map((entry) => entry.playedAt)
+  const times = lib().history(100).map((entry) => entry.playedAt)
   check('local and remote plays are unioned', new Set(times).size === times.length)
   check('the union is newest first', times.every((value, i) => i === 0 || times[i - 1]! >= value))
-  check('the local play survives', book.history(100).some((entry) => entry.trackId === 'union-local'))
+  check('the local play survives', lib().history(100).some((entry) => entry.trackId === 'union-local'))
 
   applyRemoteRecords([rec('history', 'union-a:1000', history('union-a', 1000, 'A renamed'), 1000)])
-  const duplicates = book.history(100).filter((entry) => entry.trackId === 'union-a')
+  const duplicates = lib().history(100).filter((entry) => entry.trackId === 'union-a')
   check('re-applying one play does not duplicate it', duplicates.length === 1, String(duplicates.length))
   check('the newer payload replaces the row', duplicates[0]?.title === 'A renamed')
 
   applyRemoteRecords([rec('history', 'union-b:3000', null, 4000, 'd', true)])
-  check('a history tombstone deletes exactly that play', !book.history(100).some((entry) => entry.trackId === 'union-b' && entry.playedAt === 3000))
-  check('other plays with the same track id stay', book.history(100).filter((entry) => entry.trackId === 'union-a').length === 1)
+  check('a history tombstone deletes exactly that play', !lib().history(100).some((entry) => entry.trackId === 'union-b' && entry.playedAt === 3000))
+  check('other plays with the same track id stay', lib().history(100).filter((entry) => entry.trackId === 'union-a').length === 1)
 
   check('an unparseable history id is skipped', applyRemoteRecords([rec('history', 'no-colon', history('x', 1), 1)]) === 0)
 }
@@ -338,7 +340,7 @@ console.log('\nhistory cap:')
     many.push(rec('history', `cap-${i}:${i}`, history(`cap-${i}`, i), i))
   }
   applyRemoteRecords(many)
-  const kept = book.history(HISTORY_LIMIT + 10)
+  const kept = lib().history(HISTORY_LIMIT + 10)
   check('history is capped at 5,000', kept.length === HISTORY_LIMIT, String(kept.length))
   check('the newest play is kept', kept[0]?.playedAt === HISTORY_LIMIT + 1)
   check('the oldest play is dropped', !kept.some((entry) => entry.trackId === 'cap-1'))

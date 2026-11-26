@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { JsonStore, userDataFile } from './json-store'
+import { libraryPathFor, prepareAccountLibrary } from './account/library-root'
 import type { HistoryEntry, Playlist, SavedAlbum, Track } from '@shared/types'
 
 type LibraryData = {
@@ -491,8 +492,25 @@ export class Library {
 }
 
 let library: Library | null = null
+let activeKey: string | null = null
+
+/**
+ * Point the library facade at the signed-out root or one account's root.
+ * Returns true when the active store actually changed.
+ */
+export function setActiveLibrary(userId: string | null): boolean {
+  const key = userId ?? 'local'
+  if (library && activeKey === key) return false
+  if (userId) prepareAccountLibrary(userId)
+  library = new Library(libraryPathFor(userId))
+  activeKey = key
+  return true
+}
 
 export function lib(): Library {
-  if (!library) library = new Library()
+  if (!library) {
+    library = new Library()
+    activeKey = 'local'
+  }
   return library
 }

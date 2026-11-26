@@ -59,7 +59,7 @@ import {
 import { session } from './session'
 import { mergeTrackMetadata } from './track-metadata'
 import { cachedLyrics, getLyrics } from './lyrics'
-import { lib } from './library'
+import { lib, setActiveLibrary } from './library'
 import { AudioCache } from './cache/audio'
 import { ImageCache } from './cache/images'
 import { shouldCache } from './cache/policy'
@@ -198,8 +198,21 @@ let importResolveController: AbortController | null = null
   }
 
   const applyAccount = (status: AccountStatus): void => {
+    const userId =
+      status.state === 'signed-in' || status.state === 'recovery' ? status.userId : null
+    // Each account owns its own library root; switching never mixes them.
+    const switched = setActiveLibrary(userId)
     broadcast(CH.accountChanged, status)
     sync.useAccount(status.state === 'signed-in' ? { id: status.userId } : null)
+    if (switched) {
+      broadcast(CH.libraryChanged, {
+        favorites: true,
+        albums: true,
+        history: true,
+        playlists: true,
+        settings: false
+      })
+    }
   }
 
   account.subscribe(applyAccount)
@@ -330,6 +343,8 @@ let importResolveController: AbortController | null = null
 
   ipcMain.handle(CH.syncStatus, () => sync.status())
   ipcMain.handle(CH.syncNow, () => sync.now())
+  ipcMain.handle(CH.syncConflicts, () => sync.conflicts())
+  ipcMain.handle(CH.syncClearConflicts, () => sync.clearConflicts())
 
   const downloadsStore = downloadStore()
   const manager = new DownloadManager(downloadsStore, {

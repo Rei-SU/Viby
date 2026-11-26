@@ -31,7 +31,12 @@ check(
 const tracker = new RecordTracker()
 const seeded = tracker.begin('user-empty')
 check('an empty install seeds no records', seeded.length === 0, String(seeded.length))
-check('default settings are not queued as changes', tracker.diff().length === 0)
+const defaults = tracker.diff()
+check(
+  'default settings are not queued as changes',
+  defaults.length === 0,
+  defaults.map((record) => `${record.kind}:${record.recordId}`).join(',')
+)
 
 const remotes: OutboxRecord[] = [
   { kind: 'setting', recordId: 'audioQuality', payload: { value: 'data-saver' }, updatedAt: 1000, deviceId: 'server', deleted: false },

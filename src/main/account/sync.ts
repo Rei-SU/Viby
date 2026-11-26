@@ -1,9 +1,10 @@
 import { app } from 'electron'
-import type { SyncStatus } from '@shared/account'
-import { JsonStore, userDataFile } from '../json-store'
+import type { SyncConflict, SyncStatus } from '@shared/account'
+import { JsonStore } from '../json-store'
 import { networkMonitor } from '../network'
 import { auth, publicError } from './auth'
 import { compareVersions, isSyncKind, remoteWins } from './compare'
+import { accountFile } from './library-root'
 import { outboxKey, outboxStore, type OutboxRecord } from './outbox'
 import { applyRemoteRecordsTracked, RecordTracker } from './records'
 
@@ -91,13 +92,8 @@ export class SyncEngine {
   private readonly listeners = new Set<(status: SyncStatus) => void>()
   private readonly tracker = new RecordTracker()
   private readonly outbox = outboxStore()
-  private readonly cursorStore = new JsonStore<CursorData>(userDataFile('account-sync.json'), {
-    userId: '',
-    cursor: 0,
-    lastSyncedAt: 0
-  })
+  private cursorStore: JsonStore<CursorData> | null = null
   private conflictStore: JsonStore<ConflictData> | null = null
-  private conflictCount = 0
 
   private user: AccountRef | null = null
   private cursor = 0
@@ -120,6 +116,19 @@ export class SyncEngine {
     return () => this.listeners.delete(callback)
   }
 
+  conflicts(): SyncConflict[] {
+    return [...(this.conflictStore?.get().entries ?? [])]
+  }
+
+  clearConflicts(): void {
+    this.conflictStore?.set({ entries: [] })
+    this.publish({ conflicts: 0 })
+  }
+
+  private totalConflicts(): number {
+    return this.conflictStore?.get().entries.length ?? 0
+  }
+
   /** Bind to the signed-in account, or stop everything when null. */
   useAccount(account: AccountRef | null): void {
     if (this.user?.id === account?.id) return
@@ -127,12 +136,15 @@ export class SyncEngine {
     this.rerun = false
     this.pulled = false
     this.backoff = 0
-    this.conflictCount = 0
     this.conflictStore = account
-      ? new JsonStore<ConflictData>(
-          userDataFile(`account-conflicts-${account.id.replace(/[^A-Za-z0-9-]/g, '_')}.json`),
-          { entries: [] }
-        )
+      ? new JsonStore<ConflictData>(accountFile(account.id, 'conflicts.json'), { entries: [] })
+      : null
+    this.cursorStore = account
+      ? new JsonStore<CursorData>(accountFile(account.id, 'sync-cursor.json'), {
+          userId: account.id,
+          cursor: 0,
+          lastSyncedAt: 0
+        })
       : null
 
     // The queue is per account. A different sign-in gets a different file, so
@@ -144,7 +156,7 @@ export class SyncEngine {
       this.clearTimer()
       this.cursor = 0
       this.lastSyncedAt = null
-      this.publish({ phase: 'idle', lastSyncedAt: null, error: null })
+      this.publish({ phase: 'idle', lastSyncedAt: null, error: null, conflicts: 0 })
       return
     }
 
@@ -155,7 +167,12 @@ export class SyncEngine {
     const seeded = this.tracker.begin(account.id)
     this.loadCursor(account.id)
     if (seeded.length > 0) this.outbox.putAll(seeded)
-    this.publish({ phase: 'idle', lastSyncedAt: this.lastSyncedAt, error: null })
+    this.publish({
+      phase: 'idle',
+      lastSyncedAt: this.lastSyncedAt,
+      error: null,
+      conflicts: this.totalConflicts()
+    })
     this.schedule(STARTUP_DELAY_MS)
   }
 
@@ -197,11 +214,13 @@ export class SyncEngine {
   // ---- internals ----------------------------------------------------------
 
   private loadCursor(userId: string): void {
-    const data = this.cursorStore.get()
+    const store = this.cursorStore
+    if (!store) return
+    const data = store.get()
     if (data.userId !== userId) {
       this.cursor = 0
       this.lastSyncedAt = null
-      this.cursorStore.set({ userId, cursor: 0, lastSyncedAt: 0 })
+      store.set({ userId, cursor: 0, lastSyncedAt: 0 })
       return
     }
     const cursor = rowNumber(data.cursor) ?? 0
@@ -212,7 +231,9 @@ export class SyncEngine {
 
   private persistCursor(): void {
     if (!this.user) return
-    this.cursorStore.set({
+    const store = this.cursorStore
+    if (!store) return
+    store.set({
       userId: this.user.id,
       cursor: this.cursor,
       lastSyncedAt: this.lastSyncedAt ?? 0
@@ -265,8 +286,7 @@ export class SyncEngine {
     if (!this.user) return
     const userId = this.user.id
     this.attemptAt = Date.now()
-    this.conflictCount = 0
-    this.publish({ phase: 'syncing', error: null, conflicts: 0 })
+    this.publish({ phase: 'syncing', error: null })
 
     try {
       this.flushLocal()
@@ -285,7 +305,12 @@ export class SyncEngine {
       this.lastSyncedAt = Date.now()
       this.backoff = 0
       this.persistCursor()
-      this.publish({ phase: 'idle', lastSyncedAt: this.lastSyncedAt, error: null })
+      this.publish({
+        phase: 'idle',
+        lastSyncedAt: this.lastSyncedAt,
+        error: null,
+        conflicts: this.totalConflicts()
+      })
 
       // A pull can hand back a local winner that the server still has an older
       // copy of. One follow-up is enough to settle it; anything still queued
@@ -422,7 +447,7 @@ export class SyncEngine {
       // in hand; stop suppressing the local ones.
       this.tracker.bootstrapComplete()
 
-      const pending = new Set(this.outbox.all().map(outboxKey))
+      const pending = new Map(this.outbox.all().map((record) => [outboxKey(record), record]))
       const rows = Array.isArray(data) ? (data as SyncRow[]) : []
       if (rows.length === 0) return
 
@@ -439,15 +464,19 @@ export class SyncEngine {
         if (!value) continue
         const key = outboxKey(value)
         const local = mine.get(key)
-        if (remoteWins(local, value)) {
-          if ((local && this.tracker.isDirty(local)) || pending.has(key)) {
+        // A pending write is the version the next push will send; compare the
+        // remote against that, not against a stored record without a timestamp.
+        const pendingRecord = pending.get(key)
+        const localVersion = pendingRecord ?? local
+        if (remoteWins(localVersion, value)) {
+          if (pendingRecord || (local && this.tracker.isDirty(local))) {
             this.noteConflict(value)
           }
           accept.push(value)
-        } else if (local && compareVersions(local, value) > 0) {
+        } else if (localVersion && compareVersions(localVersion, value) > 0) {
           // The local copy is newer than the pulled one; make sure the server
-          // hears about it.
-          pushBack.push(local)
+          // hears about it unless the outbox already holds that write.
+          if (!pendingRecord) pushBack.push(localVersion)
         }
       }
 
@@ -475,19 +504,19 @@ export class SyncEngine {
 
   /** A newer remote copy replaced an unpushed local edit. */
   private noteConflict(record: OutboxRecord): void {
-    this.conflictCount += 1
-    this.publish({ conflicts: this.conflictCount })
     try {
       const store = this.conflictStore
-      if (!store) return
-      const entries = [
-        { at: Date.now(), kind: record.kind, recordId: record.recordId },
-        ...store.get().entries
-      ].slice(0, 50)
-      store.set({ entries })
+      if (store) {
+        const entries = [
+          { at: Date.now(), kind: record.kind, recordId: record.recordId },
+          ...store.get().entries
+        ].slice(0, 50)
+        store.set({ entries })
+      }
     } catch {
       // A conflict log failure must not change sync behaviour.
     }
+    this.publish({ conflicts: this.totalConflicts() })
   }
 
   private publish(patch: Partial<SyncStatus>): void {

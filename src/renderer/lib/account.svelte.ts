@@ -4,10 +4,12 @@ import type {
   AccountExport,
   AccountStatus,
   SyncApi,
+  SyncConflict,
   SyncStatus
 } from '@shared/account'
 import type { Result } from '@shared/types'
 import { api } from './api'
+import { player } from './player.svelte'
 
 const SIGNED_OUT: AccountStatus = { state: 'signed-out' }
 const IDLE_SYNC: SyncStatus = {
@@ -91,6 +93,8 @@ class AccountStore {
 
   private started = false
   private disposers: (() => void)[] = []
+  /** The account identity currently loaded in the player/library. */
+  private identity = ''
 
   get signedIn(): boolean {
     return this.status.state === 'signed-in'
@@ -115,6 +119,12 @@ class AccountStore {
     try {
       this.disposers.push(
         bridge.account.onChange((next) => {
+          const identity =
+            next.state === 'signed-in' || next.state === 'recovery' ? next.userId : ''
+          // Playback belongs to the previous account; stop it before the
+          // library root changes underneath.
+          if (this.identity && identity !== this.identity) player.clearQueue()
+          this.identity = identity
           this.status = next
           // A reset link lands here: open the sheet so the new password can be set.
           if (next.state === 'recovery') this.open = true
@@ -148,6 +158,8 @@ class AccountStore {
       const [status, sync] = await Promise.all([bridge.account.status(), bridge.sync.status()])
       this.status = status
       this.sync = sync
+      this.identity =
+        status.state === 'signed-in' || status.state === 'recovery' ? status.userId : ''
       if (status.state === 'recovery') this.open = true
     } catch {
       // Signed out is the safe fallback; the sheet still opens and retries.
@@ -272,6 +284,27 @@ class AccountStore {
       const error = messageOf(err, 'Sync could not start.')
       this.sync = { ...this.sync, phase: 'error', error }
       return { ok: false, error }
+    }
+  }
+
+  async conflicts(): Promise<SyncConflict[]> {
+    const bridge = this.bridge()
+    if (!bridge) return []
+    try {
+      return await bridge.sync.conflicts()
+    } catch {
+      return []
+    }
+  }
+
+  async clearConflicts(): Promise<void> {
+    const bridge = this.bridge()
+    if (!bridge) return
+    try {
+      await bridge.sync.clearConflicts()
+      this.sync = { ...this.sync, conflicts: 0 }
+    } catch {
+      // The list stays if the clear did not reach main.
     }
   }
 

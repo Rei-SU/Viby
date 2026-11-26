@@ -3,6 +3,7 @@ import { createClient, type Session, type SupabaseClient } from '@supabase/supab
 import type { AccountCredentials, AccountStatus } from '@shared/account'
 import { JsonStore, userDataFile } from '../json-store'
 import { tokenVault } from './tokens'
+import { removeAccountData } from './library-root'
 
 /**
  * Account service.
@@ -361,9 +362,16 @@ export class AuthManager {
   /** Ask the edge function to erase the server-side account, then sign out here. */
   async deleteAccount(): Promise<void> {
     const client = this.clientInstance()
+    const userId =
+      this.state.state === 'signed-in' || this.state.state === 'recovery'
+        ? this.state.userId
+        : null
     const { error } = await client.functions.invoke('delete-account', { method: 'POST' })
     if (error) throw new Error(await functionError(error))
     await this.signOut()
+    // The server copy is gone; its local root and sync bookkeeping should not
+    // linger for the next account on this machine.
+    if (userId) removeAccountData(userId)
   }
 
   /**

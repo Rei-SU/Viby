@@ -280,7 +280,7 @@
     // views update without a navigation.
     const offLibrary = api.library.onChange((change) => {
       if (change.favorites) void favorites.load(true)
-      if (change.playlists.length > 0) void playlists.load(true)
+      if (change.playlists) void playlists.load(true)
       if (change.albums) void savedAlbums.load(true)
       if (change.history) void history.load(true)
       if (change.settings) {

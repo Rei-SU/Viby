@@ -23,6 +23,8 @@ export const ACCOUNT_CH = {
 
   syncStatus: 'sync:status',
   syncNow: 'sync:now',
+  syncConflicts: 'sync:conflicts',
+  syncClearConflicts: 'sync:clear-conflicts',
   syncChanged: 'sync:changed'
 } as const
 
@@ -47,10 +49,16 @@ export type SyncStatus = {
   lastSyncedAt: number | null
   /** Records waiting in the outbox. */
   pending: number
-  /** Pushes from this device that a newer remote copy replaced in the last run. */
+  /** Replaced local edits recorded for this account, awaiting review. */
   conflicts: number
   /** Human-readable reason for the `error` phase; null otherwise. */
   error: string | null
+}
+
+export type SyncConflict = {
+  at: number
+  kind: string
+  recordId: string
 }
 
 /** Email and password, for both sign-up and sign-in. */
@@ -97,5 +105,9 @@ export interface SyncApi {
   status(): Promise<SyncStatus>
   /** Ask for a sync now; resolves with the state once it settles. */
   now(): Promise<SyncStatus>
+  /** Local edits that a newer remote copy replaced, newest first. */
+  conflicts(): Promise<SyncConflict[]>
+  /** Acknowledge and clear the conflict log for this account. */
+  clearConflicts(): Promise<void>
   onChange(callback: (status: SyncStatus) => void): () => void
 }

@@ -5,6 +5,7 @@ import { JsonStore, userDataFile } from '../json-store'
 import { lib, type RemoteLibraryOps } from '../library'
 import { applyRemoteSettings, settings } from '../settings'
 import { deviceId } from './device'
+import { accountFile } from './library-root'
 import { keyParts, recordKey, type SyncKind } from './compare'
 import type { OutboxRecord } from './outbox'
 
@@ -117,63 +118,51 @@ type MetaEntry = { updatedAt: number; deviceId: string; hash: string; deleted: b
 type MetaData = { userId: string; records: Record<string, MetaEntry>; bootstrap?: boolean }
 
 /**
- * Which account, if any, this install's local library has been handed to. It
- * is written the first time a library is adopted so a second account signing in
- * on the same machine does not upload the first account's library as its own.
- */
-type LibraryOwnerData = { owner: string }
-let ownerStore: JsonStore<LibraryOwnerData> | null = null
-
-function libraryOwnerStore(): JsonStore<LibraryOwnerData> {
-  if (!ownerStore) {
-    ownerStore = new JsonStore<LibraryOwnerData>(userDataFile('account-library.json'), { owner: '' })
-  }
-  return ownerStore
-}
-
-/**
- * Last-known server-agreed version of every record for one account. Kept per
- * user id: switching accounts re-seeds so the new account receives the local
- * library rather than inheriting another account's bookkeeping.
+ * Last-known server-agreed version of every record for one account. Each
+ * account owns its own file inside `accounts/<userId>/`, matching its own
+ * library root, so switching accounts never reuses another account's
+ * bookkeeping.
  */
 export class RecordTracker {
-  private readonly store = new JsonStore<MetaData>(userDataFile('account-records.json'), {
+  private store = new JsonStore<MetaData>(userDataFile('account-records.json'), {
     userId: '',
     records: {}
   })
+  private openedFor: string | null = null
   private userId: string | null = null
   /**
-   * An empty install attaching to an existing account must take the server's
-   * settings, not push this device's defaults over them. While true, settings
-   * are left out of the diff and the pull comparison until the first pull has
-   * completed.
+   * A new account or an empty install must take the server's settings, not push
+   * this device's defaults over them. While true, settings are left out of the
+   * diff and the pull comparison until the first pull has completed.
    */
   private ignoreSettings = false
 
   /**
    * Bind the tracker to an account. Returns records to push on a first sign-in.
-   *
-   * Seeding adopts the local library only when no other account has adopted it
-   * yet. Otherwise the records are recorded as already known but not queued, so
-   * a second account starts from its own server copy and only this account's
-   * future edits travel.
+   * The account's library root is authoritative; content in it is adopted once,
+   * while an empty root pulls the server copy instead.
    */
   begin(userId: string): OutboxRecord[] {
     this.userId = userId
+    if (this.openedFor !== userId) {
+      this.store = new JsonStore<MetaData>(accountFile(userId, 'sync-records.json'), {
+        userId: '',
+        records: {}
+      })
+      this.openedFor = userId
+    }
     const data = this.store.get()
     if (data.userId === userId && data.records && typeof data.records === 'object') {
       this.ignoreSettings = data.bootstrap === true
       return []
     }
 
-    const owner = libraryOwnerStore().get().owner
-    const adopt = owner === '' || owner === userId
     const local = readLocalRecords()
-    // Favourites, playlists, albums or plays make this device's library worth
-    // adopting. Settings alone (always present as defaults) do not.
+    // Favourites, playlists, albums or plays make this library worth adopting.
+    // Settings alone (always present as defaults) do not.
     const hasContent = [...local.keys()].some((key) => keyParts(key)?.kind !== 'setting')
-    const emptyAttach = adopt && !hasContent
-    // Seeded records are stamped now: they describe what this device holds at
+    const emptyAttach = !hasContent
+    // Seeded records are stamped now: they describe what this library holds at
     // sign-in time. Stamping them 0 let any older server row or tombstone win
     // and silently revert the user's most recent local state.
     const stamp = Date.now()
@@ -183,17 +172,16 @@ export class RecordTracker {
     if (!emptyAttach) {
       for (const [key, value] of local) {
         records[key] = {
-          updatedAt: adopt ? stamp : value.updatedAt,
-          deviceId: adopt ? device : value.deviceId,
+          updatedAt: stamp,
+          deviceId: device,
           hash: hashPayload(value.payload),
           deleted: false
         }
-        if (adopt) seeded.push({ ...value, updatedAt: stamp, deviceId: device, deleted: false })
+        seeded.push({ ...value, updatedAt: stamp, deviceId: device, deleted: false })
       }
     }
     this.ignoreSettings = emptyAttach
     this.store.set({ userId, records, bootstrap: emptyAttach })
-    if (adopt) libraryOwnerStore().set({ owner: userId })
     return seeded
   }
 
@@ -586,10 +574,10 @@ export function applyRemoteRecordsTracked(records: OutboxRecord[]): {
     favorites: Boolean(ops.favorites?.upsert?.length || ops.favorites?.remove?.length),
     albums: Boolean(ops.albums?.upsert?.length || ops.albums?.remove?.length),
     history: Boolean(ops.history?.upsert?.length || ops.history?.remove?.length),
-    playlists: [...changedPlaylists],
+    playlists: changedPlaylists.size > 0,
     settings: Object.keys(patch).length > 0
   }
-  if (change.favorites || change.albums || change.history || change.playlists.length > 0 || change.settings) {
+  if (change.favorites || change.albums || change.history || change.playlists || change.settings) {
     notifyApplied(change)
   }
 

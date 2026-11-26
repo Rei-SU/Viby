@@ -17,7 +17,7 @@ import type { Playlist, Track } from '../src/shared/types'
 import { auth } from '../src/main/account/auth'
 import { SyncEngine } from '../src/main/account/sync'
 import { outboxStore } from '../src/main/account/outbox'
-import { lib } from '../src/main/library'
+import { lib, setActiveLibrary } from '../src/main/library'
 import { setSettings } from '../src/main/settings'
 
 let failures = 0
@@ -150,13 +150,12 @@ const manager = auth()
 const track = (id: string, title = id): Track => ({ id, title, artist: 'Artist', durationSec: 180 })
 
 // Seed the local stores before the account is attached.
-const book = lib()
-book.toggleFavorite(track('sync-a', 'A'))
-book.toggleFavorite(track('sync-b', 'B'))
-const playlist: Playlist = book.createPlaylist('Sync list')
-book.addToPlaylist(playlist.id, track('sync-a', 'A'))
-book.toggleAlbum({ id: 'sync-alb', title: 'Sync album', savedAt: 1 })
-book.addHistory({ trackId: 'sync-h', title: 'H', artist: 'Artist', playedAt: 1234, completion: 0.9 })
+lib().toggleFavorite(track('sync-a', 'A'))
+lib().toggleFavorite(track('sync-b', 'B'))
+const playlist: Playlist = lib().createPlaylist('Sync list')
+lib().addToPlaylist(playlist.id, track('sync-a', 'A'))
+lib().toggleAlbum({ id: 'sync-alb', title: 'Sync album', savedAt: 1 })
+lib().addHistory({ trackId: 'sync-h', title: 'H', artist: 'Artist', playedAt: 1234, completion: 0.9 })
 setSettings({ audioQuality: 'data-saver', shuffle: true })
 
 const postCount = (): number => requests.filter((entry) => entry.method === 'POST').length
@@ -166,6 +165,7 @@ const unsubscribe = engine.subscribe((status) => statuses.push(status.phase))
 
 try {
   console.log('first sync: backfill then pull-before-push:')
+  setActiveLibrary('user-1')
   engine.useAccount({ id: 'user-1' })
   const seeded = outboxStore().count()
   check('first sign-in backfills the local library', seeded >= 10, String(seeded))
@@ -198,8 +198,8 @@ try {
     deleted: false
   })
   await engine.now()
-  check('the remote favourite lands locally', book.isFavorite('sync-remote'))
-  check('it keeps its remote payload', book.favorites().find((entry) => entry.id === 'sync-remote')?.title === 'Remote')
+  check('the remote favourite lands locally', lib().isFavorite('sync-remote'))
+  check('it keeps its remote payload', lib().favorites().find((entry) => entry.id === 'sync-remote')?.title === 'Remote')
 
   console.log('\nlast writer wins on a conflict:')
   addRemote({
@@ -211,7 +211,7 @@ try {
     deleted: false
   })
   await engine.now()
-  check('the newer remote copy replaces the local one', book.favorites().find((entry) => entry.id === 'sync-remote')?.title === 'Remote v2')
+  check('the newer remote copy replaces the local one', lib().favorites().find((entry) => entry.id === 'sync-remote')?.title === 'Remote v2')
 
   const before = { posts: postCount(), gets: requests.length }
   await engine.now()
@@ -222,7 +222,7 @@ try {
   check('repeats do not duplicate rows', rows.size === seeded + 1, `${rows.size}`)
 
   console.log('\nconflicts are reported:')
-  book.toggleFavorite(track('sync-conflict', 'Local edit'))
+  lib().toggleFavorite(track('sync-conflict', 'Local edit'))
   engine.noteLocalChange()
   addRemote({
     kind: 'favorite',
@@ -235,16 +235,18 @@ try {
   await engine.now()
   check(
     'the newer remote copy wins',
-    book.favorites().find((entry) => entry.id === 'sync-conflict')?.title === 'Remote edit'
+    lib().favorites().find((entry) => entry.id === 'sync-conflict')?.title === 'Remote edit'
   )
   check(
     'the replaced local edit is reported',
     engine.status().conflicts >= 1,
     String(engine.status().conflicts)
   )
+  engine.clearConflicts()
+  check('clearing resets the replaced-change count', engine.status().conflicts === 0)
 
   console.log('\nlocal deletion becomes a tombstone:')
-  book.toggleFavorite(track('sync-b', 'B'))
+  lib().toggleFavorite(track('sync-b', 'B'))
   engine.noteLocalChange()
   await engine.now()
   const tombstonePost = requests
@@ -254,7 +256,7 @@ try {
   check('the deletion is pushed as a tombstone', tombstone?.kind === 'favorite' && tombstone?.deleted === true)
   const storedB = [...rows.values()].find((row) => row.record_id === 'sync-b')
   check('the server marks the row deleted', storedB?.deleted === true)
-  check('the local copy stays deleted', !book.isFavorite('sync-b'))
+  check('the local copy stays deleted', !lib().isFavorite('sync-b'))
   check('the tombstone drains from the outbox', outboxStore().count() === 0)
 
   const settled = postCount()
@@ -271,11 +273,12 @@ try {
 
   console.log('\nserver errors are reported, then recovered:')
   activeUser = 'user-2'
+  setActiveLibrary('user-2')
   engine.useAccount({ id: 'user-2' })
-  // A second account on the same install must not inherit the first account's
-  // library or backlog; only its own edits travel.
+  // A second account has its own library root, so it starts without the first
+  // account's backlog; only its own edits travel.
   check('a second account starts without a backlog', outboxStore().count() === 0, String(outboxStore().count()))
-  book.toggleFavorite(track('sync-c', 'C'))
+  lib().toggleFavorite(track('sync-c', 'C'))
   engine.noteLocalChange()
   failNextPull = true
   await engine.now()

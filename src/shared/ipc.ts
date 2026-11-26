@@ -131,8 +131,7 @@ export type LibraryChange = {
   favorites: boolean
   albums: boolean
   history: boolean
-  /** Playlist ids whose metadata or entries changed. */
-  playlists: string[]
+  playlists: boolean
   settings: boolean
 }
 

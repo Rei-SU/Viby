@@ -209,6 +209,8 @@ const api: VibyApi = {
   sync: {
     status: () => ipcRenderer.invoke(CH.syncStatus),
     now: () => ipcRenderer.invoke(CH.syncNow),
+    conflicts: () => ipcRenderer.invoke(CH.syncConflicts),
+    clearConflicts: () => ipcRenderer.invoke(CH.syncClearConflicts),
     onChange: (callback: (status: SyncStatus) => void) => {
       const handler = (_event: unknown, status: SyncStatus): void => callback(status)
       ipcRenderer.on(CH.syncChanged, handler)

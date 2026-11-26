@@ -55,7 +55,8 @@ const suites = {
   'account-outbox': { file: 'account-outbox.test.ts', electron: true },
   'account-records': { file: 'account-records.test.ts', electron: true },
   'account-sync': { file: 'account-sync.test.ts', electron: true },
-  'account-tokens': { file: 'account-tokens.test.ts', electron: true }
+  'account-tokens': { file: 'account-tokens.test.ts', electron: true },
+  'library-root': { file: 'library-root.test.ts', electron: true }
 }
 
 const requested = process.argv.slice(2)
