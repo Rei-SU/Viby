@@ -158,7 +158,9 @@ The hook replaces the inbuilt SMTP sender entirely, so the project-wide
 couple-per-hour cap no longer applies. The test-address guard still rejects
 addresses that look like test accounts.
 
-**Emails carry a 6-digit code, not a link.** The app verifies it with
+**Emails carry a numeric code, not a link.** The length is the project's Auth
+OTP setting (6–10 digits), and the app accepts any length in that range. The app
+verifies it with
 `verifyOtp` and moves straight to the signed-in state, so there is no browser
 hand-off and no blank page. `auth-open` is still deployed as a fallback landing
 page for Supabase-generated links (for example if the hook is disabled); add

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { normalizeOtpCode, OTP_MIN_LENGTH } from '@shared/account'
   import type { AccountCredentials, SyncConflict } from '@shared/account'
   import { account, relativeTime, syncSummary } from '../lib/account.svelte'
   import SignInForm from './SignInForm.svelte'
@@ -211,9 +212,9 @@
   async function submitCode(): Promise<void> {
     if (codeBusy) return
     codeError = ''
-    const value = code.trim()
-    if (!/^\d{6}$/.test(value)) {
-      codeError = 'Enter the 6-digit code from the email.'
+    const value = normalizeOtpCode(code)
+    if (value.length < OTP_MIN_LENGTH) {
+      codeError = 'Enter the code from the email.'
       return
     }
     codeBusy = true
@@ -470,8 +471,8 @@
         <div class="intro">
           <h2>Enter your code</h2>
           <p>
-            We sent a 6-digit code to <strong class="email">{status.email}</strong>. It expires
-            shortly, so enter it here to finish.
+            We sent a code to <strong class="email">{status.email}</strong>. It expires shortly,
+            so enter it here to finish. If it has not arrived in a minute, check spam.
           </p>
           <p class="hint-line">
             Already confirmed this address? Use <strong>Sign in instead</strong> below — a
@@ -489,14 +490,19 @@
           <input
             inputmode="numeric"
             autocomplete="one-time-code"
-            maxlength="6"
+            maxlength="10"
             pattern="[0-9]*"
-            bind:value={code}
-            aria-label="6-digit code"
-            placeholder="123456"
+            value={code}
+            oninput={(event) => (code = normalizeOtpCode(event.currentTarget.value))}
+            aria-label="Sign-in code"
+            placeholder="Code"
             disabled={codeBusy}
           />
-          <button class="ghost" type="submit" disabled={codeBusy || code.trim().length !== 6}>
+          <button
+            class="ghost"
+            type="submit"
+            disabled={codeBusy || normalizeOtpCode(code).length < OTP_MIN_LENGTH}
+          >
             {codeBusy ? 'Checking…' : 'Confirm'}
           </button>
         </form>

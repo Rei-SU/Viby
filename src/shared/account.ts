@@ -67,6 +67,17 @@ export type AccountCredentials = {
   password: string
 }
 
+/**
+ * A code the project may issue with 6–10 digits; it is an Auth setting, not a
+ * constant. Keep digits only so pasted separators or spaces do not fail it,
+ * and cap at Supabase's maximum.
+ */
+export const OTP_MIN_LENGTH = 6
+
+export function normalizeOtpCode(value: string): string {
+  return value.replace(/\D/g, '').slice(0, 10)
+}
+
 /** The JSON dump written for a signed-in account. */
 export type AccountExport = {
   exportedAt: number
@@ -81,7 +92,7 @@ export interface AccountApi {
   status(): Promise<AccountStatus>
   signUp(input: AccountCredentials): Promise<Result<AccountStatus>>
   signIn(input: AccountCredentials): Promise<Result<AccountStatus>>
-  /** Verify the 6-digit code from the current pending email. */
+  /** Verify the numeric code from the current pending email. */
   verifyCode(code: string): Promise<Result<AccountStatus>>
   /** Send the pending email again (signup, sign-in or reset). */
   resend(): Promise<Result<void>>

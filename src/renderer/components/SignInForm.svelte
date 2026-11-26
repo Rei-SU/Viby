@@ -140,7 +140,7 @@
 {#if linkMode}
   <form onsubmit={submitLink} novalidate aria-busy={working}>
     <p class="lead">
-      We'll email a 6-digit code. Enter it here to sign in — no password to remember.
+      We'll email a one-time code. Enter it here to sign in — no password to remember.
     </p>
 
     <div class="field">
@@ -180,7 +180,7 @@
   <form onsubmit={submitCredentials} novalidate aria-busy={working}>
     <p class="lead">
       {mode === 'sign-up'
-        ? 'The address receives a 6-digit confirmation code before your first sync.'
+        ? 'The address receives a confirmation code before your first sync.'
         : 'Sign in to bring this device in line with your other ones.'}
     </p>
 

@@ -523,7 +523,7 @@
         <div class="label">
           <span>Waiting for confirmation</span>
           <span class="hint">
-            Enter the 6-digit code sent to {account.status.email} to finish setting up sync.
+            Enter the code sent to {account.status.email} to finish setting up sync.
           </span>
         </div>
         <button class="ghost" onclick={() => account.show()}>Open account</button>

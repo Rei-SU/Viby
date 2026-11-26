@@ -287,7 +287,7 @@ Find the row for what you changed; run what it lists.
    raise the email rate limit, or turn **Confirm email** off for sync-only
    testing (sign-up then returns a session immediately). The built-in mail
    service only sends a couple of messages per hour for the whole project.
-2. Sign up in the app; the confirmation email carries a 6-digit code. Enter it
+2. Sign up in the app; the confirmation email carries a numeric code. Enter it
    in the account sheet and you must land signed in. `select count(*) from
    public.sync_records;` should then grow after the first sync.
 3. Favourite a song, create a playlist and play a track past 30 seconds; wait for
@@ -302,7 +302,7 @@ Find the row for what you changed; run what it lists.
 5. Sign out and sign in with a **different** account on the same machine: its own
    root starts empty and pulls only that account's data; the first account's
    library returns when you sign back in. Downloads/cache are device-level.
-6. Request a password reset, enter the 6-digit code from the email, and set a new
+6. Request a password reset, enter the code from the email, and set a new
    password. The old password must fail and the new one must work; sync starts
    only after the new password is saved.
 7. Delete the account. The auth user and its `sync_records` rows disappear; local

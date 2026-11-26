@@ -37,6 +37,7 @@ import {
   type ResolveRequest,
   type TaskbarState
 } from '@shared/ipc'
+import { normalizeOtpCode, OTP_MIN_LENGTH } from '@shared/account'
 import type {
   AccountCredentials,
   AccountExport,
@@ -256,11 +257,12 @@ let importResolveController: AbortController | null = null
   ipcMain.handle(
     CH.accountVerifyCode,
     async (_e, input: unknown): Promise<Result<AccountStatus>> => {
-      if (typeof input !== 'string' || !/^\d{6}$/.test(input.trim())) {
-        return fail(new Error('Enter the 6-digit code from the email.'))
+      const code = typeof input === 'string' ? normalizeOtpCode(input) : ''
+      if (code.length < OTP_MIN_LENGTH) {
+        return fail(new Error('Enter the code from the email.'))
       }
       try {
-        return ok(await account.verifyCode(input.trim()))
+        return ok(await account.verifyCode(code))
       } catch (error) {
         return fail(error)
       }

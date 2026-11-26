@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js'
+import { normalizeOtpCode, OTP_MIN_LENGTH } from '@shared/account'
 import type { AccountCredentials, AccountStatus } from '@shared/account'
 import { JsonStore, userDataFile } from '../json-store'
 import { tokenVault } from './tokens'
@@ -286,8 +287,10 @@ export class AuthManager {
     this.setStatus({ state: 'pending-verification', email })
   }
 
-  /** Enter the 6-digit code from the pending email. */
+  /** Enter the numeric code from the pending email. */
   async verifyCode(code: string): Promise<AccountStatus> {
+    const token = normalizeOtpCode(code)
+    if (token.length < OTP_MIN_LENGTH) throw new Error('Enter the code from the email.')
     const pending = this.pendingStore().get()
     if (!pending.email) throw new Error('Request a new code first.')
     const type: 'signup' | 'email' | 'recovery' =
@@ -296,7 +299,7 @@ export class AuthManager {
     const client = this.clientInstance()
     const { data, error } = await client.auth.verifyOtp({
       email: pending.email,
-      token: code,
+      token,
       type
     })
     if (error) throw new Error(describeAuthError(error))

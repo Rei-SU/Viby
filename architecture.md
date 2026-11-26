@@ -802,9 +802,10 @@ user files.
 ### Sign in and sync
 1. Account calls go through IPC to the Supabase client in main; the renderer only
    sees `AccountStatus` and `SyncStatus`.
-2. A mailed 6-digit code is verified in main and the session lands in the
-   encrypted vault; Supabase-generated links, when used, still return through
-   `viby://auth/callback`.
+2. A mailed numeric code is verified in main and the session lands in the
+   encrypted vault; its length is the project's Auth OTP setting (6–10 digits),
+   so the input accepts any length in that range; Supabase-generated links, when
+   used, still return through `viby://auth/callback`.
 3. The sync engine binds to the account: the tracker adopts or records the local
    library, then pulls, merges and pushes; a recovery session waits for the new
    password.
