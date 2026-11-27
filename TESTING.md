@@ -90,6 +90,7 @@ ones that touch main-process modules.
 | `account-sync` | pull-before-push, batching, rev cursor, merges, tombstones, losing writes reported as conflicts, error recovery, account isolation (fake PostgREST) |
 | `account-tokens` | `safeStorage` encryption at rest, memory-only fallback, corrupt and foreign-keyring files |
 | `library-root` | per-account roots: first-account legacy copy, empty second root, sign-out returns to local |
+| `connect` | device channel: per-account lifecycle, presence merge, throttled publish, one claim per start, targeted/fresh command routing, payload validation (fake channel) |
 
 ### Manual update smoke test (Windows, real hardware)
 
@@ -210,6 +211,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/lib/artwork.svelte.ts`, `src/main/cache/images.ts`, `private-address.ts`, `image-extension.ts` | unit `images`, `main-guards` · e2e `offline`, `images` |
 | `src/main/ipc.ts` | depends on the handler; if the request/response shape changed → **everything** |
 | `src/main/account/**`, `src/shared/account.ts`, `src/preload/index.ts` account bridge | unit `account-compare`, `account-bootstrap`, `account-outbox`, `account-records`, `account-sync`, `account-tokens`, `library-root` · the live account checklist below |
+| `src/main/connect/**`, `src/shared/connect.ts`, `src/renderer/lib/connect.svelte.ts`, `DevicesPanel.svelte` | unit `connect` · live two-device checklist below |
 | `src/renderer/lib/account.svelte.ts`, `AccountSheet`, `SignInForm`, `SettingsView` account row | no automated e2e (needs a live mailbox) · manual account checklist · `npm run typecheck` |
 | `src/renderer/lib/player.svelte.ts`, `player-source.ts`, `queue-session.ts` | e2e `playback`, `playback-failure`, `reconnect`, `autoplay`, `resume`, `links`, `queue` · behaviour · unit `artist-credits`, `listening`, `queue-session`, `player-source` · manual: relaunch mid-discography restores the right track and keeps the artist tail |
 | `src/main/updater.ts`, `src/main/updater-native.ts` | unit `updates` · packaged Windows update check (silent install + relaunch) |
@@ -312,3 +314,10 @@ Find the row for what you changed; run what it lists.
    switch to code entry and send a fresh code, not show "Email not confirmed".
    Signing up again with that same address must say the account already exists
    instead of waiting on a code that never arrives.
+9. Sign in on two computers. Open Devices in the player bar on each: both must
+   appear within ~10 s with the right name and platform. Play on A — B must
+   pause (if it was playing) and A's row must show Playing with the track. From
+   B, pause/next and the volume slider must act on A within a second or two.
+   Press "Play here" on A's row from B: A pauses, B adopts the queue, position,
+   shuffle and repeat and starts. Quit A: its row must disappear; quit B too and
+   signing back in must show "No other devices are online."

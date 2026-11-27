@@ -27,6 +27,7 @@ the app makes no Supabase call at all.
 | `migrations/20261126220939_playlist_items_clock_clamp.sql` | Per-entry playlist records, backfill, future-clock clamp |
 | `migrations/20261126221541_sync_push_accepted_only.sql` | Returns only accepted writes so losing edits are reconciled, not dropped |
 | `migrations/20261126231617_prune_sync_tombstones.sql` | `prune_sync_tombstones()` for 90-day server cleanup |
+| `migrations/20261127093000_device_presence.sql` | RLS on `realtime.messages` for the private per-account device channel |
 | `functions/delete-account/index.ts` | Verifies the caller's JWT, deletes the auth user with the service role |
 | `functions/send-email/index.ts` | Auth Send Email hook: verifies Supabase's signature and sends through Resend |
 | `functions/auth-open/index.ts` | HTTPS landing page that hands the verified code to `viby://auth/callback` |
@@ -244,15 +245,28 @@ what it is given and does not enforce that cap, so a client that ignores it can
 store more. A play the local cap evicts is not turned into a tombstone: it
 stays on the server and on devices that have not hit the cap.
 
+## Realtime device channel
+
+Devices inside one account see each other through a private Realtime channel,
+`account:<userId>:devices`. It stores nothing: Presence carries each device's
+snapshot and Broadcast carries commands and instant state updates. The
+migration adds two policies on `realtime.messages`, both scoped to
+`(select realtime.topic()) = 'account:' || (select auth.uid())::text ||
+':devices'` and to the `broadcast`/`presence` extensions. No table publication,
+bucket or function is involved.
+
+Dashboard note: private channels are authorized by those policies. If you also
+want to forbid the project's public (non-RLS) channels entirely, turn off
+"Allow public access" under Realtime Settings; the app only uses private
+channels, so either setting works for it.
+
 ## Known gaps
 
-- The live end-to-end smoke test (inbox delivery, deep links, two devices,
-  password reset, delete-account) has not been run yet; the auth redirect URL,
-  the Send Email hook and its Resend secrets in sections 4–5 still need to be set
-  in the dashboard.
-- A single install still shares one local library across accounts (client-side
-  isolation is a separate refactor). `playlist_track.position` is an integer
-  until drag-reorder ships.
+- Sign-in, OTP delivery from `welcome@ondavi.space`, history/playlist sync,
+  per-account roots and account isolation have been run live; the macOS
+  session/relaunch checks and a two-device device-channel pass are still manual
+  (`TESTING.md`).
+- `playlist_track.position` is an integer until drag-reorder ships.
 - Local `supabase start` was not run while authoring this; `config.toml` covers
   what the CLI needs for this project but omits unrelated defaults.
 - No server-side history cap and no automatic tombstone pruning (above).

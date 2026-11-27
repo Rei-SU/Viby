@@ -522,6 +522,25 @@ RLS and `sync_push`, and `functions/delete-account` erases the auth user with th
 service role. The backend is encrypted at rest, **not** end-to-end encrypted —
 the server can read the mirror in order to merge devices.
 
+**Devices (Connect).** `src/main/connect/` joins one private Realtime channel,
+`account:<userId>:devices`, while a full session is signed in. RLS on
+`realtime.messages` admits only that uid's topic, for `broadcast` and `presence`
+extensions (`20261127093000_device_presence.sql`). Presence carries each
+device's snapshot (name, platform, track, playing, volume, `claimAt`); commands
+and instant state updates travel as broadcast envelopes, so the
+5-per-30-second Presence limit is never in the critical path. Presence is
+throttled to one call per 7 s plus a 25 s heartbeat, and viewers extrapolate
+the position from `updatedAt`. `service.ts` merges peers, validates every
+payload on the way in (`validate.ts`), and forwards commands addressed to this
+device; the renderer applies them to the player and publishes the result. A
+later `claimAt` pauses any other playing device, so one device is audible at a
+time. Transfer asks the playing device for its session (`transfer-out` →
+`transfer-in`), which carries the persisted queue window, index, position,
+shuffle and repeat into `player.adoptRemote()`. The channel is torn down on
+sign-out, account switch and recovery; if Realtime is unavailable or the
+runtime has no WebSocket, the panel reports devices as unavailable and nothing
+else changes.
+
 ---
 
 ## 5. Renderer

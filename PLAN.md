@@ -1222,6 +1222,21 @@ the first pull, so the server copy wins. Replaced edits are listed in the accoun
 sheet and can be cleared. Account deletion removes that account's local root.
 A recovery session does not start sync until the password is set.
 
+**Devices (Connect).** A signed-in app joins one private Realtime channel per
+account (`account:<userId>:devices`; RLS on `realtime.messages` limits it to
+that uid's broadcast and presence). The player bar's Devices panel lists this
+computer and every other online device with its now-playing and state. Remote
+play/pause, next/previous and per-device volume apply without touching the
+sync engine; "Play here" asks the playing device for its session and adopts the
+queue, position, shuffle and repeat here. One rule keeps audio single: a device
+announcing playback carries a `claimAt`, and a later claim pauses any other
+device (ties break on device id), so starting playback on one machine stops the
+other with a "Paused — playing on …" notice. Presence is throttled (one track
+per 7 s plus a 25 s heartbeat) because Realtime allows five presence calls per
+client per 30 s; transitions and commands use broadcast, and viewers derive the
+clock from the published position. Devices are unavailable — never broken —
+when signed out, in recovery, offline or without a WebSocket.
+
 **Backend.** `supabase/migrations/20261125052234_sync_records.sql` creates
 `sync_records` (one row per user, kind and record id), RLS policies, and the
 `sync_push` function. `supabase/functions/delete-account` verifies the caller's
