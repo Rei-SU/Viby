@@ -423,6 +423,7 @@
 
   .icon {
     position: relative;
+    flex: 0 0 auto;
     display: grid;
     place-items: center;
     width: 30px;
@@ -612,12 +613,15 @@
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
+    min-width: 0;
   }
 
   .volume-wrap {
     position: relative;
     display: flex;
     align-items: center;
+    flex: 0 1 92px;
+    min-width: 0;
     /* The track is only 4px tall; this padding is the hover target that makes
        the wheel usable. */
     padding: 8px 0;
@@ -629,7 +633,8 @@
   }
 
   .volume {
-    width: 92px;
+    width: 100%;
+    min-width: 48px;
   }
 
   .volume-hint {
@@ -671,6 +676,8 @@
   }
 
   .quality {
+    flex: 0 0 auto;
+    white-space: nowrap;
     font-size: 9.5px;
     font-weight: 550;
     letter-spacing: 0.07em;
@@ -687,5 +694,24 @@
 
   .quality:hover {
     color: var(--text);
+  }
+
+  /* Narrow windows: the badge and transport stay intact and the slider gives
+     way first. Below this the slider is hidden (mute remains) rather than
+     letting any control overlap its neighbour or clip. */
+  @media (max-width: 1080px) {
+    .dock {
+      grid-template-columns: minmax(180px, 1fr) minmax(300px, 1.5fr) minmax(0, auto);
+      gap: 14px;
+      padding: 0 16px;
+    }
+
+    .right {
+      gap: 4px;
+    }
+
+    .volume-wrap {
+      display: none;
+    }
   }
 </style>
