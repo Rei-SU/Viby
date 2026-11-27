@@ -4,7 +4,7 @@ Build the app icons from assets/Logo.png.
 
 Platform rules this follows:
 - macOS (Big Sur and later): a 1024 canvas with an 824px rounded body and
-  transparent margin; the artwork inside should fill most of the body. The
+  transparent margin. The
   .icns is written with Pillow, so this runs on Windows too.
 - Windows: the ICO carries 16/20/24/32/40/48/64/128/256 and the art fills the
   canvas (no macOS margin), otherwise the taskbar button looks smaller than
@@ -30,53 +30,34 @@ BODY = 824
 RADIUS = 185
 SUPERSAMPLE = 4
 
-# The source is a white V on black with generous breathing room. Scaling the
-# mark to ~74% of the macOS body keeps the platform's padding while making the
-# logo read at Dock size; Windows has no such padding, so it gets more.
-MAC_MARK = 0.74
 WIN_INSET = 24
-WIN_MARK = 0.72
 
 OUT.mkdir(exist_ok=True)
-source = Image.open(SOURCE).convert("RGB")
-background = source.getpixel((0, 0))
+source = Image.open(SOURCE).convert("RGBA")
 
-# Pull the white mark out of the black background once.
-mask = source.convert("L").point(lambda value: 255 if value > 24 else 0)
+# The macOS menu bar needs a monochrome template. Use the light mark and keep
+# the dark background and gradients in the full-color app icons below.
+mask = source.convert("L").point(lambda value: max(0, min(255, (value - 60) * 3)))
 bbox = mask.getbbox()
 if bbox is None:
     raise SystemExit("assets/Logo.png has no visible mark")
 mark = mask.crop(bbox)
 
 
-def mark_image(width: int) -> Image.Image:
-    height = round(mark.height * width / mark.width)
-    alpha = mark.resize((width, height), Image.Resampling.LANCZOS)
-    image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
-    image.putalpha(alpha)
-    return image
-
-
-def rounded_tile(body: int, radius: int, mark_ratio: float) -> Image.Image:
-    """A rounded, filled tile centred on a 1024 canvas, mark scaled inside."""
+def rounded_tile(body: int, radius: int) -> Image.Image:
+    """Clip the supplied artwork to a rounded tile centered on the canvas."""
     canvas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    tile = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    mask_big = Image.new("L", (SIZE * SUPERSAMPLE, SIZE * SUPERSAMPLE), 0)
+    tile = source.resize((body, body), Image.Resampling.LANCZOS)
+    edge = body * SUPERSAMPLE
+    mask_big = Image.new("L", (edge, edge), 0)
     ImageDraw.Draw(mask_big).rounded_rectangle(
-        ((SIZE - body) // 2 * SUPERSAMPLE, (SIZE - body) // 2 * SUPERSAMPLE,
-         (SIZE + body) // 2 * SUPERSAMPLE, (SIZE + body) // 2 * SUPERSAMPLE),
+        (0, 0, edge - 1, edge - 1),
         radius=radius * SUPERSAMPLE,
         fill=255,
     )
-    tile.paste(Image.new("RGBA", (SIZE, SIZE), (*background, 255)), (0, 0),
-               mask_big.resize((SIZE, SIZE), Image.Resampling.LANCZOS))
-
-    glyph = mark_image(round(body * mark_ratio))
-    tile.alpha_composite(
-        glyph,
-        ((SIZE - glyph.width) // 2, (SIZE - glyph.height) // 2),
-    )
-    canvas.alpha_composite(tile)
+    tile.putalpha(mask_big.resize((body, body), Image.Resampling.LANCZOS))
+    inset = (SIZE - body) // 2
+    canvas.alpha_composite(tile, (inset, inset))
     return canvas
 
 
@@ -115,13 +96,13 @@ def write_icns(path: Path, image: Image.Image) -> None:
 
 
 # macOS: the standard 824px body on a 1024px canvas.
-mac = rounded_tile(BODY, RADIUS, MAC_MARK)
+mac = rounded_tile(BODY, RADIUS)
 mac.save(OUT / "icon.png")
 write_icns(OUT / "icon.icns", mac)
 
 # Windows: art fills the canvas; the taskbar and jump lists use this.
 win_body = SIZE - WIN_INSET * 2
-win = rounded_tile(win_body, round(RADIUS * win_body / BODY), WIN_MARK)
+win = rounded_tile(win_body, round(RADIUS * win_body / BODY))
 win.save(OUT / "icon-win.png")
 win.save(
     OUT / "icon.ico",
@@ -150,8 +131,8 @@ TRAY.mkdir(exist_ok=True)
 
 for scale in (1, 2):
     size = 16 * scale
-    width = size - scale
-    height = round(mark.height * width / mark.width)
+    factor = (size - scale) / max(mark.size)
+    width, height = (round(dimension * factor) for dimension in mark.size)
     glyph = mark.resize((width, height), Image.Resampling.LANCZOS)
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     black = Image.new("RGBA", glyph.size, (0, 0, 0, 255))
