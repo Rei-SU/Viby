@@ -1,10 +1,9 @@
 # Supabase backend for Viby accounts
 
-This directory is the whole server side of the optional account and sync
-feature: the database migration, the local CLI configuration and one edge
-function. It was applied and deployed to project `pnemhyszhbgmhnaudpze` on
-2026-11-25/26 through the Supabase MCP (`sync_records` and its `sync_push`
-ambiguity fix, `delete-account` v1, `send-email` and `auth-open`). The Send Email
+This directory contains the database migrations, local CLI configuration, and
+Edge Functions for the optional account and sync feature. The hardened sync
+RPC, the PKCE-only auth landing page, and the retired Spotify endpoint were
+deployed to project `pnemhyszhbgmhnaudpze` on 2026-11-27. The Send Email
 hook, its secret and the Resend key are configured, and `ondavi.space` is
 verified in Resend (`send-email` v6 sends as `Viby <welcome@ondavi.space>`).
 The auth email rate limit is raised for the hook. The remaining manual step —
@@ -27,10 +26,12 @@ the app makes no Supabase call at all.
 | `migrations/20261126220939_playlist_items_clock_clamp.sql` | Per-entry playlist records, backfill, future-clock clamp |
 | `migrations/20261126221541_sync_push_accepted_only.sql` | Returns only accepted writes so losing edits are reconciled, not dropped |
 | `migrations/20261126231617_prune_sync_tombstones.sql` | `prune_sync_tombstones()` for 90-day server cleanup |
-| `migrations/20261127093000_device_presence.sql` | RLS on `realtime.messages` for the private per-account device channel |
+| `migrations/20261127003126_device_presence.sql` | RLS on `realtime.messages` for the private per-account device channel |
+| `migrations/20261127043901_harden_sync_writes.sql` | Per-account commit ordering, validated RPC writes and restricted client grants |
 | `functions/delete-account/index.ts` | Verifies the caller's JWT, deletes the auth user with the service role |
 | `functions/send-email/index.ts` | Auth Send Email hook: verifies Supabase's signature and sends through Resend |
 | `functions/auth-open/index.ts` | HTTPS landing page that hands the verified code to `viby://auth/callback` |
+| `functions/spotify-resolve/index.ts` | Returns HTTP 410 for older clients. The current app imports public Spotify playlists locally |
 | `.gitignore` | Keeps CLI scratch state and local `.env` files out of git |
 
 ## Data model
@@ -58,10 +59,11 @@ Merge rule, enforced identically in the client and in `sync_push`: higher
 `updated_at` wins; an equal `updated_at` is broken by the higher `device_id`;
 an exact tie is won by the tombstone. `sync_push` takes a JSON array (100 per
 batch in normal use, 500 hard ceiling), assigns a fresh `rev` to every row it
-actually changes, and returns `(kind, record_id, rev)` **only for the writes it
-accepted**. A record missing from the response lost to a newer copy; the client
-pulls the winner back and reports the replaced edit as a conflict instead of
-silently dropping it.
+actually changes, and returns `(kind, record_id, rev, updated_at)` for the
+accepted writes. A per-account transaction lock keeps revisions visible in
+commit order. Clients can read their own rows through RLS and write through
+`sync_push`. An omitted write stays queued until the client fetches its
+exact server record and reconciles the outcome.
 
 Never synced: downloads, cache, session, stream URLs, lyrics.
 
@@ -263,12 +265,13 @@ channels, so either setting works for it.
 ## Known gaps
 
 - Sign-in, OTP delivery from `welcome@ondavi.space`, history/playlist sync,
-  per-account roots and account isolation have been run live; the macOS
-  session/relaunch checks and a two-device device-channel pass are still manual
-  (`TESTING.md`).
+  per-account roots, account isolation, and macOS session relaunch have been
+  verified live. The updated handoff also has a local renderer check. The
+  live two-device pass is in `TESTING.md`.
 - `playlist_track.position` is an integer until drag-reorder ships.
 - Local `supabase start` was not run while authoring this; `config.toml` covers
   what the CLI needs for this project but omits unrelated defaults.
 - No server-side history cap and no automatic tombstone pruning (above).
-- Delete-account is the only function; anything else that needs the service
-  role would need its own function and its own review.
+- Delete-account is the only Edge Function that uses the service role.
+- Supabase's hosted leaked-password check requires Pro or higher. The
+  production project currently uses Free.

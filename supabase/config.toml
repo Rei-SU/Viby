@@ -60,6 +60,7 @@ enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 enable_signup = true
 enable_anonymous_sign_ins = false
+minimum_password_length = 8
 
 [auth.email]
 enable_signup = true
@@ -79,6 +80,15 @@ policy = "per_worker"
 # The function also verifies the caller with auth.getUser(); this keeps the
 # gateway gate on as well.
 verify_jwt = true
+
+[functions.auth-open]
+verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.spotify-resolve]
+verify_jwt = false
 
 [analytics]
 enabled = false

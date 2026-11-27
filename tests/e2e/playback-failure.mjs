@@ -31,32 +31,34 @@ export async function run(app, check) {
         }
 
         const original = HTMLMediaElement.prototype.play
-        let calls = 0
-        window.__scenario = { afterError: null }
+        window.__scenario = { afterError: null, loadingShown: false }
         HTMLMediaElement.prototype.play = function () {
-          calls += 1
+          HTMLMediaElement.prototype.play = original
           const result = original.call(this)
-          if (calls === 1) {
-            result
-              .then(() => {
-                setTimeout(() => {
-                  const player = window.__viby.player
-                  // The download is the stable recovery source. Pretend this
-                  // attempt was remote so recovery does not discard it.
-                  if (player.stream) {
-                    player.stream = { ...player.stream, kind: 'remote', source: null }
-                  }
-                  this.dispatchEvent(new Event('error'))
-                  window.__scenario.afterError = {
-                    playing: player.playing,
-                    reconnecting: player.reconnecting,
-                    error: player.error
-                  }
-                }, 700)
-              })
-              .catch(() => undefined)
-            HTMLMediaElement.prototype.play = original
-          }
+          result
+            .then(() => {
+              setTimeout(() => {
+                const player = window.__viby.player
+                // The download is the stable recovery source. Pretend this
+                // attempt was remote so recovery does not discard it.
+                if (player.stream) {
+                  player.stream = { ...player.stream, kind: 'remote', source: null }
+                }
+                this.dispatchEvent(new Event('error'))
+                window.__scenario.afterError = {
+                  playing: player.playing,
+                  reconnecting: player.reconnecting,
+                  error: player.error
+                }
+                // Observe the rendered state after Svelte flushes the error
+                // handler. A local recovery can finish between polls.
+                queueMicrotask(() => {
+                  window.__scenario.loadingShown =
+                    document.querySelector('.dock .play')?.getAttribute('aria-label') === 'Loading'
+                })
+              }, 700)
+            })
+            .catch(() => undefined)
           return result
         }
         window.__restorePlay = () => {
@@ -65,7 +67,6 @@ export async function run(app, check) {
 
         await p.playList([item], 0)
 
-        const states = []
         let final = null
         for (let i = 0; i < 200; i++) {
           await wait(100)
@@ -80,7 +81,6 @@ export async function run(app, check) {
             alert: document.querySelector('.alert-card')?.textContent?.replace(/\\s+/g, ' ').trim() ?? null,
             afterError: window.__scenario.afterError
           }
-          states.push(final)
           const recovered =
             final.error === null &&
             final.playing &&
@@ -95,8 +95,7 @@ export async function run(app, check) {
           title: entry.track.title,
           afterError: window.__scenario.afterError,
           final,
-          sawReconnecting: states.some((state) => state.reconnecting === true),
-          calls
+          loadingShown: window.__scenario.loadingShown
         }
       })()`,
       { userGesture: true }
@@ -110,8 +109,7 @@ export async function run(app, check) {
     )
     check(
       'the error shows the loading state while retrying',
-      media.sawReconnecting === true,
-      `${media.calls} play calls`
+      media.loadingShown === true
     )
 
     const recovered =

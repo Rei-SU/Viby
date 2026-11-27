@@ -10,6 +10,8 @@ import {
   type ConnectChannelHandlers
 } from '../src/main/connect/service'
 import type { ConnectDevice, ConnectSnapshot } from '../src/shared/connect'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { createSupabaseChannel } from '../src/main/connect/supabase-channel'
 import { asCommand, asDevice, asSession, COMMAND_MAX_AGE_MS } from '../src/main/connect/validate'
 
 let failures = 0
@@ -102,7 +104,36 @@ function harness(presenceGapMs = 1_000): Harness & { created: () => number } {
   }
 }
 
-console.log('channel lifecycle:')
+console.log('Realtime transport:')
+{
+  let ack = false
+  let status = 'timed out'
+  const channel = {
+    on: () => channel,
+    subscribe: () => channel,
+    send: async () => status,
+    track: async () => status
+  }
+  const client = {
+    auth: { getSession: async () => ({ data: { session: null } }) },
+    channel: (_topic: string, options: { config: { broadcast: { ack: boolean } } }) => {
+      ack = options.config.broadcast.ack
+      return channel
+    }
+  } as unknown as SupabaseClient
+  const wire = await createSupabaseChannel(client)('account:test:devices', SELF, {
+    onDevices: () => {}, onMessage: () => {}, onAvailable: () => {}
+  })
+  check('broadcasts request a server acknowledgement', ack)
+  const unacknowledged = await wire.send({}).then(() => false, () => true)
+  check('a broadcast timeout is reported as a failure', unacknowledged)
+  status = 'ok'
+  await wire.send({})
+  await wire.track(device())
+  check('acknowledged broadcasts and presence succeed', true)
+}
+
+console.log('\nchannel lifecycle:')
 {
   const h = harness()
   h.service.useAccount('user-1')

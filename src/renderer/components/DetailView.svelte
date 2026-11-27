@@ -315,10 +315,6 @@
       if (res.ok) {
         result = res.data
         cacheDetail(browseId, res.data)
-        player.prefetchList(
-          res.data.items.filter((i) => i.kind === 'song' && i.id),
-          3
-        )
       } else {
         result = null
         error = res.error

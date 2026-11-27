@@ -1,7 +1,10 @@
 import { app } from 'electron'
+import { isDeepStrictEqual } from 'node:util'
 import type { SyncConflict, SyncStatus } from '@shared/account'
 import { JsonStore } from '../json-store'
+import { lib } from '../library'
 import { networkMonitor } from '../network'
+import { accountSettingsNeedPull, finishAccountSettingsPull } from '../settings'
 import { auth, publicError } from './auth'
 import { compareVersions, isSyncKind, remoteWins } from './compare'
 import { accountFile } from './library-root'
@@ -27,13 +30,14 @@ const FOCUS_MIN_INTERVAL_MS = 30_000
 const PULL_INTERVAL_MS = 60_000
 const PUSH_PAGES = 100
 const PULL_PAGES = 200
+const CURSOR_VERSION = 2
 
 type AccountRef = { id: string }
 
 type ConflictEntry = { at: number; kind: string; recordId: string }
 type ConflictData = { entries: ConflictEntry[] }
 
-type CursorData = { userId: string; cursor: number; lastSyncedAt: number }
+type CursorData = { userId: string; cursor: number; lastSyncedAt: number; version?: number }
 
 type SyncRow = {
   kind?: unknown
@@ -105,6 +109,9 @@ export class SyncEngine {
   private attemptAt = 0
   /** Deletions are only trusted after this account has been pulled once. */
   private pulled = false
+  private replaying = false
+  private recovering = false
+  private deferredPlaylistItems = new Map<string, OutboxRecord>()
   private backoff = 0
 
   status(): SyncStatus {
@@ -135,6 +142,9 @@ export class SyncEngine {
     this.user = account
     this.rerun = false
     this.pulled = false
+    this.recovering = Boolean(account && lib().loadFailed)
+    this.replaying = false
+    this.deferredPlaylistItems.clear()
     this.backoff = 0
     this.conflictStore = account
       ? new JsonStore<ConflictData>(accountFile(account.id, 'conflicts.json'), { entries: [] })
@@ -217,10 +227,10 @@ export class SyncEngine {
     const store = this.cursorStore
     if (!store) return
     const data = store.get()
-    if (data.userId !== userId) {
+    if (data.userId !== userId || data.version !== CURSOR_VERSION || this.recovering || accountSettingsNeedPull()) {
       this.cursor = 0
       this.lastSyncedAt = null
-      store.set({ userId, cursor: 0, lastSyncedAt: 0 })
+      this.replaying = true
       return
     }
     const cursor = rowNumber(data.cursor) ?? 0
@@ -236,12 +246,13 @@ export class SyncEngine {
     store.set({
       userId: this.user.id,
       cursor: this.cursor,
-      lastSyncedAt: this.lastSyncedAt ?? 0
+      lastSyncedAt: this.lastSyncedAt ?? 0,
+      version: CURSOR_VERSION
     })
   }
 
   private flushLocal(): void {
-    if (!this.user) return
+    if (!this.user || this.recovering) return
     // Before the first pull, a missing local record may simply mean the local
     // store has not been merged yet (or failed to load). Deleting on that
     // evidence would erase the account's library everywhere.
@@ -290,16 +301,37 @@ export class SyncEngine {
 
     try {
       this.flushLocal()
-      if (this.lastSyncedAt === null) {
+      if (this.lastSyncedAt === null || this.replaying) {
         // First sync on this install pulls first so an existing server copy is
         // merged before any local record is pushed over it.
-        await this.pull()
+        if (accountSettingsNeedPull() && !this.recovering) {
+          const pendingSettings = this.outbox.all()
+            .filter((record) => record.kind === 'setting')
+            .map((record) => structuredClone(record))
+          this.tracker.acceptAll(applyRemoteRecordsTracked(pendingSettings, false).accepted)
+        }
+        if (!(await this.pull())) {
+          if (this.user?.id === userId) this.schedule(DEBOUNCE_MS)
+          return
+        }
         if (this.user?.id !== userId) return
+        if (this.recovering) {
+          const pending = this.outbox.all().map((record) => structuredClone(record))
+          this.tracker.acceptAll(applyRemoteRecordsTracked(pending, false).accepted)
+          this.tracker.finishLibraryRecovery()
+          lib().finishRecovery()
+          this.recovering = false
+        }
+        finishAccountSettingsPull()
+        this.replaying = false
         await this.push()
       } else {
         await this.push()
         if (this.user?.id !== userId) return
-        await this.pull()
+        if (!(await this.pull())) {
+          if (this.user?.id === userId) this.schedule(DEBOUNCE_MS)
+          return
+        }
       }
       if (this.user?.id !== userId) return
       this.lastSyncedAt = Date.now()
@@ -319,6 +351,8 @@ export class SyncEngine {
         if (!this.followUp) {
           this.followUp = true
           this.schedule(DEBOUNCE_MS)
+        } else {
+          this.schedule(PULL_INTERVAL_MS)
         }
       } else {
         this.followUp = false
@@ -351,6 +385,7 @@ export class SyncEngine {
 
       const { data, error } = await client.rpc('sync_push', {
         p_records: batch.map((record) => ({
+          user_id: userId,
           kind: record.kind,
           record_id: record.recordId,
           payload: record.payload ?? {},
@@ -364,72 +399,88 @@ export class SyncEngine {
       // queue now belong to different users, so drop this run entirely.
       if (this.user?.id !== userId) return
 
-      this.outbox.removePushed(batch)
-      this.refreshPending()
-
       // `sync_push` returns a row only for the records it actually wrote. A
       // record that is missing lost the server-side comparison, so pull that
       // version back instead of dropping the local edit silently.
-      const accepted = new Set<string>()
+      const accepted = new Map<string, SyncRow>()
       if (Array.isArray(data)) {
         for (const row of data as SyncRow[]) {
           const key = rowKey(row)
-          if (key) accepted.add(key)
+          if (key) accepted.set(key, row)
         }
       }
       const lost = batch.filter((record) => !accepted.has(outboxKey(record)))
-      if (lost.length > 0) await this.reconcile(lost)
+      const written = batch.filter((record) => accepted.has(outboxKey(record)))
+      const pending = new Map(this.outbox.all().map((record) => [outboxKey(record), record]))
+      const normalized = written.flatMap((record) => {
+        const key = outboxKey(record)
+        const timestamp = rowNumber(accepted.get(key)?.updated_at)
+        return timestamp !== null && timestamp !== record.updatedAt && isDeepStrictEqual(record, pending.get(key))
+          ? [{ ...record, updatedAt: timestamp }]
+          : []
+      })
+      this.tracker.acceptAll(normalized)
+      this.outbox.removePushed(written)
+      if (lost.length > 0) await this.reconcile(lost, userId)
+      this.refreshPending()
 
       if (batch.length < BATCH) return
     }
   }
 
-  private async reconcile(lost: OutboxRecord[]): Promise<void> {
-    if (!this.user || lost.length === 0) return
-    // A write the server did not accept lost to a newer copy; that is exactly
-    // the case worth telling the user about.
-    for (const record of lost) this.noteConflict(record)
-    const userId = this.user.id
+  private async reconcile(lost: OutboxRecord[], userId: string): Promise<void> {
     const client = auth().clientInstance()
-    const keys = lost.map(outboxKey)
-    const wanted = new Set(keys)
     const kinds = [...new Set(lost.map((record) => record.kind))]
-
-    const { data, error } = await client
-      .from('sync_records')
-      .select('kind, record_id, payload, updated_at, device_id, deleted, rev')
-      .eq('user_id', userId)
-      .in('kind', kinds)
-      .limit(Math.min(1000, Math.max(100, lost.length * 4)))
-    if (error || !Array.isArray(data)) return
-    if (this.user?.id !== userId) return
-
-    const mine = this.tracker.localMap()
-    const winners: OutboxRecord[] = []
-    for (const row of data as SyncRow[]) {
-      const value = rowToRecord(row)
-      if (!value) continue
-      const key = outboxKey(value)
-      if (!wanted.has(key)) continue
-      if (!remoteWins(mine.get(key), value)) continue
-      const local = mine.get(key)
-      if (local && this.tracker.isDirty(local)) this.noteConflict(value)
-      winners.push(value)
+    const winners = new Map<string, OutboxRecord>()
+    for (const kind of kinds) {
+      if (this.user?.id !== userId) return
+      const ids = lost.filter((record) => record.kind === kind).map((record) => record.recordId)
+      const { data, error } = await client
+        .from('sync_records')
+        .select('kind, record_id, payload, updated_at, device_id, deleted, rev')
+        .eq('user_id', userId)
+        .eq('kind', kind)
+        .in('record_id', ids)
+      if (error) throw error
+      if (this.user?.id !== userId) return
+      for (const row of (data ?? []) as SyncRow[]) {
+        const value = rowToRecord(row)
+        if (value) winners.set(outboxKey(value), value)
+      }
     }
 
-    if (winners.length === 0) return
-    const applied = applyRemoteRecordsTracked(winners).accepted
+    const pending = new Map(this.outbox.all().map((record) => [outboxKey(record), record]))
+    const resolved: OutboxRecord[] = []
+    const restore: OutboxRecord[] = []
+    for (const sent of lost) {
+      const key = outboxKey(sent)
+      const winner = winners.get(key)
+      if (!isDeepStrictEqual(sent, pending.get(key)) || !winner) continue
+      resolved.push(sent)
+      if (winner.deleted !== sent.deleted || (!sent.deleted && !isDeepStrictEqual(winner.payload, sent.payload))) {
+        this.noteConflict(sent)
+      }
+      restore.push(winner)
+    }
+    const applied = applyRemoteRecordsTracked(restore).accepted
     this.tracker.acceptAll(applied)
-    this.refreshPending()
+    const landed = new Set(applied.map(outboxKey))
+    this.outbox.removePushed(resolved.filter((record) => landed.has(outboxKey(record))))
+    if (lost.some((record) => {
+      const key = outboxKey(record)
+      return isDeepStrictEqual(record, pending.get(key)) && !landed.has(key)
+    })) {
+      throw new Error('The server did not return every unresolved sync record. Pending changes were kept.')
+    }
   }
 
-  private async pull(): Promise<void> {
-    if (!this.user) return
+  private async pull(): Promise<boolean> {
+    if (!this.user) return false
     const userId = this.user.id
     const client = auth().clientInstance()
 
     for (let page = 0; page < PULL_PAGES; page += 1) {
-      if (this.user?.id !== userId) return
+      if (this.user?.id !== userId) return false
       const { data, error } = await client
         .from('sync_records')
         .select('kind, record_id, payload, updated_at, device_id, deleted, rev')
@@ -438,20 +489,13 @@ export class SyncEngine {
         .order('rev', { ascending: true })
         .limit(PAGE)
       if (error) throw error
-      if (this.user?.id !== userId) return
-
-      // The server answered for this account: from here on a local absence is
-      // real evidence that the record was deleted, not an unmerged store.
-      this.pulled = true
-      // An empty install attaching to an account now has the server's settings
-      // in hand; stop suppressing the local ones.
-      this.tracker.bootstrapComplete()
+      if (this.user?.id !== userId) return false
 
       const pending = new Map(this.outbox.all().map((record) => [outboxKey(record), record]))
       const rows = Array.isArray(data) ? (data as SyncRow[]) : []
-      if (rows.length === 0) return
+      if (rows.length === 0) break
 
-      const mine = this.tracker.localMap()
+      const mine = this.recovering ? new Map<string, OutboxRecord>() : this.tracker.localMap()
       const accept: OutboxRecord[] = []
       const pushBack: OutboxRecord[] = []
       let maxRev = this.cursor
@@ -485,17 +529,45 @@ export class SyncEngine {
         // invalid payload is skipped, and history evicted by the 5,000 cap is
         // gone. Marking those agreed would turn the next diff into a tombstone
         // that deletes them for every device.
-        const applied = applyRemoteRecordsTracked(accept).accepted
-        this.tracker.acceptAll(applied)
+        this.applyPulled(accept, pending)
       }
       if (pushBack.length > 0) this.outbox.putAll(pushBack)
 
       this.cursor = maxRev
-      this.persistCursor()
       this.refreshPending()
 
-      if (rows.length < PAGE) return
+      if (rows.length < PAGE) break
+      if (page === PULL_PAGES - 1) return false
     }
+    this.deferredPlaylistItems.clear()
+    this.pulled = true
+    this.tracker.bootstrapComplete()
+    return true
+  }
+
+  private applyPulled(records: OutboxRecord[], pending: Map<string, OutboxRecord>): void {
+    const library = records.filter((record) => record.kind !== 'playlist_track')
+    // A partially rebuilt library must not unlink device-owned downloads.
+    const applied = applyRemoteRecordsTracked(library, !this.recovering).accepted
+    for (const record of records) {
+      if (record.kind === 'playlist_track') this.deferredPlaylistItems.set(outboxKey(record), record)
+    }
+    if (this.deferredPlaylistItems.size > 0) {
+      const playlists = new Set(lib().playlists().map((playlist) => playlist.id))
+      const ready: OutboxRecord[] = []
+      for (const [key, record] of this.deferredPlaylistItems) {
+        const playlistId = record.recordId.split(':', 1)[0]
+        if (!record.deleted && !playlists.has(playlistId)) continue
+        this.deferredPlaylistItems.delete(key)
+        if (remoteWins(pending.get(key), record)) ready.push(record)
+      }
+      applied.push(...applyRemoteRecordsTracked(ready, !this.recovering).accepted)
+    }
+    this.tracker.acceptAll(applied)
+    this.outbox.removePushed(applied.flatMap((value) => {
+      const record = pending.get(outboxKey(value))
+      return record ? [record] : []
+    }))
   }
 
   private refreshPending(): void {

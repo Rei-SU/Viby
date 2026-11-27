@@ -1,6 +1,11 @@
 import { existsSync } from 'node:fs'
 import { JsonStore, userDataFile } from './json-store'
 import type { Settings } from '@shared/types'
+import { accountFile } from './account/library-root'
+
+export const SYNCED_SETTINGS = ['audioQuality', 'shuffle', 'repeat', 'autoplay', 'discordPresence'] as const
+type SyncedSettingKey = (typeof SYNCED_SETTINGS)[number]
+type AccountSettings = Pick<Settings, SyncedSettingKey>
 
 export const ONE_GB = 1024 * 1024 * 1024
 
@@ -111,6 +116,22 @@ function sanitizePatch(patch: Partial<Settings> | null | undefined): Partial<Set
 
 let store: JsonStore<Settings> | null = null
 let firstRun = false
+let accountStore: JsonStore<AccountSettings> | null = null
+let accountId: string | null = null
+let needsAccountSettings = false
+
+function syncedPatch(patch: Partial<Settings>): Partial<AccountSettings> {
+  const result: Partial<AccountSettings> = {}
+  for (const key of SYNCED_SETTINGS) {
+    if (patch[key] !== undefined) Object.assign(result, { [key]: patch[key] })
+  }
+  return result
+}
+
+function syncedSettings(value: AccountSettings): AccountSettings {
+  const { audioQuality, shuffle, repeat, autoplay, discordPresence } = value
+  return { audioQuality, shuffle, repeat, autoplay, discordPresence }
+}
 
 /** True when this launch created settings.json, i.e. nothing was here before. */
 export function isFirstRun(): boolean {
@@ -121,7 +142,7 @@ export function isFirstRun(): boolean {
 }
 
 /** Lazily created because app.getPath() is only valid once Electron is ready. */
-export function settings(): JsonStore<Settings> {
+function deviceSettings(): JsonStore<Settings> {
   if (!store) {
     // Captured before the store creates the file: an upgrade already has one,
     // so an empty changelog baseline is not mistaken for a fresh install.
@@ -135,6 +156,52 @@ export function settings(): JsonStore<Settings> {
     if (JSON.stringify(clean) !== JSON.stringify(store.get())) store.set(clean)
   }
   return store
+}
+
+export function settings(): Pick<JsonStore<Settings>, 'get' | 'set'> {
+  const local = deviceSettings()
+  if (!accountStore) return local
+  const account = accountStore
+  return {
+    get: () => ({ ...local.get(), ...syncedSettings(account.get()) }),
+    set: (patch) => {
+      const synced = syncedPatch(patch)
+      const device = { ...patch }
+      for (const key of SYNCED_SETTINGS) delete device[key]
+      if (Object.keys(device).length > 0) local.set(device)
+      if (Object.keys(synced).length > 0) account.set(synced)
+      return { ...local.get(), ...syncedSettings(account.get()) }
+    }
+  }
+}
+
+export function setActiveSettings(userId: string | null): boolean {
+  if (accountId === userId) return false
+  const previous = settings().get()
+  accountId = userId
+  const file = userId ? accountFile(userId, 'settings.json') : null
+  const defaults = syncedSettings(DEFAULT_SETTINGS)
+  needsAccountSettings = Boolean(file && !existsSync(file))
+  accountStore = file ? new JsonStore(file, defaults) : null
+  if (accountStore?.loadFailed) needsAccountSettings = true
+  if (accountStore && !needsAccountSettings) {
+    const stored = syncedSettings(accountStore.get())
+    const clean = syncedPatch(sanitizePatch(stored))
+    if (JSON.stringify(clean) !== JSON.stringify(stored)) accountStore.set(clean)
+  }
+  const next = settings().get()
+  runSettingsEffect(previous, next, syncedPatch(next))
+  return true
+}
+
+export function accountSettingsNeedPull(): boolean {
+  return needsAccountSettings
+}
+
+export function finishAccountSettingsPull(): void {
+  if (!needsAccountSettings) return
+  accountStore?.flush()
+  needsAccountSettings = false
 }
 
 export function setSettings(patch: Partial<Settings>): Settings {
@@ -158,6 +225,11 @@ export function setSettingsEffect(effect: SettingsEffect | null): void {
 export function applyRemoteSettings(patch: Partial<Settings>): Settings {
   const previous = settings().get()
   const next = setSettings(patch)
+  runSettingsEffect(previous, next, patch)
+  return next
+}
+
+function runSettingsEffect(previous: Settings, next: Settings, patch: Partial<Settings>): void {
   if (settingsEffect) {
     try {
       settingsEffect(previous, next, patch)
@@ -165,7 +237,6 @@ export function applyRemoteSettings(patch: Partial<Settings>): Settings {
       // A side effect must not make a pull fail halfway.
     }
   }
-  return next
 }
 
 /** Bitrate ceiling for the current quality setting, or undefined for best. */

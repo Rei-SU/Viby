@@ -81,8 +81,9 @@ export type ConnectCommandInput =
   | { kind: 'volume'; target: string; volume: number }
   /** Ask `target` to hand its session to device `to`. */
   | { kind: 'transfer-out'; target: string; to: string }
+  | { kind: 'handoff-request'; target: string; requestId: string }
   /** The hand-off itself, addressed to `target`. */
-  | { kind: 'transfer-in'; target: string; session: ConnectSession }
+  | { kind: 'transfer-in'; target: string; session: ConnectSession; requestId?: string }
 
 export type ConnectCommand = ConnectCommandInput & {
   id: string

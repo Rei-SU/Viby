@@ -531,7 +531,7 @@
   .layout {
     display: grid;
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr) 0px;
-    grid-template-rows: var(--titlebar-h) minmax(0, 1fr) var(--player-h);
+    grid-template-rows: var(--titlebar-h) minmax(0, 1fr) auto;
     height: 100vh;
     transition: grid-template-columns 300ms var(--ease);
   }

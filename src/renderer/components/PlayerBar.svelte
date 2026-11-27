@@ -45,6 +45,9 @@
   // When another device holds the latest claim this bar mirrors that session,
   // like Spotify's controller window: its track, its moving clock, its controls.
   const remote = $derived(connect.remote)
+  const remoteStatus = $derived(remote ? `${remote.playing ? 'Playing' : 'Paused'} on ${remote.name}` : '')
+  let devicesTrigger = $state<HTMLButtonElement>()
+  let remoteTrigger = $state<HTMLButtonElement>()
   const remoteTrack = $derived(connect.remote ? connect.trackOf(connect.remote) : null)
   const track = $derived(remoteTrack ?? player.current)
   const fav = $derived(track ? favorites.has(track.id) : false)
@@ -225,217 +228,238 @@
 </script>
 
 <footer class="dock glass">
-  <div
-    class="meta"
-    use:contextItem={track
-      ? {
-          item: trackToItem(track),
-          play: () => (remote ? void connect.remotePlayPause(remote) : player.toggle())
-        }
-      : null}
-  >
-    <Cover src={track?.thumbnail} size={50} radius={10} alt={track?.title ?? ''} />
-    <div class="meta-text">
-      <button class="title truncate" title="Open song page" onclick={() => track && nav.openTrack(track)}>
-        {track?.title ?? 'Nothing playing'}
-      </button>
+  <span class="sr-only" role="status">{remoteStatus}</span>
+  {#if remote}
+    <button
+      class="remote-strip"
+      class:live={remote.playing}
+      bind:this={remoteTrigger}
+      aria-expanded={connect.open}
+      title={remoteStatus}
+      onclick={() => connect.toggle()}
+    >
+      <span class="remote-mark" aria-hidden="true">
+        {#if remote.playing}
+          <span class="signal"><i></i><i></i><i></i></span>
+        {:else}
+          <Icon name="pause" size={13} />
+        {/if}
+      </span>
+      <span class="remote-label truncate">
+        {remote.playing ? 'Playing' : 'Paused'} on <strong>{remote.name}</strong>
+      </span>
+      <span class="remote-action">
+        <Icon name="devices" size={15} />
+        Devices
+        <span class="remote-chevron" class:expanded={connect.open}><Icon name="back" size={12} /></span>
+      </span>
+    </button>
+  {/if}
+
+  <div class="dock-body">
+    <div
+      class="meta"
+      use:contextItem={track
+        ? {
+            item: trackToItem(track),
+            play: () => (remote ? void connect.remotePlayPause(remote) : player.toggle())
+          }
+        : null}
+    >
+      <Cover src={track?.thumbnail} size={50} radius={10} alt={track?.title ?? ''} />
+      <div class="meta-text">
+        <button class="title truncate" title="Open song page" onclick={() => track && nav.openTrack(track)}>
+          {track?.title ?? 'Nothing playing'}
+        </button>
+        {#if track}
+          <span class="artist truncate">
+            <ArtistLinks parts={track.artistParts} name={track.artist} id={track.artistId} />
+          </span>
+        {:else}
+          <span class="artist">—</span>
+        {/if}
+      </div>
       {#if track}
-        <span class="artist truncate">
-          <ArtistLinks parts={track.artistParts} name={track.artist} id={track.artistId} />
-        </span>
-      {:else}
-        <span class="artist">—</span>
-      {/if}
-      {#if remote}
         <button
-          class="device-line"
-          class:live={remote.playing}
-          title="Show devices"
-          onclick={() => connect.toggle()}
+          class="icon fav"
+          class:on={fav}
+          title={fav ? 'Remove from favourites' : 'Add to favourites'}
+          aria-label="Favourite"
+          onclick={toggleFav}
         >
-          <span class="truncate">{remote.playing ? 'Playing' : 'Paused'} on {remote.name}</span>
+          <Icon name="heart" size={17} solid={fav} />
         </button>
       {/if}
     </div>
-    {#if track}
-      <button
-        class="icon fav"
-        class:on={fav}
-        title={fav ? 'Remove from favourites' : 'Add to favourites'}
-        aria-label="Favourite"
-        onclick={toggleFav}
-      >
-        <Icon name="heart" size={17} solid={fav} />
-      </button>
-    {/if}
-  </div>
 
-  <div class="controls">
-    <div class="buttons">
-      <button
-        class="icon shuffle"
-        class:on={player.shuffle && !remote}
-        title={remote ? 'Shuffle — this device only' : 'Shuffle'}
-        aria-label="Shuffle"
-        aria-pressed={player.shuffle && !remote}
-        disabled={!!remote}
-        onclick={() => player.toggleShuffle()}
-      >
-        <Icon name="shuffle" size={16} />
-      </button>
+    <div class="controls">
+      <div class="buttons">
+        <button
+          class="icon shuffle"
+          class:on={player.shuffle && !remote}
+          title={remote ? 'Shuffle — this device only' : 'Shuffle'}
+          aria-label="Shuffle"
+          aria-pressed={player.shuffle && !remote}
+          disabled={!!remote}
+          onclick={() => player.toggleShuffle()}
+        >
+          <Icon name="shuffle" size={16} />
+        </button>
 
-      <button class="icon" title="Previous" aria-label="Previous" onclick={skipPrevious}>
-        <Icon name="prev" size={17} />
-      </button>
+        <button class="icon" title="Previous" aria-label="Previous" onclick={skipPrevious}>
+          <Icon name="prev" size={17} />
+        </button>
 
-      <button
-        class="play"
-        class:loading={loading}
-        title={loading ? 'Loading…' : playing ? 'Pause' : 'Play'}
-        aria-label={loading ? 'Loading' : playing ? 'Pause' : 'Play'}
-        onclick={togglePlay}
-      >
-        {#if loading}
-          <span class="spinner"></span>
-        {:else}
-          <Icon name={playing ? 'pause' : 'play'} size={17} />
-        {/if}
-      </button>
+        <button
+          class="play"
+          class:loading={loading}
+          title={loading ? 'Loading…' : playing ? 'Pause' : 'Play'}
+          aria-label={loading ? 'Loading' : playing ? 'Pause' : 'Play'}
+          onclick={togglePlay}
+        >
+          {#if loading}
+            <span class="spinner"></span>
+          {:else}
+            <Icon name={playing ? 'pause' : 'play'} size={17} />
+          {/if}
+        </button>
 
-      <button class="icon" title="Next" aria-label="Next" onclick={skipNext}>
-        <Icon name="next" size={17} />
-      </button>
+        <button class="icon" title="Next" aria-label="Next" onclick={skipNext}>
+          <Icon name="next" size={17} />
+        </button>
 
-      <button
-        class="icon repeat"
-        class:on={player.repeat !== 'off' && !remote}
-        title={remote ? 'Repeat — this device only' : repeatLabel}
-        aria-label={repeatLabel}
-        aria-pressed={player.repeat !== 'off' && !remote}
-        disabled={!!remote}
-        onclick={() => player.cycleRepeat()}
-      >
-        <Icon name={player.repeat === 'one' ? 'repeatOne' : 'repeat'} size={16} />
-      </button>
+        <button
+          class="icon repeat"
+          class:on={player.repeat !== 'off' && !remote}
+          title={remote ? 'Repeat — this device only' : repeatLabel}
+          aria-label={repeatLabel}
+          aria-pressed={player.repeat !== 'off' && !remote}
+          disabled={!!remote}
+          onclick={() => player.cycleRepeat()}
+        >
+          <Icon name={player.repeat === 'one' ? 'repeatOne' : 'repeat'} size={16} />
+        </button>
+      </div>
+
+      <div class="scrub">
+        <span class="time tabular">{fmt(shownPosition)}</span>
+        <div
+          class="seek"
+          bind:this={seekEl}
+          role="presentation"
+          onpointerenter={schedulePreview}
+          onpointermove={schedulePreview}
+          onpointerleave={clearPreview}
+        >
+          {#if preview}
+            <span
+              class="seek-preview tabular"
+              style="left: clamp({PREVIEW_EDGE}px, {preview.percent}%, calc(100% - {PREVIEW_EDGE}px))"
+              aria-hidden="true"
+            >
+              {fmt(preview.seconds)}
+            </span>
+          {/if}
+          <input
+            type="range"
+            min="0"
+            max={Math.max(duration, 1)}
+            step="1"
+            value={shownPosition}
+            style="--progress: {progress}%"
+            disabled={!track}
+            aria-label="Seek"
+            aria-valuetext={track ? fmt(shownPosition) : undefined}
+            oninput={onSeekInput}
+            onchange={onSeekCommit}
+          />
+        </div>
+        <span class="time tabular">{fmt(duration)}</span>
+      </div>
     </div>
 
-    <div class="scrub">
-      <span class="time tabular">{fmt(shownPosition)}</span>
-      <div
-        class="seek"
-        bind:this={seekEl}
-        role="presentation"
-        onpointerenter={schedulePreview}
-        onpointermove={schedulePreview}
-        onpointerleave={clearPreview}
+    <div class="right">
+      {#if qualityText}
+        <span class="quality" title={qualityTitle}>{qualityText}</span>
+      {/if}
+      <button
+        class="icon"
+        class:on={sidePanel.mode === 'queue'}
+        class:drop-ready={trackDrag.active}
+        class:queue-over={queueOver}
+        title={queueOver ? 'Add to queue' : 'Queue'}
+        aria-label="Queue"
+        onclick={() => sidePanel.toggle('queue')}
+        ondragover={queueDragOver}
+        ondragleave={() => (queueOver = false)}
+        ondrop={onQueueDrop}
       >
-        {#if preview}
-          <span
-            class="seek-preview tabular"
-            style="left: clamp({PREVIEW_EDGE}px, {preview.percent}%, calc(100% - {PREVIEW_EDGE}px))"
-            aria-hidden="true"
-          >
-            {fmt(preview.seconds)}
-          </span>
-        {/if}
+        <Icon name="list" size={16} />
+      </button>
+      <button
+        class="icon"
+        class:on={sidePanel.mode === 'lyrics'}
+        title="Lyrics"
+        aria-label="Lyrics"
+        disabled={!track}
+        onclick={() => sidePanel.toggle('lyrics')}
+      >
+        <Icon name="lyrics" size={16} />
+      </button>
+      {#if account.signedIn && !remote}
+        <button
+          class="icon"
+          class:on={connect.open}
+          class:remote={!!connect.remotePlaying}
+          title={connect.remotePlaying ? `Playing on ${connect.remotePlaying.name}` : 'Devices'}
+          aria-label="Devices"
+          aria-expanded={connect.open}
+          bind:this={devicesTrigger}
+          onclick={() => connect.toggle()}
+        >
+          <Icon name="devices" size={16} />
+        </button>
+      {/if}
+      {#if !remote}
+        <button
+          class="icon"
+          title={player.muted ? 'Unmute' : 'Mute'}
+          aria-label={player.muted ? 'Unmute' : 'Mute'}
+          onclick={() => player.toggleMute()}
+        >
+          <Icon name={player.muted || player.volume === 0 ? 'mute' : 'volume'} size={16} />
+        </button>
+      {/if}
+      <div
+        class="volume-wrap"
+        class:remote
+        role="presentation"
+        onwheel={onVolumeWheel}
+        onpointerleave={resetVolumeWheel}
+      >
         <input
           type="range"
+          class="volume"
           min="0"
-          max={Math.max(duration, 1)}
-          step="1"
-          value={shownPosition}
-          style="--progress: {progress}%"
-          disabled={!track}
-          aria-label="Seek"
-          aria-valuetext={track ? fmt(shownPosition) : undefined}
-          oninput={onSeekInput}
-          onchange={onSeekCommit}
+          max="1"
+          step="0.01"
+          value={remote ? (remote.muted ? 0 : remote.volume) : player.muted ? 0 : player.volume}
+          style="--progress: {volumeLevel}%"
+          aria-label={remote ? `Volume on ${remote.name}` : 'Volume'}
+          oninput={(e) => {
+            if (!remote) player.setVolume(Number((e.currentTarget as HTMLInputElement).value))
+          }}
+          onchange={(e) => {
+            if (remote) void connect.remoteVolume(remote, Number((e.currentTarget as HTMLInputElement).value))
+          }}
         />
+        <span class="volume-hint" class:show={volumeHint} aria-hidden="true">{volumeLevel}%</span>
       </div>
-      <span class="time tabular">{fmt(duration)}</span>
     </div>
   </div>
-
-  <div class="right">
-    {#if qualityText}
-      <span class="quality" title={qualityTitle}>{qualityText}</span>
-    {/if}
-    <button
-      class="icon"
-      class:on={sidePanel.mode === 'queue'}
-      class:drop-ready={trackDrag.active}
-      class:queue-over={queueOver}
-      title={queueOver ? 'Add to queue' : 'Queue'}
-      aria-label="Queue"
-      onclick={() => sidePanel.toggle('queue')}
-      ondragover={queueDragOver}
-      ondragleave={() => (queueOver = false)}
-      ondrop={onQueueDrop}
-    >
-      <Icon name="list" size={16} />
-    </button>
-    <button
-      class="icon"
-      class:on={sidePanel.mode === 'lyrics'}
-      title="Lyrics"
-      aria-label="Lyrics"
-      disabled={!track}
-      onclick={() => sidePanel.toggle('lyrics')}
-    >
-      <Icon name="lyrics" size={16} />
-    </button>
-    {#if account.signedIn}
-      <button
-        class="icon"
-        class:on={connect.open}
-        class:remote={!!connect.remotePlaying}
-        title={connect.remotePlaying ? `Playing on ${connect.remotePlaying.name}` : 'Devices'}
-        aria-label="Devices"
-        data-connect-toggle
-        onclick={() => connect.toggle()}
-      >
-        <Icon name="devices" size={16} />
-      </button>
-    {/if}
-    {#if !remote}
-      <button
-        class="icon"
-        title={player.muted ? 'Unmute' : 'Mute'}
-        aria-label={player.muted ? 'Unmute' : 'Mute'}
-        onclick={() => player.toggleMute()}
-      >
-        <Icon name={player.muted || player.volume === 0 ? 'mute' : 'volume'} size={16} />
-      </button>
-    {/if}
-    <div
-      class="volume-wrap"
-      class:remote
-      role="presentation"
-      onwheel={onVolumeWheel}
-      onpointerleave={resetVolumeWheel}
-    >
-      <input
-        type="range"
-        class="volume"
-        min="0"
-        max="1"
-        step="0.01"
-        value={remote ? (remote.muted ? 0 : remote.volume) : player.muted ? 0 : player.volume}
-        style="--progress: {volumeLevel}%"
-        aria-label={remote ? `Volume on ${remote.name}` : 'Volume'}
-        oninput={(e) => {
-          if (!remote) player.setVolume(Number((e.currentTarget as HTMLInputElement).value))
-        }}
-        onchange={(e) => {
-          if (remote) void connect.remoteVolume(remote, Number((e.currentTarget as HTMLInputElement).value))
-        }}
-      />
-      <span class="volume-hint" class:show={volumeHint} aria-hidden="true">{volumeLevel}%</span>
-    </div>
-    {#if account.signedIn}
-      <DevicesPanel />
-    {/if}
-  </div>
+  {#if account.signedIn}
+    <DevicesPanel trigger={remote ? remoteTrigger : devicesTrigger} />
+  {/if}
 </footer>
 
 <style>
@@ -445,12 +469,115 @@
     border-radius: 0;
     border-top: 1px solid var(--stroke);
     box-shadow: none;
+    min-width: 0;
+  }
+
+  .dock-body {
     display: grid;
     grid-template-columns: minmax(210px, 1fr) minmax(380px, 1.5fr) minmax(190px, 1fr);
     align-items: center;
     gap: 22px;
     padding: 0 22px;
+    min-height: calc(var(--player-h) - 2px);
     min-width: 0;
+  }
+
+  .remote-strip {
+    --remote-accent: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 36px;
+    width: 100%;
+    padding: 0 22px;
+    border-bottom: 1px solid color-mix(in srgb, var(--remote-accent) 26%, transparent);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--remote-accent) 17%, transparent),
+      color-mix(in srgb, var(--remote-accent) 5%, transparent));
+    color: var(--text);
+    text-align: left;
+    font-size: 12px;
+  }
+
+  .remote-strip.live {
+    --remote-accent: var(--accent-green);
+  }
+
+  .remote-strip:hover,
+  .remote-strip[aria-expanded='true'] {
+    background-color: color-mix(in srgb, var(--remote-accent) 7%, transparent);
+  }
+
+  .remote-strip:focus-visible {
+    outline-offset: -3px;
+  }
+
+  .remote-mark {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 23px;
+    height: 23px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--remote-accent) 16%, transparent);
+    color: var(--remote-accent);
+  }
+
+  .signal {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .signal i {
+    width: 2px;
+    height: 7px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+
+  .signal i:nth-child(2) {
+    height: 13px;
+  }
+
+  .signal i:nth-child(3) {
+    height: 9px;
+  }
+
+  .remote-label {
+    min-width: 0;
+  }
+
+  .remote-label strong {
+    font-weight: 700;
+  }
+
+  .remote-action {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    margin-left: auto;
+    color: var(--remote-accent);
+    font-weight: 600;
+  }
+
+  .remote-chevron {
+    display: grid;
+    place-items: center;
+    transform: rotate(90deg);
+  }
+
+  .remote-chevron.expanded {
+    transform: rotate(-90deg);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .meta {
@@ -488,45 +615,6 @@
     color: var(--text-dim);
     text-align: left;
     max-width: 100%;
-  }
-
-  .device-line {
-    align-self: flex-start;
-    max-width: 100%;
-    margin-top: 2px;
-    padding: 1px 7px;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-faint);
-    font-size: 10.5px;
-    line-height: 1.3;
-    cursor: pointer;
-    transition:
-      color var(--speed) var(--ease),
-      background var(--speed) var(--ease);
-  }
-
-  .device-line.live {
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-  }
-
-  .device-line:hover {
-    color: var(--text-dim);
-    background: var(--glass-hover);
-  }
-
-  .device-line.live:hover {
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 13%, transparent);
-  }
-
-  .device-line span {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .icon {
@@ -815,10 +903,14 @@
      way first. Below this the slider is hidden (mute remains) rather than
      letting any control overlap its neighbour or clip. */
   @media (max-width: 1080px) {
-    .dock {
+    .dock-body {
       grid-template-columns: minmax(180px, 1fr) minmax(300px, 1.5fr) minmax(0, auto);
       gap: 14px;
       padding: 0 16px;
+    }
+
+    .remote-strip {
+      padding-inline: 16px;
     }
 
     .right {

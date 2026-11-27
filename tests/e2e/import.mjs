@@ -45,13 +45,13 @@ export async function run(app, check) {
     check('reports match counts', /matched/.test(state?.counts ?? '') && !/^0 matched/.test(state?.counts ?? ''), state?.counts ?? '')
     check('no error while matching', !state?.error, state?.error ?? '')
 
-    const sourceFirst = await app.evaluate(
-      `[...document.querySelectorAll('.rows .row')]
-        .find((row) => row.querySelector('.chip.auto'))
-        ?.querySelector('.title')
-        ?.textContent?.trim() ?? null`
+    const expectedOrder = await app.evaluate(
+      `[...new Set([...document.querySelectorAll('.rows .row')]
+        .filter((row) => row.querySelector('.check[aria-pressed="true"]'))
+        .map((row) => row.querySelector('select')?.value)
+        .filter(Boolean))]`
     )
-    check('shows the first matched source track', Boolean(sourceFirst), sourceFirst ?? 'null')
+    check('shows selected catalog matches', expectedOrder.length > 0, `${expectedOrder.length} matches`)
 
     const clicked = await app.evaluate(
       `(() => {
@@ -87,19 +87,21 @@ export async function run(app, check) {
               id: playlist.id,
               name: playlist.name,
               tracks: playlist.tracks.length,
+              ids: playlist.tracks.map((track) => track.id),
               first: playlist.tracks[0]?.title ?? null,
               last: playlist.tracks.at(-1)?.title ?? null
             }
           : null
       })()
     `)
-    console.log('  created:', JSON.stringify(created))
+    const { ids, ...summary } = created ?? {}
+    console.log('  created:', created ? JSON.stringify(summary) : 'missing')
     check('playlist is in the library', Boolean(created), created ? 'yes' : 'missing')
     check('playlist has the matched tracks', (created?.tracks ?? 0) > 0, `${created?.tracks ?? 0}`)
     check(
       'playlist keeps source order',
-      Boolean(sourceFirst) && created?.first === sourceFirst,
-      JSON.stringify({ sourceFirst, createdFirst: created?.first ?? null })
+      expectedOrder.length > 0 && JSON.stringify(ids) === JSON.stringify(expectedOrder),
+      JSON.stringify({ expected: expectedOrder.slice(0, 5), actual: ids?.slice(0, 5), count: created?.tracks })
     )
   } finally {
     const ids = await app.evaluate(`window.__viby.api.library.playlists().then((list) => list.map((p) => p.id))`).catch(() => [])

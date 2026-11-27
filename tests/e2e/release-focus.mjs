@@ -264,55 +264,73 @@ export async function run(app, check) {
 
   // ---- song cards: title opens, the rest plays ---------------------------
   const cards = await app.evaluate(
-    `(async () => {
+    `(async (fixture) => {
+      if (!fixture?.albumId || !fixture.id) return { found: false, reason: 'release fixture unavailable' }
       const { nav, player } = window.__viby
+      const { homeShelves } = await import('/lib/catalog-cache.svelte.ts')
       const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const shelves = homeShelves.shelves
       player.clearQueue()
       nav.go('home')
 
-      let card = null
-      for (let i = 0; i < 60 && !card; i++) {
-        await wait(150)
-        card = document.querySelector('.rail .card:has(button.card-title)')
-      }
-      if (!card) return { found: false }
-
-      const title = card.querySelector('button.card-title').textContent.trim()
-      card.querySelector('button.card-title').click()
-      let navigated = null
-      for (let i = 0; i < 50; i++) {
-        await wait(100)
-        if (nav.detail || nav.track) {
-          navigated = { detail: nav.detail?.title ?? null, track: nav.track?.title ?? null }
-          break
+      // YouTube can populate Home with collections only. Reuse the release
+      // found above to exercise a song card independently of the feed's mix.
+      homeShelves.shelves = [{ title: 'Release card test', items: [fixture] }, ...shelves]
+      const findCard = () => [...document.querySelectorAll('.rail .card:has(button.card-title)')]
+        .find((card) => card.querySelector('button.card-title').textContent.trim() === fixture.title)
+      try {
+        let card = null
+        for (let i = 0; i < 60 && !card; i++) {
+          await wait(150)
+          card = findCard()
         }
-      }
+        if (!card) return { found: false }
 
-      nav.go('home')
-      await wait(500)
-      const again = document.querySelector('.rail .card:has(button.card-title)')
-      again?.querySelector('.card-hit')?.click()
-      await wait(700)
-      const played = {
-        queue: player.queue.length,
-        detail: nav.detail?.title ?? null,
-        track: nav.track?.title ?? null
+        card.querySelector('button.card-title').click()
+        let navigated = null
+        for (let i = 0; i < 50; i++) {
+          await wait(100)
+          if (nav.detail || nav.track) {
+            navigated = { detailId: nav.detail?.id ?? null, detail: nav.detail?.title ?? null, track: nav.track?.title ?? null }
+            break
+          }
+        }
+
+        nav.go('home')
+        await wait(500)
+        findCard()?.querySelector('.card-hit')?.click()
+        await wait(700)
+        const played = {
+          firstQueuedId: player.queue[0]?.id ?? null,
+          detail: nav.detail?.title ?? null,
+          track: nav.track?.title ?? null
+        }
+        return { found: true, title: fixture.title, navigated, played }
+      } finally {
+        homeShelves.shelves = shelves
+        player.clearQueue()
+        player.error = null
       }
-      player.clearQueue()
-      player.error = null
-      return { found: true, title, navigated, played }
-    })()`,
+    })(${JSON.stringify({
+      id: album.clickedId,
+      kind: 'song',
+      title: album.title,
+      subtitle: album.albumName,
+      album: album.albumName,
+      albumId: album.detail?.id,
+      releaseType: 'Album'
+    })})`,
     { userGesture: true }
   )
   check(
     'a song card title opens its release',
-    cards.found && Boolean(cards.navigated?.detail || cards.navigated?.track),
+    cards.found && cards.navigated?.detailId === album.detail?.id,
     JSON.stringify(cards)
   )
   check(
     'clicking the rest of a song card plays it',
     cards.found &&
-      cards.played?.queue > 0 &&
+      cards.played?.firstQueuedId === album.clickedId &&
       cards.played.detail === null &&
       cards.played.track === null,
     JSON.stringify(cards.played)

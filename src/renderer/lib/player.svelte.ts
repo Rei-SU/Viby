@@ -517,16 +517,11 @@ class Player {
     else void this.advance(-1)
   }
 
-  /** Warm a track's stream URL without playing it (hover prefetch). */
-  prefetch(id: string): void {
+  /** Warm the next track's stream URL without playing it. */
+  private prefetch(id: string): void {
     if (!id || this.current?.id === id || this.prefetched.has(id)) return
     this.prefetched.add(id)
     api.player.prefetch(id)
-  }
-
-  /** Warm the first few playable items of a list the user is looking at. */
-  prefetchList(items: CatalogItem[], count = 3): void {
-    for (const item of items.filter(isPlayable).slice(0, count)) this.prefetch(item.id)
   }
 
   toggle(): void {
@@ -740,7 +735,7 @@ class Player {
    * the adopted track then goes through the ordinary resolve path, resuming at
    * the transferred position.
    */
-  async adoptRemote(session: ConnectSession): Promise<void> {
+  async adoptRemote(session: ConnectSession): Promise<boolean> {
     this.cancelQueueMore()
     this.playToken += 1
     api.player.cancel()
@@ -771,7 +766,11 @@ class Player {
     this.syncMetadata()
     this.persistSession(true)
 
-    if (this.current) await this.start(session.playing)
+    if (!this.current) return false
+    const token = this.playToken + 1
+    await this.start(session.playing)
+    return token === this.playToken && this.playing && !audio.paused && !audio.error &&
+      audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
   }
 
   removeAt(i: number): void {
@@ -928,7 +927,7 @@ class Player {
    */
   private prefetchNext(): void {
     // No connection means no useful warm-up; local files need none anyway.
-    if (network.localFirst) return
+    if (!this.playing || network.localFirst) return
     // Repeat-one repeats this track; shuffle has no known next. Warming a guess
     // in either case just wastes a resolve.
     if (this.repeat === 'one' || this.shuffle || this.queue.length === 0) return
@@ -944,7 +943,6 @@ class Player {
       return
     }
 
-    if (this.prefetched.has(next.id)) return
     // Use the prefetch channel: a resolve here would overwrite main's loaded
     // track id and weaken cache/download protection for the current song.
     this.prefetch(next.id)

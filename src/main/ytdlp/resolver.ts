@@ -18,6 +18,7 @@ import { run } from './exec'
  */
 
 const URL_TTL_MS = 2 * 60 * 60 * 1000
+const YOUTUBE_COOLDOWN_MS = 60_000
 
 /** Keep the persisted cache bounded; expired entries are pruned on save. */
 const URL_CACHE_LIMIT = 300
@@ -34,6 +35,38 @@ export class Resolver {
   private urlCache = new Map<string, ResolvedEntry>()
   private cacheFile: string | null = null
   private persistTimer: ReturnType<typeof setTimeout> | null = null
+  private youtubeRetryAt = 0
+
+  constructor(
+    private readonly runYtDlp = run,
+    private readonly getRunner = ensureRunner
+  ) {}
+
+  private checkCooldown(url: string): void {
+    if (Date.now() < this.youtubeRetryAt && isYouTubeUrl(url)) {
+      throw new ResolveError('rate-limited', 'Viby is waiting to retry YouTube. Try again in a minute.')
+    }
+  }
+
+  private noteFailure(url: string, error: unknown): void {
+    if (
+      error instanceof ResolveError &&
+      (error.kind === 'botcheck' || error.kind === 'rate-limited') &&
+      isYouTubeUrl(url)
+    ) {
+      this.youtubeRetryAt = Date.now() + YOUTUBE_COOLDOWN_MS
+    }
+  }
+
+  private async runnerFor(url: string, signal?: AbortSignal): Promise<Runner> {
+    if (signal?.aborted) throw new ResolveError('cancelled', 'Cancelled.')
+    this.checkCooldown(url)
+    const runner = await this.getRunner()
+    if (signal?.aborted) throw new ResolveError('cancelled', 'Cancelled.')
+    // Another request may have hit a restriction while the runner loaded.
+    this.checkCooldown(url)
+    return runner
+  }
 
   /** Cheap check used to avoid prefetching something already warm. */
   hasCached(input: string, maxKbps?: number): boolean {
@@ -157,7 +190,7 @@ export class Resolver {
 
     return this.semaphore.run(async () => {
       const started = Date.now()
-      const runner = await ensureRunner()
+      const runner = await this.runnerFor(url, opts.signal)
 
       try {
         const info = await this.inspect(runner, url, opts.signal)
@@ -173,6 +206,7 @@ export class Resolver {
       } catch (err) {
         // A cancel is a decision, not a failure.
         if (opts.signal?.aborted) throw new ResolveError('cancelled', 'Cancelled.')
+        this.noteFailure(url, err)
         throw err
       }
     })
@@ -195,7 +229,7 @@ export class Resolver {
       url
     ]
 
-    const { code, stdout, stderr } = await run(
+    const { code, stdout, stderr } = await this.runYtDlp(
       runner.command,
       [...runner.prefix, ...args],
       { timeoutMs: 60_000, signal }
@@ -229,14 +263,15 @@ export class Resolver {
     background = false
   ): Promise<{ file: string; ext: string; id: string; dir: string }> {
     if (!isSafeYtDlpInput(url)) throw new Error('Only http(s) track URLs are supported.')
+    url = Resolver.normalizeInput(url)
     const semaphore = background ? this.backgroundSemaphore : this.semaphore
     return semaphore.run(async () => {
-      const runner = await ensureRunner()
+      const runner = await this.runnerFor(url, signal)
       const id = Resolver.extractId(url) ?? `viby-${Date.now()}`
       const dir = mkdtempSync(join(tmpdir(), 'viby-track-'))
 
       try {
-        const { code, stderr } = await run(
+        const { code, stderr } = await this.runYtDlp(
           runner.command,
           [
             ...runner.prefix,
@@ -255,7 +290,11 @@ export class Resolver {
           ],
           { timeoutMs: 300_000, signal }
         )
-        if (code !== 0) throw new Error(firstLine(stderr) || 'Download failed')
+        if (code !== 0) {
+          const error = describeFailure(stderr, code)
+          if (!signal?.aborted) this.noteFailure(url, error)
+          throw error
+        }
 
         const file = readdirSync(dir).find((f) => f.startsWith(id))
         if (!file) throw new Error('Downloaded file was not found')
@@ -400,11 +439,12 @@ function mimeFor(ext: string): string {
   }
 }
 
-function firstLine(text: string): string {
-  return text.trim().split('\n').filter(Boolean).pop() ?? ''
-}
+export type ResolveErrorKind = 'unavailable' | 'playlist' | 'botcheck' | 'rate-limited' | 'cancelled' | 'unknown'
 
-export type ResolveErrorKind = 'unavailable' | 'playlist' | 'botcheck' | 'cancelled' | 'unknown'
+function isYouTubeUrl(url: string): boolean {
+  const host = new URL(url).hostname
+  return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com')
+}
 
 /** A resolution failure with a message worth showing a human. */
 /** yt-dlp treats a leading `-` as an option; never pass renderer strings as options. */
@@ -436,10 +476,19 @@ export class ResolveError extends Error {
 function describeFailure(stderr: string, code: number): ResolveError {
   const text = stderr.toLowerCase()
 
-  if (text.includes('sign in to confirm') || text.includes('not a bot')) {
+  if (text.includes('not a bot')) {
     return new ResolveError(
       'botcheck',
-      'YouTube is asking for a bot check. Try "Update resolver" below; if that does not help, the PO-token provider is needed.'
+      'YouTube asked for a bot check. Try again in a minute. If it persists, open Settings and choose Update resolver.'
+    )
+  }
+  if (
+    /http(?: error)?\s+429\b|too many requests/.test(text) ||
+    /(?:this|the following) content (?:isn['’]t|is not) available, try again later/.test(text)
+  ) {
+    return new ResolveError(
+      'rate-limited',
+      'The music source is limiting requests. Try again in a minute.'
     )
   }
   if (text.includes('video is unavailable') || text.includes('this video is unavailable')) {

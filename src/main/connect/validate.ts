@@ -192,9 +192,15 @@ export function asCommandInput(value: unknown): ConnectCommandInput | null {
       const to = text(source.to, 64)
       return to ? { kind: 'transfer-out', target, to } : null
     }
+    case 'handoff-request': {
+      const requestId = text(source.requestId, 64)
+      return requestId ? { kind: 'handoff-request', target, requestId } : null
+    }
     case 'transfer-in': {
       const session = asSession(source.session)
-      return session ? { kind: 'transfer-in', target, session } : null
+      const requestId = text(source.requestId, 64)
+      if (!session || (source.requestId !== undefined && !requestId)) return null
+      return requestId ? { kind: 'transfer-in', target, session, requestId } : { kind: 'transfer-in', target, session }
     }
     default:
       return null
@@ -217,7 +223,7 @@ export function asCommand(
   if (issuedAt < now - COMMAND_MAX_AGE_MS || issuedAt > now + COMMAND_MAX_AHEAD_MS) return null
   const input = asCommandInput(value)
   if (!input) return null
-  if (input.kind === 'transfer-in' && from === selfId) return null
+  if ((input.kind === 'transfer-in' || input.kind === 'handoff-request') && from === selfId) return null
   return { ...input, id, from, issuedAt }
 }
 

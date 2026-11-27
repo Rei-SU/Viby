@@ -10,6 +10,7 @@ import { join } from 'node:path'
 
 export const app = {
   isPackaged: false,
+  whenReady: async (): Promise<void> => {},
   getAppPath: (): string => process.cwd(),
   getPath: (name: string): string => {
     if (name !== 'userData') return process.cwd()

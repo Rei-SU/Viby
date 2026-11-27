@@ -1,5 +1,7 @@
+import { existsSync, renameSync } from 'node:fs'
 import { JsonStore, userDataFile } from '../json-store'
 import { isSyncKind, recordKey, type SyncKind } from './compare'
+import { accountFile, legacyOutboxFile } from './library-root'
 
 /**
  * One pending write. The payload is the record's full local state (or nothing
@@ -37,7 +39,16 @@ function isValidRecord(value: unknown): value is OutboxRecord {
 
 /** One queue file per account, so two accounts never share pending writes. */
 function queueFile(userId: string): string {
-  return userDataFile(`account-outbox-${userId.replace(/[^A-Za-z0-9-]/g, '_')}.json`)
+  const path = accountFile(userId, 'outbox.json')
+  const legacy = legacyOutboxFile(userId)
+  if (!existsSync(path) && existsSync(legacy)) {
+    try {
+      renameSync(legacy, path)
+    } catch {
+      return legacy
+    }
+  }
+  return path
 }
 
 /**

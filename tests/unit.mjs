@@ -10,6 +10,7 @@ import { join } from 'node:path'
  */
 const suites = {
   resolver: { file: 'resolver.test.ts', electron: true },
+  'resolver-cooldown': { file: 'resolver-cooldown.test.ts', electron: true },
   innertube: { file: 'innertube.test.ts' },
   catalog: { file: 'catalog.test.ts' },
   thumbs: { file: 'thumbs.test.ts' },
@@ -58,6 +59,7 @@ const suites = {
   'account-tokens': { file: 'account-tokens.test.ts', electron: true },
   'account-otp': { file: 'account-otp.test.ts' },
   'account-auth-errors': { file: 'account-auth-errors.test.ts', electron: true },
+  'account-edge': { file: 'account-edge.test.ts' },
   connect: { file: 'connect.test.ts' },
   'device-clock': { file: 'device-clock.test.ts' },
   'library-root': { file: 'library-root.test.ts', electron: true }

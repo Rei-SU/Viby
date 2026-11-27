@@ -22,7 +22,7 @@ export function createSupabaseChannel(client: SupabaseClient): ConnectChannelFac
     }
 
     const channel = client.channel(topic, {
-      config: { private: true, presence: { key: presenceKey } }
+      config: { private: true, broadcast: { ack: true }, presence: { key: presenceKey } }
     })
 
     channel
@@ -40,10 +40,11 @@ export function createSupabaseChannel(client: SupabaseClient): ConnectChannelFac
 
     const transport: ConnectChannel = {
       track: async (payload: ConnectDevice) => {
-        await channel.track(payload)
+        if (await channel.track(payload) !== 'ok') throw new Error('Realtime presence update failed')
       },
       send: async (payload: unknown) => {
-        await channel.send({ type: 'broadcast', event: 'device', payload })
+        const status = await channel.send({ type: 'broadcast', event: 'device', payload })
+        if (status !== 'ok') throw new Error('Realtime did not acknowledge the broadcast')
       },
       leave: async () => {
         await client.removeChannel(channel)

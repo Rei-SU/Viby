@@ -9,7 +9,7 @@
  */
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -17,8 +17,11 @@ import type { Playlist, Track } from '../src/shared/types'
 import { auth } from '../src/main/account/auth'
 import { SyncEngine } from '../src/main/account/sync'
 import { outboxStore } from '../src/main/account/outbox'
+import { setRemoteLibrarySink } from '../src/main/account/records'
+import { libraryPathFor } from '../src/main/account/library-root'
+import { recoveryMarkerFor } from '../src/main/json-store'
 import { lib, setActiveLibrary } from '../src/main/library'
-import { setSettings } from '../src/main/settings'
+import { setActiveSettings, settings, setSettings } from '../src/main/settings'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = ''): void {
@@ -44,6 +47,8 @@ const requests: Array<{ method: string; path: string; body: unknown }> = []
 let rev = 0
 let activeUser = 'user-1'
 let failNextPull = false
+let failNextReconcile = false
+let omitNextWinner = false
 
 const rowKey = (userId: string, kind: string, recordId: string): string =>
   `${userId}\u0000${kind}\u0000${recordId}`
@@ -118,6 +123,15 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/rest/v1/sync_records') {
+      const exact = url.searchParams.get('record_id')
+      if (exact && failNextReconcile) {
+        failNextReconcile = false
+        return send(res, 500, { message: 'winner unavailable' })
+      }
+      if (exact && omitNextWinner) {
+        omitNextWinner = false
+        return send(res, 200, [])
+      }
       if (failNextPull) {
         failNextPull = false
         return send(res, 500, { message: 'server exploded', code: 'XX000' })
@@ -126,8 +140,11 @@ const server = http.createServer((req, res) => {
       const rawCursor = url.searchParams.get('rev') ?? ''
       const cursor = Number(rawCursor.replace(/^gt\./, '')) || 0
       const limit = Number(url.searchParams.get('limit') ?? 500) || 500
+      const kind = url.searchParams.get('kind')?.replace(/^eq\./, '')
+      const ids = exact?.slice(4, -1).split(',')
       const list = [...rows.values()]
         .filter((row) => row.user_id === userId && row.rev > cursor)
+        .filter((row) => (!kind || row.kind === kind) && (!ids || ids.includes(row.record_id)))
         .sort((a, b) => a.rev - b.rev)
         .slice(0, limit)
       return send(res, 200, list)
@@ -291,6 +308,98 @@ try {
   check('the second account is synced', outboxStore().count() === 0)
   check('the second account has its own rows', [...rows.values()].some((row) => row.user_id === 'user-2' && row.record_id === 'sync-c'))
   check('the first account rows are untouched', [...rows.values()].some((row) => row.user_id === 'user-1' && row.record_id === 'sync-remote'))
+
+  console.log('\nreconciliation keeps rejected writes until the exact winner is available:')
+  lib().toggleFavorite(track('sync-c'))
+  engine.noteLocalChange()
+  addRemote({
+    kind: 'favorite', record_id: 'sync-c', payload: track('sync-c', 'Remote winner'),
+    updated_at: Date.now() + 10_000, device_id: 'remote', deleted: false
+  })
+  failNextReconcile = true
+  await engine.now()
+  check('a failed winner request leaves the write queued', engine.status().pending === 1)
+  omitNextWinner = true
+  await engine.now()
+  check('a missing exact match leaves the write queued', engine.status().pending === 1)
+  await engine.now()
+  check('a successful exact lookup clears the rejected write', engine.status().pending === 0)
+  check('the winner replaces the rejected edit', lib().favorites()[0]?.title === 'Remote winner')
+
+  console.log('\ncorruption marker survives restart and rebuilds the library:')
+  lib().toggleFavorite(track('unsynced'))
+  engine.noteLocalChange()
+  const file = libraryPathFor('user-2')
+  engine.useAccount(null)
+  setActiveLibrary(null)
+  writeFileSync(file, '{corrupt')
+  setActiveLibrary('user-2')
+  check('failed parse creates a persistent recovery marker', lib().loadFailed && existsSync(recoveryMarkerFor(file)))
+  setActiveLibrary(null)
+  setActiveLibrary('user-2')
+  check('a new instance still knows the library needs recovery', lib().loadFailed)
+  engine.useAccount({ id: 'user-2' })
+  failNextPull = true
+  await engine.now()
+  check('an interrupted restore keeps the recovery marker and queue', lib().loadFailed && engine.status().pending === 1)
+  let downloadUpdates = 0
+  setRemoteLibrarySink(() => { downloadUpdates++ })
+  await engine.now()
+  setRemoteLibrarySink(null)
+  check('an incomplete library never reconciles local download ownership', downloadUpdates === 0)
+  check('the full pull restores previously synced tracks', lib().isFavorite('sync-c'))
+  check('the previous durable local edit is restored and pushed', lib().isFavorite('unsynced') &&
+    rows.get(rowKey('user-2', 'favorite', 'unsynced'))?.deleted === false)
+  check('recovery clears the marker only after the pull finishes', !lib().loadFailed && !existsSync(recoveryMarkerFor(file)))
+  await engine.now()
+  check('restored records are not tombstoned', rows.get(rowKey('user-2', 'favorite', 'sync-c'))?.deleted === false)
+
+  console.log('\nfull replay keeps playlist entries that arrive before their metadata:')
+  engine.useAccount(null)
+  activeUser = 'user-3'
+  setActiveLibrary(activeUser)
+  const stamp = Date.now()
+  addRemote({
+    kind: 'playlist_track', record_id: 'playlist-new:entry',
+    payload: { playlistId: 'playlist-new', track: track('entry'), position: 0 },
+    updated_at: stamp, device_id: 'remote', deleted: false
+  })
+  for (let index = 0; index < 499; index++) {
+    addRemote({
+      kind: 'setting', record_id: `other-setting-${index}`, payload: { value: false },
+      updated_at: stamp, device_id: 'remote', deleted: false
+    })
+  }
+  addRemote({
+    kind: 'playlist', record_id: 'playlist-new',
+    payload: { id: 'playlist-new', name: 'Restored list', createdAt: stamp, updatedAt: stamp },
+    updated_at: stamp, device_id: 'remote', deleted: false
+  })
+  engine.useAccount({ id: activeUser })
+  await engine.now()
+  check('an item on the first page survives until its playlist on the second page',
+    lib().playlist('playlist-new')?.tracks[0]?.id === 'entry')
+
+  console.log('\naccount preferences migrate with their own queued edits:')
+  engine.useAccount(null)
+  activeUser = 'user-4'
+  setActiveLibrary(activeUser)
+  setActiveSettings(activeUser)
+  engine.useAccount({ id: activeUser })
+  const setting = {
+    kind: 'setting' as const, recordId: 'repeat', payload: { value: 'one' },
+    updatedAt: Date.now(), deviceId: 'local', deleted: false
+  }
+  outboxStore().put(setting)
+  addRemote({
+    kind: 'setting', record_id: 'repeat', payload: { value: 'off' },
+    updated_at: setting.updatedAt - 100, device_id: 'remote', deleted: false
+  })
+  await engine.now()
+  await engine.now()
+  check('the newer queued preference survives both hydration and the next diff',
+    settings().get().repeat === 'one' &&
+    (rows.get(rowKey(activeUser, 'setting', 'repeat'))?.payload as { value?: string })?.value === 'one')
 } finally {
   unsubscribe()
   engine.dispose()

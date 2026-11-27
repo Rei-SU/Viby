@@ -96,13 +96,9 @@ export function signedInStatus(session: Session): AccountStatus {
   }
 }
 
-/** A deep link's meaningful parameters, from the query or the hash. */
+/** Only a PKCE code or a provider error can arrive through the desktop link. */
 export type AuthCallback = {
   code: string | null
-  tokenHash: string | null
-  accessToken: string | null
-  refreshToken: string | null
-  type: string | null
   error: string | null
 }
 
@@ -113,23 +109,15 @@ export function parseAuthCallback(raw: string): AuthCallback | null {
   } catch {
     return null
   }
-  if (url.protocol !== 'viby:') return null
-
-  const params = new URLSearchParams(url.search)
-  if (url.hash.length > 1) {
-    const hash = new URLSearchParams(url.hash.slice(1))
-    for (const [key, value] of hash) if (!params.has(key)) params.set(key, value)
-  }
-
+  if (
+    url.protocol !== 'viby:' || url.hostname !== 'auth' || url.pathname !== '/callback' ||
+    url.username || url.password || url.port || url.hash
+  ) return null
+  const params = url.searchParams
+  if (['token_hash', 'access_token', 'refresh_token'].some((key) => params.has(key))) return null
   const error = params.get('error_description') ?? params.get('error')
-  return {
-    code: params.get('code'),
-    tokenHash: params.get('token_hash'),
-    accessToken: params.get('access_token'),
-    refreshToken: params.get('refresh_token'),
-    type: params.get('type'),
-    error
-  }
+  const code = params.get('code')
+  return code || error ? { code, error } : null
 }
 
 type PendingFlow = 'signup' | 'magiclink' | 'recovery'
@@ -184,6 +172,7 @@ export class AuthManager {
   async init(): Promise<void> {
     if (this.started) return
     this.started = true
+    this.recovery = this.pendingStore().get().recovery === true
     const client = this.clientInstance()
 
     client.auth.onAuthStateChange((event, session) => {
@@ -193,6 +182,7 @@ export class AuthManager {
         return
       }
       if (session?.user) {
+        if (this.pendingStore().get().flow === 'recovery') this.recovery = true
         this.pendingStore().set({ email: '', recovery: this.recovery, flow: 'signup' })
         this.setStatus(
           this.recovery
@@ -436,43 +426,19 @@ export class AuthManager {
   async handleCallback(raw: string): Promise<void> {
     await app.whenReady()
     const parsed = parseAuthCallback(raw)
-    if (!parsed) return
-    if (parsed.error) throw new Error(publicError(parsed.error))
-
-    // The link says whether this sign-in is a reset; a reset requested in the
-    // app also leaves that intent in the pending record. Remember it before the
-    // auth client emits SIGNED_IN so that event cannot hide the recovery step.
     const pending = this.pendingStore().get()
-    if (parsed.type === 'recovery' || pending.flow === 'recovery') this.recovery = true
-
+    if (!parsed || !pending.email || this.state.state !== 'pending-verification') return
+    if (parsed.error) throw new Error(publicError(parsed.error))
+    if (!parsed.code) return
+    this.recovery = pending.flow === 'recovery'
     const client = this.clientInstance()
-
-    if (parsed.code) {
+    try {
       const { data, error } = await client.auth.exchangeCodeForSession(parsed.code)
       if (error) throw new Error(describeAuthError(error))
       if (data.session?.user) this.applyCallbackSession(data.session)
-      return
-    }
-
-    if (parsed.accessToken && parsed.refreshToken) {
-      const { data, error } = await client.auth.setSession({
-        access_token: parsed.accessToken,
-        refresh_token: parsed.refreshToken
-      })
-      if (error) throw new Error(describeAuthError(error))
-      if (data.session?.user) this.applyCallbackSession(data.session)
-      return
-    }
-
-    if (parsed.tokenHash && parsed.type) {
-      const type = parsed.type as 'magiclink' | 'recovery' | 'email' | 'signup' | 'invite'
-      const { data, error } = await client.auth.verifyOtp({
-        token_hash: parsed.tokenHash,
-        type
-      })
-      if (error) throw new Error(describeAuthError(error))
-      if (data.session?.user) this.applyCallbackSession(data.session)
-      return
+    } catch (error) {
+      this.recovery = false
+      throw error
     }
   }
 

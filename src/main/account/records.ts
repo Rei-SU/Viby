@@ -3,7 +3,7 @@ import type { HistoryEntry, Playlist, SavedAlbum, Settings, Track } from '@share
 import type { LibraryChange } from '@shared/ipc'
 import { JsonStore, userDataFile } from '../json-store'
 import { lib, type RemoteLibraryOps } from '../library'
-import { applyRemoteSettings, settings } from '../settings'
+import { accountSettingsNeedPull, applyRemoteSettings, settings, SYNCED_SETTINGS } from '../settings'
 import { deviceId } from './device'
 import { accountFile } from './library-root'
 import { keyParts, recordKey, type SyncKind } from './compare'
@@ -19,15 +19,7 @@ import type { OutboxRecord } from './outbox'
  */
 
 /** Only these settings travel. Volume, window and download preferences stay local. */
-export const SYNCED_SETTINGS = [
-  'audioQuality',
-  'shuffle',
-  'repeat',
-  'autoplay',
-  'discordPresence'
-] as const
-
-export type SyncedSettingKey = (typeof SYNCED_SETTINGS)[number]
+export { SYNCED_SETTINGS } from '../settings'
 
 export const HISTORY_LIMIT = 5000
 /** A tombstone keeps a deletion from being resurrected for this long. */
@@ -153,7 +145,7 @@ export class RecordTracker {
     }
     const data = this.store.get()
     if (data.userId === userId && data.records && typeof data.records === 'object') {
-      this.ignoreSettings = data.bootstrap === true
+      this.ignoreSettings = data.bootstrap === true || accountSettingsNeedPull()
       return []
     }
 
@@ -171,6 +163,7 @@ export class RecordTracker {
     const seeded: OutboxRecord[] = []
     if (!emptyAttach) {
       for (const [key, value] of local) {
+        if (value.kind === 'setting' && accountSettingsNeedPull()) continue
         records[key] = {
           updatedAt: stamp,
           deviceId: device,
@@ -180,8 +173,8 @@ export class RecordTracker {
         seeded.push({ ...value, updatedAt: stamp, deviceId: device, deleted: false })
       }
     }
-    this.ignoreSettings = emptyAttach
-    this.store.set({ userId, records, bootstrap: emptyAttach })
+    this.ignoreSettings = emptyAttach || accountSettingsNeedPull()
+    this.store.set({ userId, records, bootstrap: this.ignoreSettings })
     return seeded
   }
 
@@ -191,6 +184,16 @@ export class RecordTracker {
     this.ignoreSettings = false
     const data = this.store.get()
     if (data.userId && data.bootstrap) this.store.set({ ...data, bootstrap: false })
+  }
+
+  /** A full restore cannot infer deletes from entries missing on this device. */
+  finishLibraryRecovery(): void {
+    const data = this.store.get()
+    const local = readLocalRecords()
+    const records = Object.fromEntries(
+      Object.entries(data.records ?? {}).filter(([key, entry]) => entry.deleted || local.has(key))
+    )
+    this.store.set({ ...data, records })
   }
 
   stop(): void {
@@ -260,7 +263,7 @@ export class RecordTracker {
     }
 
     if (!allowDeletions) {
-      if (dirty) this.store.set({ userId: this.userId, records })
+      if (dirty) this.store.set({ userId: this.userId, records, bootstrap: this.ignoreSettings })
       return changed
     }
 
@@ -436,7 +439,7 @@ function notifySink(ops: RemoteLibraryOps): void {
  * agreed: a payload that failed validation, or a history play evicted by the
  * 5,000 cap, is not "agreed" and must not become a tombstone on the next diff.
  */
-export function applyRemoteRecordsTracked(records: OutboxRecord[]): {
+export function applyRemoteRecordsTracked(records: OutboxRecord[], syncDownloads = true): {
   applied: number
   accepted: OutboxRecord[]
 } {
@@ -546,15 +549,17 @@ export function applyRemoteRecordsTracked(records: OutboxRecord[]): {
   for (const entry of ops.playlistItems?.upsert ?? []) touchedPlaylists.add(entry.playlistId)
   for (const entry of ops.playlistItems?.remove ?? []) touchedPlaylists.add(entry.playlistId)
   const currentPlaylists = new Map(lib().playlists().map((playlist) => [playlist.id, playlist]))
-  notifySink({
-    favorites: ops.favorites,
-    playlists: {
-      upsert: [...touchedPlaylists]
-        .map((id) => currentPlaylists.get(id))
-        .filter((playlist): playlist is Playlist => Boolean(playlist)),
-      remove: ops.playlists?.remove ?? []
-    }
-  })
+  if (syncDownloads) {
+    notifySink({
+      favorites: ops.favorites,
+      playlists: {
+        upsert: [...touchedPlaylists]
+          .map((id) => currentPlaylists.get(id))
+          .filter((playlist): playlist is Playlist => Boolean(playlist)),
+        remove: ops.playlists?.remove ?? []
+      }
+    })
+  }
 
   // Settings pulled from another device must take effect here too: going
   // through `applyRemoteSettings` runs the same side effects (cache eviction,

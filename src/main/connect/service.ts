@@ -133,7 +133,10 @@ export class ConnectService {
   useAccount(userId: string | null): void {
     if (this.userId === userId) return
     this.teardown()
-    if (!userId) return
+    if (!userId) {
+      this.emit()
+      return
+    }
     this.userId = userId
     this.openChannel(userId)
   }
@@ -347,9 +350,7 @@ export class ConnectService {
       case 'command': {
         const command = asCommand(envelope.command, this.options.deviceId, this.now())
         if (!command) return
-        // A hand-off only makes sense if the sender is still online.
-        if (command.kind === 'transfer-in') this.listeners.command?.(command)
-        else this.listeners.command?.(command)
+        this.listeners.command?.(command)
         return
       }
     }

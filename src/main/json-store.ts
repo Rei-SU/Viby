@@ -19,6 +19,11 @@ export function recoveryMarkerFor(file: string): string {
   return `${file}.recovery-needed`
 }
 
+export function markRecoveryNeeded(file: string): void {
+  mkdirSync(join(file, '..'), { recursive: true })
+  writeFileSync(recoveryMarkerFor(file), JSON.stringify({ at: Date.now(), file }))
+}
+
 export class JsonStore<T extends object> {
   private data: T
   /** True when an existing file could not be parsed; the app is on defaults. */
@@ -48,11 +53,7 @@ export class JsonStore<T extends object> {
         // If even the rename fails, the recovery marker still blocks sweeps.
       }
       try {
-        mkdirSync(join(file, '..'), { recursive: true })
-        writeFileSync(
-          recoveryMarkerFor(file),
-          JSON.stringify({ at: Date.now(), file })
-        )
+        markRecoveryNeeded(file)
       } catch {
         // Best effort; the process-local flag still protects this run.
       }

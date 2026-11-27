@@ -41,7 +41,11 @@ class ConnectStore {
   private disposers: (() => void)[] = []
   private applying = 0
   private lastPlaying = false
-  private pending: { timer: ReturnType<typeof setTimeout> } | null = null
+  private pending: {
+    deviceId: string
+    requestId: string
+    timer: ReturnType<typeof setTimeout> | null
+  } | null = null
   /** Each device's clock and playback position, modelled from fresh samples. */
   private clocks = new DeviceClock()
 
@@ -234,7 +238,6 @@ class ConnectStore {
   private playRemote(session: ConnectSession): boolean {
     const target = this.remote
     if (!target) return false
-    if (player.playing) player.toggle()
     void this.send({ kind: 'transfer-in', target: target.id, session })
     return true
   }
@@ -245,19 +248,22 @@ class ConnectStore {
     if (!bridge || !this.available || this.busyId) return
     this.clearPending()
     this.busyId = device.id
-    this.pending = {
+    const pending = {
+      deviceId: device.id,
+      requestId: crypto.randomUUID(),
       timer: setTimeout(() => {
         this.pending = null
         this.busyId = ''
         toast.show(`${device.name} did not answer.`)
       }, TRANSFER_TIMEOUT_MS)
     }
+    this.pending = pending
     const result = await bridge.send({
-      kind: 'transfer-out',
+      kind: 'handoff-request',
       target: device.id,
-      to: this.selfId
+      requestId: pending.requestId
     })
-    if (!result.ok) {
+    if (!result.ok && this.pending === pending) {
       this.clearPending()
       toast.show(result.error)
     }
@@ -273,6 +279,11 @@ class ConnectStore {
     // rewind a playing device to its last sample.
     this.clocks.observe(this.devices)
     if (joined) this.publish()
+    if (!state.available && this.pending) this.clearPending()
+    // A snapshot is also confirmation that the target is playing. This
+    // covers a claim broadcast lost while either device was reconnecting.
+    const active = this.remote
+    if (active?.playing) this.handleClaim({ deviceId: active.id, at: active.claimAt })
     if (state.available && !this.pending) this.busyId = ''
   }
 
@@ -284,7 +295,7 @@ class ConnectStore {
   }
 
   private handleClaim(claim: ConnectClaim): void {
-    if (!player.playing || claim.deviceId === this.selfId) return
+    if (!player.playing || this.applying > 0 || claim.deviceId === this.selfId) return
     const newer =
       claim.at > this.claimAt || (claim.at === this.claimAt && claim.deviceId > this.selfId)
     if (!newer) return
@@ -321,35 +332,49 @@ class ConnectStore {
         // must not jump whatever is playing now.
         if (player.current?.id === command.trackId) player.seek(command.position)
         return
-      case 'transfer-out': {
+      case 'transfer-out':
+      case 'handoff-request': {
         const session = player.transferSession()
         if (!session) return
         // "Play here" is an intent to listen there, even if this device was
         // paused: hand over a playing session.
-        const result = await api.connect.send({
+        await this.send({
           kind: 'transfer-in',
           target: command.from,
-          session: { ...session, playing: true }
+          session: { ...session, playing: true },
+          ...(command.kind === 'handoff-request' ? { requestId: command.requestId } : {})
         })
-        // The session now belongs to the other device; stop here quietly.
-        if (result.ok) {
-          this.applyRemote(() => {
-            if (player.playing) player.toggle()
-          })
-        }
+        // Keep playing until the receiving device actually starts and claims.
         return
       }
       case 'transfer-in': {
-        this.clearPending()
+        const pending = this.pending
+        if (command.requestId) {
+          if (pending?.requestId !== command.requestId || pending.deviceId !== command.from || !pending.timer) return
+          clearTimeout(pending.timer)
+          pending.timer = null
+        }
         this.applying += 1
+        let playing = false
+        let current = false
         try {
-          await player.adoptRemote(command.session)
+          playing = await player.adoptRemote(command.session)
+          current = this.available && (!command.requestId || this.pending === pending)
         } finally {
           this.applying = Math.max(0, this.applying - 1)
+          if (command.requestId && this.pending === pending) this.clearPending()
         }
         // The adopted session is this device's now: announce it so any other
         // player pauses. A paused hand-off claims nothing.
-        if (player.playing) this.setClaim(Date.now())
+        if (playing && current) {
+          // A host clock can be behind the source's. A confirmed hand-off
+          // must claim after the source's most recent claim on either clock.
+          const source = this.devices.find((device) => device.id === command.from)
+          this.setClaim(Math.max(Date.now(), this.claimAt + 1, (source?.claimAt ?? 0) + 1))
+          this.lastPlaying = true
+        } else if (current && command.requestId) {
+          toast.show('Could not start playback here.')
+        }
         this.publish()
         return
       }
@@ -378,7 +403,7 @@ class ConnectStore {
   }
 
   private clearPending(): void {
-    if (this.pending) clearTimeout(this.pending.timer)
+    if (this.pending?.timer) clearTimeout(this.pending.timer)
     this.pending = null
     this.busyId = ''
   }

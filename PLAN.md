@@ -1265,3 +1265,27 @@ auth email rate limit is raised for it. The backend is encrypted at rest,
 **not** end-to-end encrypted: the server can read the mirror in order to merge
 devices, and no copy may claim otherwise. The manual checklist lives in
 `supabase/README.md` and `TESTING.md`.
+
+### Sync integrity and device handoff
+
+The write RPC holds a transaction lock for the account before allocating
+revisions. That makes a revision cursor safe across concurrent commits.
+Clients can read their own rows and send writes through the RPC. Each new
+client batch carries the expected account as a precondition, and rejected
+records stay queued until their exact server versions can be reconciled.
+
+The account root contains the library, synced settings, and pending writes.
+The desktop app adopts the legacy outbox in place when the account opens.
+A durable recovery marker blocks inferred deletions until a complete cloud
+pull restores a damaged library. The cursor format was advanced to replay
+records that older clients may have missed, and recovery keeps local
+downloads intact while the library is incomplete.
+
+Desktop auth links deliver a PKCE code for a locally initiated flow. The
+email code path remains available inside the app. The hosted Spotify
+resolver returns HTTP 410 because current builds import playlists locally.
+
+A device handoff uses a request ID to match the reply to the selected source.
+The source keeps playing until the destination starts playback and claims
+the session. The transport checks broadcast acknowledgement and a playing
+snapshot can confirm a claim after reconnect.

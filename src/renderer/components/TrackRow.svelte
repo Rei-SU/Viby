@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { CatalogItem } from '@shared/types'
-  import { onDestroy } from 'svelte'
   import { isPlayable, player, toTrack } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import { playlistPicker } from '../lib/playlist-picker.svelte'
@@ -102,22 +101,6 @@
         return 'Download'
     }
   })
-
-  let hoverTimer: ReturnType<typeof setTimeout> | null = null
-
-  function hoverStart(): void {
-    if (!canPlay) return
-    hoverTimer = setTimeout(() => player.prefetch(item.id), 80)
-  }
-
-  function hoverEnd(): void {
-    if (hoverTimer) {
-      clearTimeout(hoverTimer)
-      hoverTimer = null
-    }
-  }
-
-  onDestroy(hoverEnd)
 
   function activate(): void {
     if (canPlay) {
@@ -242,8 +225,6 @@
   draggable={canPlay}
   ondragstart={dragStart}
   ondragend={dragEnd}
-  onpointerenter={hoverStart}
-  onpointerleave={hoverEnd}
   use:contextItem={{
     item,
     context,

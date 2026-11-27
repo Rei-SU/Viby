@@ -251,7 +251,9 @@ Background caching is skipped without free disk space and ignored if the cache
 was cleared while it ran.
 
 The renderer resolves only when playback actually starts. Opening a 100-track
-album costs zero resolver calls; prefetch warms the next/hovered tracks.
+album costs zero resolver calls; prefetch warms the next track during playback.
+If YouTube reports a bot check or rate limit, the playback resolver skips fresh
+YouTube requests for one minute. Cached stream URLs and local files can still play.
 
 Artist **Play all** uses the same pipeline with a lazy queue tail: the popular
 songs start now, each release is browsed as the queue nears its end, and radio
@@ -2248,7 +2250,6 @@ The app-wide audio player: one element, queue, playback state and OS media integ
 | 459 | Player.next | method | Skips forward through `advance(1)`. |
 | 464 | Player.previous | method | Restarts after three seconds, otherwise skips back one track. |
 | 470 | Player.prefetch | method | Warms a track's stream URL through the prefetch channel. |
-| 477 | Player.prefetchList | method | Prefetches the first few playable items in a list. |
 | 481 | Player.toggle | method | Starts a restored track or toggles play/pause on the element. |
 | 507 | Player.resume | method | Resumes playback after an interruption, guarding against duplicate recovery. |
 | 526 | Player.seek | method | Seeks the element or records a pending resume position before load. |
@@ -2518,7 +2519,7 @@ Album, artist or playlist catalogue page with cached browse, shelves, an expanda
 | 220 | withDefaults | function | Clones a row, filling fallback artist, page release metadata and header artwork. |
 | 253 | albumSnapshot | function | Builds the SavedAlbum record (title, artist, art, year, track count) for saving. |
 | 268 | toggleAlbumSave | function | Saves or unsaves the album snapshot, swallowing local write errors. |
-| 308 | load | function | Browses a catalogue id, guards stale requests, caches the result and prefetches songs. |
+| 308 | load | function | Browses a catalogue id, guards stale requests and caches the result. |
 | 331 | retry | function | Re-runs the browse after a failure with a fresh request token. |
 | 414 | loadReleaseTracks | function | Browses one release for the artist queue tail through the shared detail cache. |
 | 424 | playAll | function | Plays an album/playlist list, or the full popular set plus a lazy discography tail on an artist page. |
@@ -2606,7 +2607,7 @@ Home shelves plus recent-listening dashboard and mood grid, backed by a shared s
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 42 | load | function | Fetches home shelves into the shared store and prefetches the first shelf. |
+| 42 | load | function | Fetches home shelves into the shared store. |
 | 64 | loadRecent | function | Throttled (10s) refresh of history and weekly summary feeding the dashboard card. |
 | 88 | play | function | Plays the item at its position within the filtered playable list. |
 | 94 | activate | function | Plays playable cards, otherwise navigates to the item's page. |
@@ -2877,8 +2878,6 @@ Dense track row with play, favourite, download, playlist, drag and remove action
 
 | Line | Symbol | Kind | Role |
 |---:|---|---|---|
-| 107 | hoverStart | function | Starts an 80ms timer that prefetches the row's stream. |
-| 112 | hoverEnd | function | Cancels the pending prefetch timer; also registered with `onDestroy`. |
 | 121 | activate | function | Plays the track within its context, or navigates when not blocked. |
 | 133 | dragGhost | function | Builds a compact cover-and-title drag image that removes itself after a tick. |
 | 178 | dragStart | function | Begins a queued drag with copy effect, payload data and drag image. |

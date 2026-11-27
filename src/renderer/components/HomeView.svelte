@@ -48,7 +48,6 @@
       const res = await api.catalog.home()
       if (res.ok) {
         page.shelves = res.data.filter((s) => s.items.length > 0)
-        player.prefetchList(page.shelves[0]?.items ?? [], 2)
       } else {
         page.error = res.error
         page.shelves = []
@@ -73,7 +72,6 @@
       // The track changed again while this request was in flight.
       if (request !== summaryRequest) return
       summary = weekly
-      player.prefetchList(recentItems, 2)
     } catch {
       // Listening context is a convenience; a failed read leaves the old list.
     }

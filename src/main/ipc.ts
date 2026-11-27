@@ -58,6 +58,7 @@ import { changelogInfo } from './changelog'
 import {
   qualityCapKbps,
   setSettings,
+  setActiveSettings,
   setSettingsEffect,
   settings,
   type SettingsEffect
@@ -103,7 +104,7 @@ let activeResolve: AbortController | null = null
  * user just emptied.
  */
 let cacheGeneration = 0
-/** All in-flight hover prefetches share one controller so a real click can cancel them. */
+/** One next-track warm-up at a time, cancellable when playback requests a track. */
 let prefetchAbort: AbortController | null = null
 
 let downloads: DownloadsStore | null = null
@@ -221,16 +222,17 @@ let importResolveController: AbortController | null = null
       status.state === 'signed-in' || status.state === 'recovery' ? status.userId : null
     // Each account owns its own library root; switching never mixes them.
     const switched = setActiveLibrary(userId)
+    const settingsSwitched = setActiveSettings(userId)
     broadcast(CH.accountChanged, status)
     sync.useAccount(status.state === 'signed-in' ? { id: status.userId } : null)
     devices.useAccount(status.state === 'signed-in' ? status.userId : null)
-    if (switched) {
+    if (switched || settingsSwitched) {
       broadcast(CH.libraryChanged, {
         favorites: true,
         albums: true,
         history: true,
         playlists: true,
-        settings: false
+        settings: settingsSwitched
       })
     }
   }
@@ -744,15 +746,12 @@ let importResolveController: AbortController | null = null
   })
 
   /**
-   * Hover prefetch: warm a track's stream URL while the pointer is on it, so the
-   * click itself has nothing left to wait for. Best-effort and bounded — never
-   * competes with real playback, and at most two warm-ups at a time.
+   * Warm the next track's URL while playback is active. Browsing and hovering
+   * do not use the resolver.
    */
-  const prefetching = new Set<string>()
   ipcMain.on(CH.playerPrefetch, (_e, input: unknown) => {
     const value = typeof input === 'string' ? input.trim() : ''
-    if (!value || activeResolve || networkMonitor.isOffline()) return
-    if (prefetching.has(value) || prefetching.size >= 2) return
+    if (!value || activeResolve || prefetchAbort || networkMonitor.isOffline()) return
     const directId = Resolver.extractId(value)
     if (directId) {
       const ids = aliasStore().related(directId)
@@ -762,14 +761,15 @@ let importResolveController: AbortController | null = null
     }
     if (resolver.hasCached(value, qualityCapKbps())) return
 
-    if (!prefetchAbort) prefetchAbort = new AbortController()
-    const controller = prefetchAbort
+    const controller = new AbortController()
+    prefetchAbort = controller
 
-    prefetching.add(value)
     void resolver
       .resolve(value, { signal: controller.signal, maxKbps: qualityCapKbps() })
       .catch(() => undefined)
-      .finally(() => prefetching.delete(value))
+      .finally(() => {
+        if (prefetchAbort === controller) prefetchAbort = null
+      })
   })
 
   // ---- catalog (PLAN §5.2, §5.3) ------------------------------------------

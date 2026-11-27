@@ -1,6 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { userDataFile } from '../json-store'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { recoveryMarkerFor, userDataFile } from '../json-store'
 
 /**
  * Local roots per account.
@@ -50,9 +50,14 @@ export function libraryPathFor(userId: string | null): string {
   return userId ? join(accountDir(userId), 'library.json') : userDataFile('library.json')
 }
 
+export function legacyOutboxFile(userId: string): string {
+  return userDataFile(`account-outbox-${userId.replace(/[^A-Za-z0-9-]/g, '_')}.json`)
+}
+
 /** Copy the legacy local library into the first account that signs in. */
 export function prepareAccountLibrary(userId: string): void {
   const target = libraryPathFor(userId)
+  if (existsSync(recoveryMarkerFor(target))) return
   if (existsSync(target)) {
     if (!readOwner()) writeOwner(userId)
     return
@@ -79,5 +84,22 @@ export function removeAccountData(userId: string): void {
     rmSync(accountDir(userId), { recursive: true, force: true })
   } catch {
     // Downloads and the signed-out library are separate and stay.
+  }
+  const legacy = legacyOutboxFile(userId)
+  const prefix = `${basename(legacy)}.corrupt-`
+  let quarantined: string[] = []
+  try {
+    quarantined = readdirSync(dirname(legacy))
+      .filter((file) => file.startsWith(prefix) && /^\d+$/.test(file.slice(prefix.length)))
+      .map((file) => join(dirname(legacy), file))
+  } catch {
+    // The exact legacy paths can still be removed.
+  }
+  for (const file of [legacy, `${legacy}.tmp`, recoveryMarkerFor(legacy), ...quarantined]) {
+    try {
+      rmSync(file, { force: true })
+    } catch {
+      // Try both paths even if one cannot be removed.
+    }
   }
 }

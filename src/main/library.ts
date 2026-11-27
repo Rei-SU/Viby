@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { JsonStore, userDataFile } from './json-store'
+import { existsSync, rmSync } from 'node:fs'
+import { JsonStore, markRecoveryNeeded, recoveryMarkerFor, userDataFile } from './json-store'
 import { libraryPathFor, prepareAccountLibrary } from './account/library-root'
 import type { HistoryEntry, Playlist, SavedAlbum, Track } from '@shared/types'
 
@@ -95,6 +96,8 @@ function isValidSavedAlbum(value: unknown): value is SavedAlbum {
  */
 export class Library {
   private store: JsonStore<LibraryData>
+  private readonly recoveryMarker: string
+  private recoveryNeeded: boolean
 
   constructor(file = userDataFile('library.json')) {
     this.store = new JsonStore<LibraryData>(file, {
@@ -103,13 +106,29 @@ export class Library {
       playlists: [],
       albums: []
     })
+    this.recoveryMarker = recoveryMarkerFor(file)
+    this.recoveryNeeded = this.store.loadFailed || existsSync(this.recoveryMarker)
     const data = this.store.get()
-    if (
+    const malformedCollections =
       !Array.isArray(data.favorites) ||
       !Array.isArray(data.history) ||
       !Array.isArray(data.playlists) ||
       !Array.isArray(data.albums)
+    if (
+      malformedCollections ||
+      data.favorites.some((item) => !isValidTrack(item)) ||
+      data.history.some((item) => !isValidHistoryEntry(item)) ||
+      data.playlists.some((item) => !isValidPlaylist(item) || item.tracks.some((track) => !isValidTrack(track))) ||
+      data.albums.some((item) => !isValidSavedAlbum(item))
     ) {
+      this.recoveryNeeded = true
+      try {
+        markRecoveryNeeded(file)
+      } catch {
+        // Keep sync recovery enabled for this run even if disk writes fail.
+      }
+    }
+    if (malformedCollections) {
       this.store.update((next) => {
         if (!Array.isArray(next.favorites)) next.favorites = []
         if (!Array.isArray(next.history)) next.history = []
@@ -120,12 +139,17 @@ export class Library {
   }
 
   /**
-   * True when library.json could not be parsed and this run is on empty
-   * defaults. Sync must never read that emptiness as "the user deleted
-   * everything"; the file is kept for recovery instead.
+   * Stays true across restarts until sync rebuilds the quarantined library.
+   * An incomplete library cannot be used to infer user deletions.
    */
   get loadFailed(): boolean {
-    return this.store.loadFailed
+    return this.recoveryNeeded
+  }
+
+  finishRecovery(): void {
+    this.store.flush()
+    rmSync(this.recoveryMarker, { force: true })
+    this.recoveryNeeded = false
   }
 
   favorites(): Track[] {

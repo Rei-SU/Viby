@@ -43,6 +43,7 @@ ones that touch main-process modules.
 | Suite | Covers |
 |---|---|
 | `resolver` | yt-dlp runner, client selection, parsing, URL cache, no-direct-URL fallback |
+| `resolver-cooldown` | bot checks and HTTP 429, cached playback during cooldown, blocked downloads and retry after expiry, using a fake runner |
 | `innertube` | parsing of a captured response, search filters, browse, YouTube's release labels |
 | `catalog` | live catalog: filters, ranking, artist shelves, radio, audio-first |
 | `thumbs` | thumbnail URLs across surfaces + CDN status |
@@ -87,8 +88,9 @@ ones that touch main-process modules.
 | `account-bootstrap` | empty-install attach: no default settings queued, server settings win, later local changes still sync |
 | `account-outbox` | per-account queues: replacement, in-flight edits kept, drain and scoping |
 | `account-records` | local↔record mapping (playlist metadata plus one record per entry), first-account adoption, diff and tombstones, payload validation, pull application |
-| `account-sync` | pull-before-push, batching, rev cursor, merges, tombstones, losing writes reported as conflicts, error recovery, account isolation (fake PostgREST) |
+| `account-sync` | pull-before-push, batching, revision cursor, tombstones, exact conflict lookups and recovery after corrupt local files (fake PostgREST) |
 | `account-tokens` | `safeStorage` encryption at rest, memory-only fallback, corrupt and foreign-keyring files |
+| `account-edge` | PKCE-only redirect page and retired Spotify endpoint (local handlers) |
 | `library-root` | per-account roots: first-account legacy copy, empty second root, sign-out returns to local |
 | `connect` | device channel: per-account lifecycle, presence merge, throttled publish, one claim per start, targeted/fresh command routing, payload validation (fake channel) |
 
@@ -154,7 +156,7 @@ the app while they run — they own the queue.
 | `changelog` | after an update the What's New sheet shows the running version's notes once, includes a version marked seen without a sheet, caps a multi-version jump at three with the earlier count, Escape/Close dismiss it, and Settings reopens it |
 | `shortcuts` | Space, transport/seek/volume keys, mute/shuffle/repeat/like, Escape, `/`, and text-field guards |
 | `playback` | start, seek a cached file, auto-advance, dock sync, quality tag |
-| `playback-failure` | media errors stop the fake Pause, retry a fresh source, and recover from a local download or show a visible error |
+| `playback-failure` | media errors stop the fake Pause, show the loading state, and recover from a download or show a visible error. The test profile needs an existing playable download |
 | `reconnect` | a dead source on resume shows the spinner and re-resolves |
 | `autoplay` | radio extension when the queue ends |
 | `links` | player-bar title → song page, artist link, related list, every credited artist linked in the dock |
@@ -244,6 +246,7 @@ Find the row for what you changed; run what it lists.
 | `src/shared/**`, `src/preload/**`, `src/renderer/lib/api.ts` | **everything** (contract) |
 | `electron.vite.config.ts`, `package.json`, `electron-builder.yml` | build + launch smoke test; e2e `images` |
 | `scripts/fetch-runtime.mjs`, `src/main/ytdlp/binary.ts` | unit `resolver` (asserts the vendored runtime) · packaged smoke test (below) |
+| `src/main/ytdlp/resolver.ts` | unit `resolver`, `resolver-cooldown` · e2e `playback`, `autoplay` · manual: browse and hover without issuing stream resolves, then play and check the next track |
 | `scripts/make-icons.py`, `resources/icon.*`, `src/main/menu.ts` | `npm run icons` · `npm run dist:dir` · check `CFBundleIconFile` and the packaged menu name |
 
 ## Windows notes
@@ -314,7 +317,7 @@ Find the row for what you changed; run what it lists.
    switch to code entry and send a fresh code, not show "Email not confirmed".
    Signing up again with that same address must say the account already exists
    instead of waiting on a code that never arrives.
-9. Sign in on two computers. Open Devices in the player bar on each: both must
+9. Sign in on two computers running the current build. Open Devices in the player bar on each: both must
    appear within ~10 s with the right name and platform. Play on A — B must
    pause (if it was playing) and A's row must show Playing with the track. B's
    player bar must switch to A's track, label it "Playing on <A>", tick the
@@ -326,6 +329,14 @@ Find the row for what you changed; run what it lists.
    playlist in B must play it on A while B stays a controller. Lyrics opened in
    B must show A's track and highlight in step with A; clicking a line must seek
    A to it.
-   Press "Play here" on A's row from B: A pauses, B adopts the queue, position,
-   shuffle and repeat and starts. Quit A: its row must disappear; quit B too and
+   Press "Play here" on A's row from B: B adopts the queue, position,
+   shuffle and repeat and starts, then A pauses. If B cannot start the track,
+   A keeps playing. Quit A: its row must disappear; quit B too and
    signing back in must show "No other devices are online."
+
+### PostgreSQL sync migration test
+
+Install `embedded-postgres` into an isolated scratch directory and pass that
+directory to `node tests/sync-postgres.mjs <directory>`. The test creates a
+temporary loopback database, applies the migrations and checks account RLS,
+client grants, the write RPC and concurrent commit ordering on PostgreSQL.

@@ -45,14 +45,8 @@ function page(): Response {
 <script>
   (function () {
     var params = new URLSearchParams(location.search);
-    if (!params.get('code') && location.hash.length > 1) {
-      var hash = new URLSearchParams(location.hash.slice(1));
-      hash.forEach(function (value, key) {
-        if (!params.has(key)) params.set(key, value);
-      });
-    }
     var target = new URL('viby://auth/callback');
-    ['code', 'token_hash', 'type', 'error', 'error_description', 'access_token', 'refresh_token', 'expires_in', 'token_type'].forEach(function (key) {
+    ['code', 'error', 'error_description'].forEach(function (key) {
       var value = params.get(key);
       if (value) target.searchParams.set(key, value);
     });
@@ -63,7 +57,7 @@ function page(): Response {
       copy.textContent = 'This link could not be used.';
       copy.className = 'error';
       detail.textContent = error;
-    } else if (!params.get('code') && !params.get('token_hash')) {
+    } else if (!params.get('code')) {
       copy.textContent = 'This link is missing its sign-in code. Request a new one from Viby.';
     }
     document.getElementById('open').href = target.toString();
