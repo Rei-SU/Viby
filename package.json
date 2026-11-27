@@ -1,9 +1,9 @@
 {
   "name": "viby",
   "version": "0.6.0",
-  "description": "Ad-free, account-free desktop music client",
+  "description": "Ad-free desktop music client with optional accounts",
   "main": "./out/main/index.js",
-  "author": "Viby",
+  "author": "Ondavi",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
@@ -15,9 +15,9 @@
     "icons": "node scripts/make-icons.mjs",
     "runtime": "node scripts/fetch-runtime.mjs",
     "runtime:mac": "node scripts/fetch-runtime.mjs --platform darwin --arch x64 && node scripts/fetch-runtime.mjs --platform darwin --arch arm64",
-    "dist:mac": "npm run build && npm run runtime:mac && electron-builder --mac",
+    "dist:mac": "npm run build && npm run runtime:mac && electron-builder --config electron-builder.mac.yml --mac",
     "dist:win": "npm run build && node scripts/fetch-runtime.mjs --platform win32 --arch x64 && electron-builder --win",
-    "dist:dir": "npm run build && npm run runtime && electron-builder --dir",
+    "dist:dir": "npm run build && npm run runtime && node scripts/package-directory.mjs",
     "measure": "node scripts/measure.mjs"
   },
   "dependencies": {

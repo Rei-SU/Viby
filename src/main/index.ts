@@ -20,15 +20,12 @@ if (!app.isPackaged && process.env.VIBY_DEBUG_PORT) {
   app.commandLine.appendSwitch('remote-debugging-port', process.env.VIBY_DEBUG_PORT)
 }
 
-// Development runs as plain "Electron" and would otherwise label the menu and
-// Dock that way. Rename it Viby, but pin userData first: it is keyed to
-// app.getName(), and moving it would orphan settings, library and cache.
-// Packaged builds already carry Viby in the bundle (CFBundleName/DisplayName).
-if (!app.isPackaged) {
-  const userData = app.getPath('userData')
-  app.setName('Viby')
-  app.setPath('userData', userData)
-}
+// Electron starts with the existing package name and profile directory. Pin
+// that path before setting the display name so libraries, downloads and the
+// encrypted session continue to open from the same place after an upgrade.
+const userData = app.getPath('userData')
+app.setPath('userData', userData)
+app.setName('Ondavi')
 
 // Windows binds an SMTC media session to a taskbar button by Application User
 // Model ID, and the id it looks for is the one the installer puts on its
@@ -67,7 +64,7 @@ installDeepLinks(handleAuthCallback)
 process.on('uncaughtException', (error) => {
   console.error('[main] uncaught exception', error)
   try {
-    dialog.showErrorBox('Viby encountered an error', error.stack || error.message)
+    dialog.showErrorBox('Ondavi encountered an error', error.stack || error.message)
   } catch {
     // The app may not be ready enough to show a dialog.
   }
@@ -159,7 +156,7 @@ if (!gotLock) {
       const message = error instanceof Error ? error.stack || error.message : String(error)
       console.error('[startup] failed', message)
       dialog.showErrorBox(
-        'Viby could not start',
+        'Ondavi could not start',
         'A local data file could not be read. Details:\n\n' + message.slice(0, 1500)
       )
       app.quit()

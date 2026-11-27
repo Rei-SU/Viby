@@ -80,7 +80,7 @@ jobs:
             done
             gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file release-notes.md
           else
-            gh release create "$TAG" --draft --verify-tag --title "Viby $VERSION" --notes-file release-notes.md
+            gh release create "$TAG" --draft --verify-tag --title "Ondavi $VERSION" --notes-file release-notes.md
           fi
 
   macos:
@@ -129,6 +129,9 @@ jobs:
         run: |
           for app in dist/mac/Viby.app dist/mac-arm64/Viby.app; do
             codesign --verify --strict --verbose=2 "$app"
+            plist="$app/Contents/Info.plist"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$plist")" = Viby
+            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$plist")" = Ondavi
           done
 
       # artifactName templates cannot map arm64 -> arm or x64 -> intel, so the

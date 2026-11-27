@@ -127,6 +127,21 @@ hand-off still needs a newer published release to exercise. Windows 10 uses the
 same x64 build and is covered by the Windows 11 pass by maintainer decision.
 Re-run this after any updater change.
 
+### Ondavi upgrade smoke test
+
+Start with a Viby 0.6.0 profile on each platform. Save a favourite, a playlist,
+an offline download, and a preference. Sign in, restart, and confirm the
+session persists before upgrading.
+
+- On Windows, upgrade using the `Viby-windows-x64.exe` update. Confirm that the
+  existing install opens as Ondavi and its shortcuts launch the same install.
+- On macOS, open the matching DMG and replace the existing app in Applications.
+  The bundle filename stays `Viby.app`, and its display name is Ondavi. Open it
+  and confirm that the existing Keychain item can still unlock the session.
+- On both platforms, check that the new icon appears, the saved library and
+  preference survive, the offline download still plays, and an account email
+  link still opens the app. Verify the same branding on a clean install.
+
 ### E2E scenarios (app must be running)
 
 ```bash

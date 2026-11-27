@@ -1,0 +1,8 @@
+extends: ./electron-builder.yml
+
+# Keep the bundle filename for drag-to-replace upgrades and the native name for
+# Electron's macOS Safe Storage key and helper apps.
+productName: Viby
+mac:
+  extendInfo:
+    CFBundleDisplayName: Ondavi

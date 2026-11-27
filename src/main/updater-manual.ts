@@ -16,7 +16,7 @@ const STALL_TIMEOUT = 60_000
  * on every build (PLAN §2.1). So the honest flow is: download the correct DMG
  * ourselves, verify it, open it, and let the user make the one drag.
  *
- * Files written by Viby carry no quarantine flag, so the *updated* copy does
+ * Files written by Ondavi carry no quarantine flag, so the *updated* copy does
  * not go through Gatekeeper again — only the first install does.
  */
 export async function downloadMacInstaller(
@@ -31,7 +31,7 @@ export async function downloadMacInstaller(
   await mkdir(folder, { recursive: true })
   // Version the local filename so an interrupted attempt never deletes the
   // user's existing installer (or an unrelated file with the same name).
-  const file = join(folder, `Viby-${release.version}-${name}`)
+  const file = join(folder, `Ondavi-${release.version}-${name.replace(/^Viby-/, '')}`)
 
   // The signed manifest wins over the GitHub digest when both exist. If a
   // manifest is present but omits this asset, that is a hard failure; silently
@@ -52,9 +52,9 @@ export async function downloadMacInstaller(
   // Replacing a copy that lives on the mounted DMG (or in Downloads) is not an
   // update. Say what to do instead of letting the drag silently fail.
   if (!inApplications()) {
-    return 'Downloaded and opened. Move Viby into Applications first, then drag the new copy over it.'
+    return 'Downloaded and opened. Drag Ondavi into Applications and open it there.'
   }
-  return 'Downloaded and opened. Quit Viby, drag the new Viby into Applications, then reopen it.'
+  return 'Downloaded and opened. Quit Ondavi, drag the new copy into Applications, choose Replace, then reopen it.'
 }
 
 async function download(
@@ -117,7 +117,7 @@ async function download(
 
 function installerName(url: string): string {
   const candidate = url.split('/').pop() ?? ''
-  return candidate && candidate !== '.' && candidate !== '..' ? candidate : 'Viby.dmg'
+  return candidate && candidate !== '.' && candidate !== '..' ? candidate : 'Ondavi.dmg'
 }
 
 /** Dev builds and apps launched from a DMG run outside /Applications. */

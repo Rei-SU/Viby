@@ -1,6 +1,6 @@
 appId: com.viby.app
-productName: Viby
-copyright: Viby
+productName: Ondavi
+copyright: Ondavi
 
 directories:
   output: dist
@@ -8,7 +8,7 @@ directories:
 
 # Account links come back as viby://auth/callback; the OS routes them here.
 protocols:
-  - name: Viby
+  - name: Ondavi
     schemes:
       - viby
 
@@ -61,11 +61,12 @@ mac:
   gatekeeperAssess: false
 
 dmg:
+  title: Ondavi ${version}
   # No version in the filename: the release tag is the version, and the name
   # should tell a user which Mac they have, not which build they downloaded.
   # (arm64 -> arm, x64 -> intel happens in the release workflow, since
   # artifactName templates cannot map arches.)
-  artifactName: ${productName}-macos-${arch}.${ext}
+  artifactName: Viby-macos-${arch}.${ext}
   # No .dmg.blockmap and no latest-mac.yml: macOS in-place updates need signing
   # and a zip target, so until signing is available the release carries the two
   # installers only. Windows keeps its latest.yml — it updates unsigned.
@@ -73,13 +74,16 @@ dmg:
 
 win:
   icon: resources/icon.ico
+  # Keep the executable path used by existing shortcuts and login items.
+  executableName: Viby
   target:
     - target: nsis
       arch: [x64]
-  # User-facing filename: Viby-windows-x64.exe (see CIRULES §3.13).
-  artifactName: ${productName}-windows-${arch}.${ext}
+  # Already-installed versions look for this exact name in signed updates.
+  artifactName: Viby-windows-${arch}.${ext}
 
 nsis:
+  shortcutName: Ondavi
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
