@@ -529,8 +529,11 @@ extensions (`20261127093000_device_presence.sql`). Presence carries each
 device's snapshot (name, platform, track, playing, volume, `claimAt`); commands
 and instant state updates travel as broadcast envelopes, so the
 5-per-30-second Presence limit is never in the critical path. Presence is
-throttled to one call per 7 s plus a 25 s heartbeat, and viewers extrapolate
-the position from `updatedAt`. `service.ts` merges peers, validates every
+throttled to one call per 7 s plus a 30 s heartbeat and a hard cap of four
+calls per 30 s; viewers extrapolate the position from `updatedAt`. An errored
+or closed channel is recreated with backoff (2 s doubling to 30 s), and
+handlers from an older channel are ignored, so a refused join or a rate limit
+recovers without restarting the app. `service.ts` merges peers, validates every
 payload on the way in (`validate.ts`), and forwards commands addressed to this
 device; the renderer applies them to the player and publishes the result. A
 later `claimAt` pauses any other playing device, so one device is audible at a

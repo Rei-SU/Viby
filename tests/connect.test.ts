@@ -51,13 +51,15 @@ type Harness = {
   now: { value: number }
 }
 
-function harness(): Harness {
+function harness(presenceGapMs = 1_000): Harness & { created: () => number } {
   let handlers: ConnectChannelHandlers | null = null
   const tracked: ConnectDevice[] = []
   const sent: unknown[] = []
   let left = false
+  let created = 0
   const now = { value: 10_000 }
   const factory: ConnectChannelFactory = (_topic, _key, next) => {
+    created += 1
     handlers = next
     const channel: ConnectChannel = {
       track: async (payload) => {
@@ -78,8 +80,9 @@ function harness(): Harness {
     platform: 'macOS',
     createChannel: factory,
     now: () => now.value,
-    presenceGapMs: 1_000,
-    stateGapMs: 5
+    presenceGapMs,
+    stateGapMs: 5,
+    retryBaseMs: 50
   })
   const states: string[] = []
   service.onState((state) => states.push(JSON.stringify(state)))
@@ -93,6 +96,7 @@ function harness(): Harness {
     sent,
     states,
     left: () => left,
+    created: () => created,
     now
   }
 }
@@ -185,6 +189,31 @@ console.log('\ncommands and claims:')
   const offline = await h.service.send({ kind: 'play', target: OTHER })
   check('send fails while signed out', offline.ok === false)
   h.service.dispose()
+}
+
+console.log('\npresence limit and rejoin:')
+{
+  const h = harness(0)
+  h.service.useAccount('user-1')
+  h.handlers().onAvailable(true)
+  for (let i = 0; i < 6; i++) h.service.publish(snapshot({ position: i }))
+  check('presence stays within four calls per 30 s', h.tracked.length <= 4, String(h.tracked.length))
+  check('at least one presence call went out', h.tracked.length >= 1)
+  h.service.dispose()
+
+  const r = harness()
+  r.service.useAccount('user-1')
+  r.handlers().onAvailable(true)
+  r.handlers().onAvailable(false)
+  check('a lost channel keeps its single subscription', r.created() === 1)
+  await sleep(160)
+  check('the channel is recreated after the error', r.created() === 2, String(r.created()))
+  r.handlers().onAvailable(true)
+  check(
+    'a successful rejoin is available again',
+    JSON.parse(r.states.at(-1)!).available === true
+  )
+  r.service.dispose()
 }
 
 console.log('\nvalidation:')

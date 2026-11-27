@@ -44,6 +44,8 @@ export type ConnectServiceOptions = {
   presenceGapMs?: number
   /** Broadcast state coalescing window. */
   stateGapMs?: number
+  /** First rejoin delay; doubles up to 30 s. */
+  retryBaseMs?: number
 }
 
 type Listeners = {
@@ -72,6 +74,13 @@ export class ConnectService {
   private stateTimer: ReturnType<typeof setTimeout> | null = null
   /** Keeps presence fresh through idle periods and channel reconnects. */
   private heartbeat: ReturnType<typeof setInterval> | null = null
+  /** Rejoin attempts after an error or a closed channel. */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryAttempt = 0
+  /** Presence timestamps in the last 30 s; the server allows five per client. */
+  private presenceTimes: number[] = []
+  /** Handlers from an older channel must not touch the current one. */
+  private generation = 0
   private readonly listeners: Listeners = { state: null, command: null, claim: null }
 
   constructor(private readonly options: ConnectServiceOptions) {
@@ -108,25 +117,36 @@ export class ConnectService {
     this.teardown()
     if (!userId) return
     this.userId = userId
+    this.openChannel(userId)
+  }
+
+  private openChannel(userId: string): void {
     if (!this.options.createChannel) {
       this.emit()
       return
     }
+    const gen = ++this.generation
     try {
       const created = this.options.createChannel(
         `account:${userId}:devices`,
         this.options.deviceId,
         {
-          onDevices: (payloads) => this.mergePresence(payloads),
-          onMessage: (payload) => this.handleMessage(payload),
-          onAvailable: (available) => this.setAvailable(available)
+          onDevices: (payloads) => {
+            if (gen === this.generation) this.mergePresence(payloads)
+          },
+          onMessage: (payload) => {
+            if (gen === this.generation) this.handleMessage(payload)
+          },
+          onAvailable: (available) => {
+            if (gen === this.generation) this.setAvailable(available)
+          }
         }
       )
       if (typeof (created as Promise<ConnectChannel>).then === 'function') {
         void (created as Promise<ConnectChannel>)
           .then((channel) => {
             // The account may have changed while the token was being fetched.
-            if (this.userId !== userId || this.channel !== null) {
+            if (gen !== this.generation || this.userId !== userId) {
               void channel.leave().catch(() => {})
               return
             }
@@ -140,20 +160,41 @@ export class ConnectService {
             }
           })
           .catch(() => {
-            if (this.userId === userId) {
-              this.available = false
-              this.emit()
-            }
+            if (gen === this.generation && this.userId === userId) this.setAvailable(false)
           })
       } else {
         this.channel = created as ConnectChannel
       }
       this.emit()
     } catch {
-      this.channel = null
-      this.available = false
-      this.emit()
+      if (gen === this.generation) {
+        this.channel = null
+        this.setAvailable(false)
+      }
     }
+  }
+
+  /**
+   * An errored or closed channel is recreated with backoff. Without this a
+   * single refused join (rate limit, expired token, network blip) left the
+   * devices panel empty until the app restarted.
+   */
+  private scheduleRetry(): void {
+    if (this.retryTimer || !this.userId || !this.options.createChannel) return
+    const base = this.options.retryBaseMs ?? 2_000
+    const delay = Math.min(30_000, base * 2 ** this.retryAttempt)
+    this.retryAttempt += 1
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      const userId = this.userId
+      if (!userId) return
+      const old = this.channel
+      this.channel = null
+      this.generation += 1
+      if (old) void old.leave().catch(() => {})
+      this.openChannel(userId)
+    }, delay)
+    this.retryTimer.unref?.()
   }
 
   /** Mirror the local player. Cheap to call often; sends are throttled here. */
@@ -205,36 +246,50 @@ export class ConnectService {
   // ---- internals ---------------------------------------------------------
 
   private setAvailable(available: boolean): void {
-    if (this.available === available) return
+    if (this.available === available) {
+      // A failed first join reports "not available" without a transition; it
+      // still needs a retry, otherwise the panel stays empty until relaunch.
+      if (!available) this.scheduleRetry()
+      return
+    }
     this.available = available
     if (!available) this.peers.clear()
     this.emit()
     if (available) {
+      this.retryAttempt = 0
+      if (this.retryTimer) clearTimeout(this.retryTimer)
+      this.retryTimer = null
       // The join is fresh: publish the current snapshot without waiting for
       // the presence gap, then settle into the throttle.
       this.lastPresenceAt = 0
+      this.presenceTimes = []
       this.schedulePresence()
       this.scheduleState()
       if (!this.heartbeat) {
-        this.heartbeat = setInterval(() => this.presencePing(), 25_000)
+        this.heartbeat = setInterval(() => this.schedulePresence(), 30_000)
         this.heartbeat.unref?.()
       }
     } else {
       if (this.heartbeat) clearInterval(this.heartbeat)
       this.heartbeat = null
+      if (this.presenceTimer) clearTimeout(this.presenceTimer)
+      if (this.stateTimer) clearTimeout(this.stateTimer)
+      this.presenceTimer = null
+      this.stateTimer = null
+      this.scheduleRetry()
     }
   }
 
   /**
-   * A steady low-rate presence refresh. Peer views extrapolate the position, so
-   * this only corrects drift, repairs a presence lost to a reconnect, and keeps
-   * the device visible while it is idle.
+   * Milliseconds until another presence call is allowed. The server enforces
+   * five per client per 30 s; four leaves headroom for the join and a retry.
    */
-  private presencePing(): void {
-    if (!this.channel || !this.available || !this.self) return
-    this.lastPresenceAt = this.now()
-    const self = this.self
-    void this.channel.track(self).catch(() => {})
+  private presenceGate(): number {
+    const now = this.now()
+    this.presenceTimes = this.presenceTimes.filter((at) => now - at < 30_000)
+    if (this.presenceTimes.length < 4) return 0
+    const oldest = this.presenceTimes[0] ?? now
+    return 30_000 - (now - oldest) + 100
   }
 
   private mergePresence(payloads: unknown[]): void {
@@ -287,23 +342,32 @@ export class ConnectService {
 
   private schedulePresence(): void {
     if (!this.channel || !this.available || !this.self) return
-    const wait = this.lastPresenceAt + this.presenceGapMs - this.now()
+    const now = this.now()
+    const wait = Math.max(this.lastPresenceAt + this.presenceGapMs - now, this.presenceGate())
     if (wait <= 0) {
       this.presenceTimer = null
-      this.lastPresenceAt = this.now()
-      const self = this.self
-      void this.channel.track(self).catch(() => {})
+      this.trackPresence()
       return
     }
     if (this.presenceTimer) return
     this.presenceTimer = setTimeout(() => {
       this.presenceTimer = null
-      if (!this.channel || !this.self) return
-      this.lastPresenceAt = this.now()
-      const self = this.self
-      void this.channel.track(self).catch(() => {})
+      this.trackPresence()
     }, wait)
     this.presenceTimer.unref?.()
+  }
+
+  private trackPresence(): void {
+    if (!this.channel || !this.available || !this.self) return
+    if (this.presenceGate() > 0) {
+      this.schedulePresence()
+      return
+    }
+    const now = this.now()
+    this.presenceTimes.push(now)
+    this.lastPresenceAt = now
+    const self = this.self
+    void this.channel.track(self).catch(() => {})
   }
 
   private emit(): void {
@@ -311,12 +375,17 @@ export class ConnectService {
   }
 
   private teardown(): void {
+    this.generation += 1
     if (this.presenceTimer) clearTimeout(this.presenceTimer)
     if (this.stateTimer) clearTimeout(this.stateTimer)
     if (this.heartbeat) clearInterval(this.heartbeat)
+    if (this.retryTimer) clearTimeout(this.retryTimer)
     this.presenceTimer = null
     this.stateTimer = null
     this.heartbeat = null
+    this.retryTimer = null
+    this.retryAttempt = 0
+    this.presenceTimes = []
     const channel = this.channel
     this.channel = null
     this.userId = null
