@@ -203,6 +203,31 @@ console.log('\nvalidation:')
   })())
   check('a session without tracks is rejected', asSession({ queue: [], track: null, index: 0, position: 0 }) === null)
   check('a device needs an id and a name', asDevice({ id: 'short', name: 'n' }) === null)
+  const seek = asCommand(
+    {
+      id: 'seek-1',
+      from: OTHER,
+      target: SELF,
+      issuedAt: 5,
+      kind: 'seek',
+      trackId: 'track-a',
+      position: -4
+    },
+    SELF,
+    10
+  )
+  check(
+    'a seek keeps its track and clamps to zero',
+    seek?.kind === 'seek' && seek.trackId === 'track-a' && seek.position === 0
+  )
+  check(
+    'a seek without a track is rejected',
+    asCommand(
+      { id: 'seek-2', from: OTHER, target: SELF, issuedAt: 5, kind: 'seek', position: 10 },
+      SELF,
+      10
+    ) === null
+  )
   check('a command from another sender is accepted only for this device', (() => {
     const command = asCommand(
       {

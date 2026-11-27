@@ -77,6 +77,7 @@ export type ConnectSession = {
 /** What a controller sends; main adds id, sender and timestamp. */
 export type ConnectCommandInput =
   | { kind: 'play' | 'pause' | 'next' | 'previous'; target: string }
+  | { kind: 'seek'; target: string; trackId: string; position: number }
   | { kind: 'volume'; target: string; volume: number }
   /** Ask `target` to hand its session to device `to`. */
   | { kind: 'transfer-out'; target: string; to: string }

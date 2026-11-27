@@ -182,6 +182,12 @@ export function asCommandInput(value: unknown): ConnectCommandInput | null {
       if (volume === undefined) return null
       return { kind: 'volume', target, volume: clamp01(volume) }
     }
+    case 'seek': {
+      const trackId = text(source.trackId, 64)
+      const position = finite(source.position)
+      if (!trackId || position === undefined) return null
+      return { kind: 'seek', target, trackId, position: Math.max(0, Math.min(position, 86_400)) }
+    }
     case 'transfer-out': {
       const to = text(source.to, 64)
       return to ? { kind: 'transfer-out', target, to } : null
