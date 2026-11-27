@@ -205,9 +205,10 @@
     if (main && scrollKey) scrollMemory.set(scrollKey, main.scrollTop)
   }
 
-  // Keep the panel in sync when the track changes while lyrics are open.
+  // Keep the panel in sync when the track changes while lyrics are open. While
+  // another device owns playback, the mirrored track is the current one.
   $effect(() => {
-    const track = player.current
+    const track = connect.activeTrack
     if (sidePanel.mode === 'lyrics' && track) void lyrics.load(track)
   })
 

@@ -323,7 +323,9 @@ Find the row for what you changed; run what it lists.
    two. Pressing Play in B's bar while A plays must pause A (not start B), and
    Space / ⌘-or-Ctrl+arrows in B must follow A as well. Dragging B's seek bar
    (or the plain arrow keys) must move A's playhead, and picking any song or
-   playlist in B must play it on A while B stays a controller.
+   playlist in B must play it on A while B stays a controller. Lyrics opened in
+   B must show A's track and highlight in step with A; clicking a line must seek
+   A to it.
    Press "Play here" on A's row from B: A pauses, B adopts the queue, position,
    shuffle and repeat and starts. Quit A: its row must disappear; quit B too and
    signing back in must show "No other devices are online."

@@ -2,6 +2,7 @@
   import { lyrics } from '../lib/lyrics.svelte'
   import { lineIndexAt } from '../lib/lyrics-sync'
   import { player } from '../lib/player.svelte'
+  import { connect } from '../lib/connect.svelte'
 
   let {
     showingLoading
@@ -32,6 +33,24 @@
       activeIndex = -1
       return
     }
+    // A controller window follows the mirrored device's clock, not its own
+    // paused <audio> element.
+    const remote = connect.remote
+    if (remote) {
+      if (!remote.playing) {
+        activeIndex = lineIndexAt(current, connect.devicePosition(remote) + LEAD_SECONDS)
+        return
+      }
+      let frame = 0
+      const tick = (): void => {
+        const next = lineIndexAt(current, connect.devicePosition(remote) + LEAD_SECONDS)
+        if (next !== activeIndex) activeIndex = next
+        frame = requestAnimationFrame(tick)
+      }
+      tick()
+      return () => cancelAnimationFrame(frame)
+    }
+
     if (!player.playing) {
       activeIndex = lineIndexAt(current, player.position + LEAD_SECONDS)
       return
@@ -80,7 +99,10 @@
 
   function seek(index: number): void {
     const line = lines[index]
-    if (line) player.seek(line.time)
+    if (!line) return
+    const remote = connect.remote
+    if (remote?.track) void connect.remoteSeek(remote, remote.track.id, line.time)
+    else player.seek(line.time)
   }
 </script>
 
