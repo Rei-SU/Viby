@@ -1,17 +1,17 @@
-# Supabase backend for Viby accounts
+# Supabase backend for Ondavi accounts
 
 This directory contains the database migrations, local CLI configuration, and
 Edge Functions for the optional account and sync feature. The hardened sync
 RPC, the PKCE-only auth landing page, and the retired Spotify endpoint were
 deployed to project `pnemhyszhbgmhnaudpze` on 2026-11-27. The Send Email
 hook, its secret and the Resend key are configured, and `ondavi.space` is
-verified in Resend (`send-email` v6 sends as `Viby <welcome@ondavi.space>`).
+verified in Resend (`send-email` v6 sends as `Ondavi <welcome@ondavi.space>`).
 The auth email rate limit is raised for the hook. The remaining manual step —
 redirect URLs for Supabase-generated links — is section 4 below.
 
 **Security model.** Records are encrypted at rest by Supabase, and that is all.
 The backend can read a user's library. There is no end-to-end encryption in
-Viby, and no document, comment or UI copy should say there is.
+Ondavi, and no document, comment or UI copy should say there is.
 
 The JSON stores on the device remain authoritative; this backend is a mirror
 that lets a second device converge on the same data. With no account signed in,
@@ -74,7 +74,7 @@ Run these from the repository root. They are not automated and are not part of
 
 ### 1. Restore or create the project
 
-Restore the existing Viby Supabase project from its backup if one exists;
+Restore the existing Ondavi Supabase project from its backup if one exists;
 otherwise create a fresh project in the dashboard. Note the project ref (the
 subdomain in `https://<ref>.supabase.co`). Keep the database password in a
 password manager — it is not needed by the app.
@@ -144,12 +144,12 @@ email cap does not apply).
 the authentication). Finish the wiring in the dashboard:
 
 1. Create a Resend account and API key. `ondavi.space` is verified in Resend
-   (2026-11-26) and the function sends as `Viby <welcome@ondavi.space>` by
+   (2026-11-26) and the function sends as `Ondavi <welcome@ondavi.space>` by
    default; set `RESEND_FROM` only to override it. `onboarding@resend.dev`
    reaches the Resend account's own mailbox only, so it is not usable for real
    users.
 2. Project Settings → Edge Functions → Secrets: add `RESEND_API_KEY` and,
-   optionally, `RESEND_FROM` (for example `Viby <hello@yourdomain>`).
+   optionally, `RESEND_FROM` (for example `Ondavi <hello@yourdomain>`).
 3. Authentication → Hooks → **Send Email**: create the secret, set the URL to
    `https://pnemhyszhbgmhnaudpze.supabase.co/functions/v1/send-email`, paste the
    same secret into the function environment as `SEND_EMAIL_HOOK_SECRET`

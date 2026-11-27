@@ -124,8 +124,8 @@ Verified after the change: `npm run typecheck`, `node tests/unit.mjs`, `node tes
 1. **Display sleep is 2 minutes on this machine.** A sleeping or occluded display makes macOS throttle the renderer and purge its surfaces. Numbers become too low (playing CPU below the 5.2% floor) and RSS can shrink mid-soak. `measure.mjs` now handles this; any new harness must too.
 2. **The app must be frontmost.** `activate()` uses `tell application id "com.viby.app" to activate`. Terminal or another app stealing focus invalidates a sample.
 3. **The first launch after a fresh unsigned build is slow.** ~4 s once; warm launches are 0.5–0.7 s to page. Do not treat that as a regression.
-4. **Dev and packaged apps share userData** (`~/Library/Application Support/viby`). E2E runs can leave history entries and settings behind. The harness forgets synthetic titles, but scenarios using real tracks (`lyrics-change`) do not. If an auto-advance e2e fails, check `player.repeat` first: profiling can leave it on `one`.
-5. **CDP port 9222 must be free.** Kill stale `Viby`/`Electron` processes before launching the packaged app or the dev server.
+4. **Dev and packaged apps share userData** (`~/Library/Application Support/viby`), retained from the Viby name for migration compatibility. E2E runs can leave history entries and settings behind. The harness forgets synthetic titles, but scenarios using real tracks (`lyrics-change`) do not. If an auto-advance e2e fails, check `player.repeat` first: profiling can leave it on `one`.
+5. **CDP port 9222 must be free.** Kill stale `Viby`/`Ondavi`/`Electron` processes before launching the packaged app or the dev server.
 6. **The measure script plays the first Home card.** If Home is empty or the first card is not playable, it throws. A more robust version would search for a known track or pick from Quick picks.
 7. **Do not push.** The user has not asked for a push. Windows 10 is closed by decision (covered by the Windows 11 x64 pass). macOS signing/notarization is deferred indefinitely.
 

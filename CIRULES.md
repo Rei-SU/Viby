@@ -391,6 +391,8 @@ has.
 
 ### 3.13 Artifact names
 
+The app now displays as Ondavi. The current release still uses Viby names for installer assets, the macOS bundle, the Windows executable, URL scheme and user-data paths. These are retained for existing installs and session migration. Rename them only with an explicit compatibility plan.
+
 Filenames are user-facing text. They answer "which file do I need?" — not
 "which build is this?". The version lives in the tag, the release title and
 `package.json`; repeating it in the filename adds noise, ages badly in links,

@@ -1,10 +1,10 @@
-# Viby — Architecture
+# Ondavi — Architecture
 
 Status: current as of **main after 0.5.7** (2026-11-25). This document describes how
 the code is organized and how data moves. Product decisions, history and performance
 measurements live in [PLAN.md](PLAN.md); this is the map for finding and changing code.
 
-Suggested reading order: [README.md](README.md) (what Viby is) → this file (how it
+Suggested reading order: [README.md](README.md) (what Ondavi is) → this file (how it
 fits together, including the full function/symbol map) → [PLAN.md](PLAN.md) (why
 decisions were made) →
 [TESTING.md](TESTING.md) (what to run) → [CIRULES.md](CIRULES.md) (commit/release
@@ -30,7 +30,7 @@ rules).
 
 ## 1. At a glance
 
-Viby is an Electron desktop music player:
+Ondavi is an Electron desktop music player:
 
 - **Catalog:** YouTube Music through InnerTube (metadata, search, browse, home).
 - **Playback:** `yt-dlp` resolves direct audio URLs; a bounded local cache and
@@ -101,7 +101,7 @@ contract is [`src/shared/ipc.ts`](src/shared/ipc.ts).
 ### Preload
 
 `src/preload/index.ts` exposes exactly one object, `window.viby`, typed as
-`VibyApi` from `src/shared/ipc.ts`. It contains no business logic and no Node
+`VibyApi` from `src/shared/ipc.ts`. These legacy identifiers remain stable across the Ondavi rebrand. It contains no business logic and no Node
 globals. Adding a capability means updating the shared interface, the preload
 bridge, and a main handler together.
 
@@ -435,7 +435,7 @@ Zero-dependency local IPC client:
 | `frame.ts` | 8-byte little-endian header + JSON frames |
 | `paths.ts` | `discord-ipc-0..9` discovery on Windows/macOS |
 | `client.ts` | handshake, READY, ping/pong, pending request matching |
-| `activity.ts` | activity payload: Listening type, title/artist, links, artwork, vinyl badge, **Get Viby** button |
+| `activity.ts` | activity payload: Listening type, title/artist, links, artwork, vinyl badge, **Get Ondavi** button |
 | `rate-limit.ts` | 5 updates / 20s; sends inside the cap are immediate |
 | `presence.ts` | connection lifecycle, 250ms coalescing, reconnect backoff, pause/stop clear |
 | `index.ts` | public app ID, dev-only socket/badge overrides |
@@ -1799,7 +1799,7 @@ macOS manual update path: downloads and verifies the DMG, opens it, and returns 
 | 60 | download | function | Streams the installer to disk with stall/abort handling, hashing and progress. |
 | 68 | forwardAbort | arrow | Aborts the internal controller when the caller signal fires. |
 | 72 | arm | arrow | Resets the 60s stall timer on each received chunk. |
-| 118 | installerName | function | Takes the last URL segment as the filename, defaulting to `Viby.dmg`. |
+| 118 | installerName | function | Takes the last URL segment as the filename, defaulting to `Ondavi.dmg`. |
 | 124 | inApplications | function | Reports whether the running app lives in /Applications. |
 
 #### src/main/version.ts
@@ -2419,7 +2419,7 @@ Publishes the song currently being dragged so drop targets can identify it.
 | 18 | TrackDragState.active | method | True while a drag is in flight. |
 | 22 | TrackDragState.begin | method | Records the dragged item and its source row. |
 | 27 | TrackDragState.end | method | Clears the dragged item and source. |
-| 36 | isTrackDrag | function | True when a drag event carries the custom Viby track type. |
+| 36 | isTrackDrag | function | True when a drag event carries the custom Ondavi track type. |
 
 #### src/renderer/lib/track.ts
 Track/catalog-item conversions and IPC-safe plain copies.
@@ -3135,7 +3135,7 @@ Measures startup time, RSS and CPU of the packaged macOS app over CDP.
 | 183 | connect.evaluate | arrow | Sends a CDP evaluation request and resolves with its returned value. |
 | 201 | launch | function | Launches the app with a debug port and waits for the CDP page, shell and home cards. |
 | 242 | quit | function | Sends SIGTERM and waits for exit, with a timeout fallback. |
-| 252 | activate | function | Brings Viby to the front via osascript so macOS does not throttle it. |
+| 252 | activate | function | Brings Ondavi to the front via osascript so macOS does not throttle it. |
 | 262 | bundleReport | function | Reports raw and gzip sizes for the built renderer JS and CSS assets. |
 
 #### scripts/update-manifest.mjs

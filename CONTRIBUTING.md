@@ -1,6 +1,6 @@
-# Contributing to Viby
+# Contributing to Ondavi
 
-Thanks for taking the time to make Viby better.
+Thanks for taking the time to make Ondavi better.
 
 Commit messages, versioning, release and CI rules live in
 [CIRULES.md](CIRULES.md). Read it before your first commit; deviations need a
@@ -48,7 +48,7 @@ publishes everything to a GitHub Release for that tag via
    git push origin main vX.Y.Z
    ```
 
-The notes are for people using Viby: what they can do now, what changed, or
+The notes are for people using Ondavi: what they can do now, what changed, or
 what stopped going wrong. Do not mention internal components, hashes, build
 steps or logs; keep it to what a user would notice. The workflow runs
 `scripts/check-release-notes.mjs` before creating the draft and rejects

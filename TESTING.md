@@ -105,9 +105,9 @@ running per-user install on a real machine.
 3. Bump `package.json`, tag and push a newer `v*` release; wait for it to go
    live.
 4. In the installed build: check → **Download**. The progress bar must advance
-   and reach 100%, then Viby must quit, install and relaunch by itself — no
+   and reach 100%, then Ondavi must quit, install and relaunch by itself — no
    second click and no installer wizard.
-5. Confirm Viby reopens on the new version (`Settings → Updates` shows the new
+5. Confirm Ondavi reopens on the new version (`Settings → Updates` shows the new
    current version) and that the What's New sheet names it with its notes. If
    the previous version's sheet never appeared, that version's notes must be in
    the sheet too. Closing it must record the version, so a restart does not
@@ -127,7 +127,7 @@ hand-off still needs a newer published release to exercise. Windows 10 uses the
 same x64 build and is covered by the Windows 11 pass by maintainer decision.
 Re-run this after any updater change.
 
-### Ondavi upgrade smoke test
+### Viby-to-Ondavi upgrade smoke test
 
 Start with a Viby 0.6.0 profile on each platform. Save a favourite, a playlist,
 an offline download, and a preference. Sign in, restart, and confirm the
@@ -136,7 +136,7 @@ session persists before upgrading.
 - On Windows, upgrade using the `Viby-windows-x64.exe` update. Confirm that the
   existing install opens as Ondavi and its shortcuts launch the same install.
 - On macOS, open the matching DMG and replace the existing app in Applications.
-  The bundle filename stays `Viby.app`, and its display name is Ondavi. Open it
+  The bundle filename stays `Viby.app` for the existing install and Keychain identity, and its display name is Ondavi. Open it
   and confirm that the existing Keychain item can still unlock the session on
   the first launch after replacement. Quit and reopen Ondavi to check again.
 - On both platforms, check that the new icon appears, the saved library and
@@ -257,7 +257,7 @@ Find the row for what you changed; run what it lists.
 | `src/renderer/components/TrackView.svelte` | e2e `links` |
 | `src/renderer/components/Icon.svelte`, `Cover.svelte` | e2e `images` · visual check |
 | `src/renderer/App.svelte`, `main.ts` | all e2e (layout, routes, panels) |
-| `src/main/discord/**`, `App.svelte` presence effect | unit `discord` · manual Discord check (Listening label, album art, Get Viby button, pause clears, switching tracks never blanks the card) |
+| `src/main/discord/**`, `App.svelte` presence effect | unit `discord` · manual Discord check (Listening label, album art, Get Ondavi button, pause clears, switching tracks never blanks the card) |
 | `src/renderer/styles/global.css` | visual check · e2e `images` as a sanity pass |
 | `src/shared/**`, `src/preload/**`, `src/renderer/lib/api.ts` | **everything** (contract) |
 | `electron.vite.config.ts`, `package.json`, `electron-builder.yml` | build + launch smoke test; e2e `images` |
@@ -288,7 +288,7 @@ Find the row for what you changed; run what it lists.
   it and keep audio going; the tray/menu **Quit** must exit for real. Needs a
   packaged or dev window and a human.
 - **Memory/CPU budget** — `npm run measure` against the packaged app (run `npm run dist:dir` first). It samples RSS/CPU per process across idle, playback, lyrics and a 2-minute soak.
-- **Login-item registration and a minimized login launch** — need a packaged build. Check Login Items (macOS) or Startup apps (Windows), sign out/in, and confirm Viby starts (minimized when that toggle is on). Dev runs never touch the OS login items.
+- **Login-item registration and a minimized login launch** — need a packaged build. Check Login Items (macOS) or Startup apps (Windows), sign out/in, and confirm Ondavi starts (minimized when that toggle is on). Dev runs never touch the OS login items.
 - **Packaging** — run `npm run dist:dir`, launch the app in `dist/mac/`, play a
   track, and confirm `ps` shows `Viby.app/Contents/Resources/python/bin/python3`
   running `yt-dlp-src/__main__.py`. That is the "no system Python" proof.
