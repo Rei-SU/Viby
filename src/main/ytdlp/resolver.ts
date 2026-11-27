@@ -44,7 +44,7 @@ export class Resolver {
 
   private checkCooldown(url: string): void {
     if (Date.now() < this.youtubeRetryAt && isYouTubeUrl(url)) {
-      throw new ResolveError('rate-limited', 'Viby is waiting to retry YouTube. Try again in a minute.')
+      throw new ResolveError('rate-limited', 'Ondavi is waiting to retry YouTube. Try again in a minute.')
     }
   }
 

@@ -88,7 +88,7 @@ export async function run(app, check) {
   try {
     const shown = await show(app, previous, previous)
     check('the sheet opens after an update', shown.open === true, JSON.stringify(shown))
-    check('it names the new version', shown.title === `Viby ${current}`, shown.title)
+    check('it names the new version', shown.title === `Ondavi ${current}`, shown.title)
     check(
       'it shows when the version was released',
       /^Released \S/.test(shown.released ?? ''),
@@ -139,7 +139,7 @@ export async function run(app, check) {
     )
     check(
       'the catch-up sheet starts with the running version',
-      catchUp.title === `Viby ${current}` && catchUp.older[0] === `Viby ${previous}`,
+      catchUp.title === `Ondavi ${current}` && catchUp.older[0] === `Ondavi ${previous}`,
       `${catchUp.title} / ${catchUp.older.join(', ')}`
     )
     await close(app)
@@ -149,7 +149,7 @@ export async function run(app, check) {
     const unshown = await show(app, current, '')
     check(
       'the running version is shown once if no sheet was ever painted',
-      unshown.open === true && unshown.releases === 1 && unshown.title === `Viby ${current}`,
+      unshown.open === true && unshown.releases === 1 && unshown.title === `Ondavi ${current}`,
       JSON.stringify({ open: unshown.open, releases: unshown.releases, title: unshown.title })
     )
     await close(app)
@@ -189,7 +189,7 @@ export async function run(app, check) {
     check('Settings offers the running version notes', reopened.found === true)
     check(
       'Settings reopens the same sheet',
-      reopened.open === true && reopened.title === `Viby ${current}`,
+      reopened.open === true && reopened.title === `Ondavi ${current}`,
       JSON.stringify(reopened)
     )
 

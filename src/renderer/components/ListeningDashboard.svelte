@@ -192,7 +192,7 @@
     {:else}
       <p class="empty artists-empty">
         {summary.plays > 0
-          ? 'Artist names will appear as Viby learns more from the catalogue.'
+          ? 'Artist names will appear as Ondavi learns more from the catalogue.'
           : 'Play something to start your weekly snapshot.'}
       </p>
     {/if}

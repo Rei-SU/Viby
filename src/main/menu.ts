@@ -52,14 +52,14 @@ export function installMenu(): void {
   }
 
   app.setAboutPanelOptions({
-    applicationName: 'Viby',
+    applicationName: 'Ondavi',
     applicationVersion: app.getVersion(),
-    copyright: 'Viby'
+    copyright: 'Ondavi'
   })
 
   const template: MenuItemConstructorOptions[] = [
     {
-      label: 'Viby',
+      label: 'Ondavi',
       submenu: [
         { role: 'about' },
         { type: 'separator' },

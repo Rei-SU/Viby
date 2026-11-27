@@ -330,7 +330,7 @@
           <Icon name="forward" size={16} />
         </button>
       </div>
-      <span class="brand">Viby</span>
+      <span class="brand">Ondavi</span>
     </div>
 
     <div class="search-slot">
@@ -625,11 +625,21 @@
     gap: 2px;
   }
 
+  @font-face {
+    font-family: 'BBH Bartle';
+    src: url('/fonts/bbh-bartle.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+  }
+
   .brand {
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--text);
+    font-family: 'BBH Bartle', sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0.26em;
+    color: transparent;
+    -webkit-text-stroke: 0.75px rgba(255, 255, 255, 0.78);
   }
 
   .net-wrap {

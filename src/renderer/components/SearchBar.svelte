@@ -581,7 +581,7 @@
             <div class="quick-empty">
               <span class="empty-icon"><Icon name="search" size={18} /></span>
               <span>
-                <strong>Search Viby</strong>
+                <strong>Search Ondavi</strong>
                 <small>Songs, artists and playlists — without leaving the page.</small>
               </span>
             </div>

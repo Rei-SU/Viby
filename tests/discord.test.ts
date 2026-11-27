@@ -85,7 +85,7 @@ console.log('\nactivity mapping:')
   const act = buildActivity(snap, 100_000)
   check('playing builds an activity', act !== null)
   if (act) {
-    check('name is Viby', act.name === 'Viby')
+    check('name is Ondavi', act.name === 'Ondavi')
     check('type is Listening', act.type === 2)
     check('details is the title', act.details === 'Instant Crush')
     check('details links the track', act.details_url === `https://music.youtube.com/watch?v=${track.id}`)
@@ -100,8 +100,8 @@ console.log('\nactivity mapping:')
     check('small image is the vinyl badge', act.assets?.small_image === DISCORD_BADGE_URL)
     check('small text is the quality', act.assets?.small_text === 'Playing · AAC 130k')
     check(
-      'one Get Viby button',
-      act.buttons?.length === 1 && act.buttons[0].label === 'Get Viby'
+      'one Get Ondavi button',
+      act.buttons?.length === 1 && act.buttons[0].label === 'Get Ondavi'
     )
   }
 
@@ -282,7 +282,7 @@ console.log('\nclient over a real socket:')
       ((handshake?.data as { client_id?: string })?.client_id) === '123'
     )
 
-    await client.setActivity({ name: 'Viby', type: 2, details: 'Song' })
+    await client.setActivity({ name: 'Ondavi', type: 2, details: 'Song' })
     const set = received.find((m) => m.cmd === 'SET_ACTIVITY')
     check('activity sent', set !== undefined)
     check('pid sent', ((set?.args as { pid?: number })?.pid) === 4242, JSON.stringify(set?.args))

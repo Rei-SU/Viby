@@ -71,7 +71,7 @@
     <header>
       <div class="heading">
         <p class="eyebrow">What's new</p>
-        <h2 id="changelog-title">Viby {primary.version}</h2>
+        <h2 id="changelog-title">Ondavi {primary.version}</h2>
         {#if primary.date}
           <p class="released">Released {formatDate(primary.date)}</p>
         {/if}
@@ -90,7 +90,7 @@
         <section class="release" class:older={index > 0}>
           {#if index > 0}
             <h3>
-              <a href={entry.url} target="_blank" rel="noreferrer">Viby {entry.version}</a>
+              <a href={entry.url} target="_blank" rel="noreferrer">Ondavi {entry.version}</a>
               {#if entry.date}<span>{formatDate(entry.date)}</span>{/if}
             </h3>
           {/if}

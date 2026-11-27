@@ -20,7 +20,7 @@ export type DiscordActivity = {
   buttons?: { label: string; url: string }[]
 }
 
-const ACTIVITY_NAME = 'Viby'
+const ACTIVITY_NAME = 'Ondavi'
 /** Discord's "Listening" activity type; Playing (0) is the fallback if clients ignore it. */
 const ACTIVITY_TYPE_LISTENING = 2
 /** Show `state` (the artist) in the member list instead of the activity name. */
@@ -28,7 +28,7 @@ const STATUS_DISPLAY_STATE = 1
 const TEXT_MAX = 128
 const IMAGE_URL_MAX = 313
 const LINK_MAX = 256
-const GET_VIBY_URL = 'https://github.com/Rei-SU/Viby/releases/latest'
+const DOWNLOAD_URL = 'https://github.com/Rei-SU/Viby/releases/latest'
 
 /**
  * Animated badges must be external URLs: Discord does not animate uploaded
@@ -141,6 +141,6 @@ export function buildActivity(
     status_display_type: STATUS_DISPLAY_STATE,
     timestamps,
     assets,
-    buttons: [{ label: 'Get Viby', url: GET_VIBY_URL }]
+    buttons: [{ label: 'Get Ondavi', url: DOWNLOAD_URL }]
   }
 }

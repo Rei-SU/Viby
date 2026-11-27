@@ -1515,7 +1515,7 @@ class Player {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
       artist: track.artist,
-      album: 'Viby',
+      album: 'Ondavi',
       artwork: thumbnail && !localArt ? [{ src: thumbnail, sizes: '512x512', type: 'image/jpeg' }] : []
     })
 
@@ -1525,7 +1525,7 @@ class Player {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: track.title,
         artist: track.artist,
-        album: 'Viby',
+        album: 'Ondavi',
         artwork: [{ src: art.src, sizes: '512x512', type: art.type }]
       })
     })

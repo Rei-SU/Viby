@@ -452,7 +452,7 @@
           <h2>Sync your library</h2>
           <p>
             Favourites, playlists, saved albums, history and a few settings, on every device you
-            sign in to. Optional — Viby works fully without an account.
+            sign in to. Optional — Ondavi works fully without an account.
           </p>
         </div>
 
@@ -490,7 +490,7 @@
         {/if}
 
         <p class="privacy">
-          While you are signed in, your library syncs through Viby's server, which stores it
+          While you are signed in, your library syncs through Ondavi's server, which stores it
           encrypted at rest and can read it to keep devices in step. Signed out, nothing is sent.
         </p>
       {:else if status.state === 'pending-verification'}

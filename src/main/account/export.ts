@@ -17,8 +17,8 @@ export async function exportAccount(status: AccountStatus): Promise<AccountExpor
   const exportedAt = Date.now()
   const stamp = new Date(exportedAt).toISOString().slice(0, 10)
   const options = {
-    title: 'Export Viby account',
-    defaultPath: join(app.getPath('downloads'), `viby-${stamp}.json`),
+    title: 'Export Ondavi account',
+    defaultPath: join(app.getPath('downloads'), `ondavi-${stamp}.json`),
     filters: [{ name: 'JSON', extensions: ['json'] }]
   }
 

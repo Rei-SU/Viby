@@ -260,7 +260,7 @@
       case 'ready':
         return { label: 'Restarting…', disabled: true, run: installUpdate }
       case 'manual':
-        return { label: 'Quit Viby', disabled: false, run: installUpdate }
+        return { label: 'Quit Ondavi', disabled: false, run: installUpdate }
       default:
         return { label: 'Check for updates', disabled: false, run: checkUpdates }
     }
@@ -273,23 +273,23 @@
   function updateHint(state: UpdateState): string {
     switch (state.phase) {
       case 'idle':
-        return `Viby ${state.currentVersion}. Checks GitHub when you ask — no account, no telemetry.`
+        return `Ondavi ${state.currentVersion}. Checks GitHub when you ask — no account, no telemetry.`
       case 'checking':
         return 'Checking GitHub…'
       case 'up-to-date':
         return state.message ?? `You're up to date (${state.currentVersion}).`
       case 'available':
         return state.canInstall
-          ? `Version ${state.version} is available. Downloading it restarts Viby to install it.`
-          : `Version ${state.version} is available. Viby downloads the installer for this Mac and opens it.`
+          ? `Version ${state.version} is available. Downloading it restarts Ondavi to install it.`
+          : `Version ${state.version} is available. Ondavi downloads the installer for this Mac and opens it.`
       case 'downloading':
         return `Downloading ${state.version ?? 'the update'}… ${Math.round((state.progress ?? 0) * 100)}%${
-          state.canInstall ? ' Viby restarts when it finishes.' : ''
+          state.canInstall ? ' Ondavi restarts when it finishes.' : ''
         }`
       case 'ready':
-        return `Version ${state.version} is ready. Restarting Viby to install it…`
+        return `Version ${state.version} is ready. Restarting Ondavi to install it…`
       case 'manual':
-        return state.message ?? 'Installer opened. Drag Viby into Applications, then reopen it.'
+        return state.message ?? 'Installer opened. Drag Ondavi into Applications, then reopen it.'
       case 'error':
         return state.message ?? 'Could not check for updates.'
     }
@@ -353,7 +353,7 @@
       <div class="label">
         <span>Keep playing when closed</span>
         <span class="hint">
-          Closing the window hides Viby in the {trayName} and keeps music playing. Quit from
+          Closing the window hides Ondavi in the {trayName} and keeps music playing. Quit from
           there to stop it.
         </span>
       </div>
@@ -372,7 +372,7 @@
     <div class="row">
       <div class="label">
         <span>Launch at login</span>
-        <span class="hint">Open Viby when you sign in to this computer.</span>
+        <span class="hint">Open Ondavi when you sign in to this computer.</span>
       </div>
       <button
         class="switch"
@@ -419,7 +419,7 @@
           {#if network.state.forcedOffline}
             On. Only downloads play, and browsing waits until you switch it off.
           {:else if network.state.status === 'online'}
-            Automatic. Viby follows your connection; downloads are always available.
+            Automatic. Ondavi follows your connection; downloads are always available.
           {:else}
             Automatic — {network.detail.toLowerCase()} Downloads still play.
           {/if}
@@ -446,7 +446,7 @@
         <span>Show what I'm listening to on Discord</span>
         <span class="hint">
           Uses the Discord desktop app. Friends see the song only if Discord's Activity Privacy is
-          on. Pausing or stopping clears it. Nothing else leaves Viby.
+          on. Pausing or stopping clears it. Nothing else leaves Ondavi.
         </span>
       </div>
       <button
@@ -471,7 +471,7 @@
           <span>{account.status.email}</span>
           <span class="hint">
             Favourites, playlists, saved albums, history and a few playback settings sync through
-            Viby's server, which stores them encrypted at rest.
+            Ondavi's server, which stores them encrypted at rest.
           </span>
         </div>
         <button class="ghost" onclick={() => account.show()}>Manage</button>
@@ -534,7 +534,7 @@
           <span>Sync across devices</span>
           <span class="hint">
             Optional. Sign in to keep favourites, playlists, saved albums, history and a few
-            playback settings in step. Viby's server stores them encrypted at rest.
+            playback settings in step. Ondavi's server stores them encrypted at rest.
           </span>
         </div>
         <button class="ghost" onclick={() => account.show()}>Set up</button>
@@ -561,9 +561,9 @@
       <div class="label">
         <span>
           {#if updates.pending && update?.version}
-            Viby {update.currentVersion} → {update.version}
+            Ondavi {update.currentVersion} → {update.version}
           {:else}
-            Viby {update?.currentVersion ?? ''}
+            Ondavi {update?.currentVersion ?? ''}
           {/if}
         </span>
         <span class="hint">
@@ -708,7 +708,7 @@
 
   <p class="about">
     <Icon name="disc" size={14} />
-    <span>Viby · no ads, no subscription, no sign-in required.</span>
+    <span>Ondavi · no ads, no subscription, no sign-in required.</span>
   </p>
 </div>
 

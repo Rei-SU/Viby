@@ -22,7 +22,7 @@ const STORAGE_KEY = 'viby-account'
 /**
  * Emails point at an HTTPS page, not the custom scheme: a server redirect to
  * `viby://` is suppressed by browsers (no user gesture), which left a blank
- * page. The page shows an Open Viby button and then hands over the same link.
+ * page. The page shows an Open button and then hands over the same link.
  */
 const CALLBACK_URL = `${SUPABASE_URL}/functions/v1/auth-open`
 
@@ -287,7 +287,7 @@ export class AuthManager {
     if (error) {
       const message = describeAuthError(error)
       if (/signups not allowed/i.test(publicError(error))) {
-        throw new Error('No Viby account uses that address yet. Create one first.')
+        throw new Error('No Ondavi account uses that address yet. Create one first.')
       }
       throw new Error(message)
     }

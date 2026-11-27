@@ -27,14 +27,14 @@ function createTray(): void {
     if (process.platform === 'darwin') image.setTemplateImage(true)
 
     tray = new Tray(image)
-    tray.setToolTip('Viby')
+    tray.setToolTip('Ondavi')
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: 'Open Viby', click: () => openWindow() },
+        { label: 'Open Ondavi', click: () => openWindow() },
         { label: 'Settings…', click: () => openWindow(true) },
         { type: 'separator' },
         {
-          label: 'Quit Viby',
+          label: 'Quit Ondavi',
           click: () => {
             markQuitting()
             app.quit()
