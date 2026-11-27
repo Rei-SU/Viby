@@ -8,8 +8,11 @@
   import { sidePanel } from '../lib/side-panel.svelte'
   import { isTrackDrag, trackDrag } from '../lib/track-drag.svelte'
   import { toast } from '../lib/toast.svelte'
+  import { account } from '../lib/account.svelte'
+  import { connect } from '../lib/connect.svelte'
   import Cover from './Cover.svelte'
   import Icon from './Icon.svelte'
+  import DevicesPanel from './DevicesPanel.svelte'
   import { codecLabel, qualityLabel } from '../lib/quality'
   import { formatDuration as fmt } from '../lib/format'
 
@@ -320,6 +323,19 @@
     >
       <Icon name="lyrics" size={16} />
     </button>
+    {#if account.signedIn}
+      <button
+        class="icon"
+        class:on={connect.open}
+        class:remote={!!connect.remotePlaying}
+        title={connect.remotePlaying ? `Playing on ${connect.remotePlaying.name}` : 'Devices'}
+        aria-label="Devices"
+        data-connect-toggle
+        onclick={() => connect.toggle()}
+      >
+        <Icon name="devices" size={16} />
+      </button>
+    {/if}
     <button
       class="icon"
       title={player.muted ? 'Unmute' : 'Mute'}
@@ -347,6 +363,9 @@
       />
       <span class="volume-hint" class:show={volumeHint} aria-hidden="true">{volumeLevel}%</span>
     </div>
+    {#if account.signedIn}
+      <DevicesPanel />
+    {/if}
   </div>
 </footer>
 
@@ -403,6 +422,7 @@
   }
 
   .icon {
+    position: relative;
     display: grid;
     place-items: center;
     width: 30px;
@@ -412,6 +432,17 @@
     transition:
       color var(--speed) var(--ease),
       background var(--speed) var(--ease);
+  }
+
+  .icon.remote::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
   }
 
   .icon:hover {
@@ -576,6 +607,7 @@
   }
 
   .right {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: flex-end;

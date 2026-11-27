@@ -16,6 +16,7 @@ import { createArtistQueue } from './artist-queue'
 import { queueWindow, restoreQueue } from './queue-session'
 import { artistPartsFor, creditParts } from '@shared/artist-credits'
 import { plainParts, plainTrack } from './track'
+import type { ConnectSession } from '@shared/connect'
 
 /**
  * The player owns exactly one <audio> element for the whole app (PLAN §6: one
@@ -676,6 +677,68 @@ class Player {
     this.stopTimer()
     api.player.setPlaying(false)
     this.persistSession(true)
+  }
+
+  /**
+   * What another device needs to continue this session: the loaded window of
+   * the queue (not an endless artist tail), the current index inside it, the
+   * position, and the modes. Plain objects only; it crosses IPC and the wire.
+   */
+  transferSession(): ConnectSession | null {
+    if (!this.current) return null
+    const window = queueWindow(this.queue, this.index)
+    const queue = window.queue.map(plainTrack)
+    const index =
+      queue.length === 0 ? 0 : Math.max(0, Math.min(this.index - window.queueStart, queue.length - 1))
+    return {
+      track: plainTrack(this.current),
+      queue,
+      index,
+      position: this.position,
+      playing: this.playing,
+      shuffle: this.shuffle,
+      repeat: this.repeat
+    }
+  }
+
+  /**
+   * Take over another device's session. Everything local is torn down first so
+   * the old stream, history row and queue tail cannot leak into the new one;
+   * the adopted track then goes through the ordinary resolve path, resuming at
+   * the transferred position.
+   */
+  async adoptRemote(session: ConnectSession): Promise<void> {
+    this.cancelQueueMore()
+    this.playToken += 1
+    api.player.cancel()
+    this.finalizePlay()
+    audio.pause()
+    audio.removeAttribute('src')
+    audio.load()
+
+    const queue = session.queue.length > 0 ? session.queue : session.track ? [session.track] : []
+    const index = queue.length === 0 ? -1 : Math.max(0, Math.min(session.index, queue.length - 1))
+    this.queue = queue
+    this.index = index
+    this.current = index >= 0 ? queue[index] : null
+    this.stream = null
+    this.busy = false
+    this.reconnecting = false
+    this.playing = false
+    this.loadedId = null
+    this.error = null
+    this.duration = this.current?.durationSec ?? 0
+    this.position = Math.max(0, Math.min(session.position, this.duration || session.position))
+    this.pendingResume = this.current ? { id: this.current.id, position: this.position } : null
+    this.shuffle = session.shuffle
+    this.repeat = session.repeat
+    void api.settings.set({ shuffle: this.shuffle, repeat: this.repeat })
+    this.stopTimer()
+    api.player.setPlaying(false)
+    this.syncMetadata()
+    this.persistSession(true)
+
+    if (this.current) await this.start(session.playing)
   }
 
   removeAt(i: number): void {

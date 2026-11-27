@@ -20,6 +20,7 @@
   import ChangelogDialog from './components/ChangelogDialog.svelte'
   import AccountSheet from './components/AccountSheet.svelte'
   import { account } from './lib/account.svelte'
+  import { connect } from './lib/connect.svelte'
   import { sidePanel } from './lib/side-panel.svelte'
   import { toast } from './lib/toast.svelte'
   import { changelog } from './lib/changelog.svelte'
@@ -235,7 +236,7 @@
     // gap. The previous track stays up until the new one actually plays (or a
     // genuine pause/failure sends the clear).
     if (busy) return
-    const key = `${track?.id ?? ''}|${playing}|${Math.round(duration)}|${quality ?? ''}`
+    const key = `${track?.id ?? ''}|${playing}|${Math.round(duration)}|${quality ?? ''}|${player.volume}|${player.muted}`
     const now = Date.now()
     const expected = playing ? lastSentPosition + (now - lastSentAt) / 1000 : lastSentPosition
     const jumped = Math.abs(position - expected) > 2
@@ -260,6 +261,9 @@
       quality: quality ?? undefined,
       updatedAt: Date.now()
     })
+    // Same state, second consumer: account devices. Signed out there is no
+    // channel, so nothing leaves the machine.
+    if (account.signedIn) connect.publish()
   })
 
   onMount(() => {
@@ -271,6 +275,7 @@
     // Optional and non-blocking: it subscribes and asks for the current state,
     // and a missing or slow account service changes nothing about startup.
     account.init()
+    connect.init()
     updates.init()
     void changelog.init()
     const offSettings = api.app.onOpenSettings(openSettings)

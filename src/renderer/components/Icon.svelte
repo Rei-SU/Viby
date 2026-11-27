@@ -32,6 +32,7 @@
     | 'queueAdd'
     | 'clock'
     | 'user'
+    | 'devices'
 
   let {
     name,
@@ -89,7 +90,11 @@
     bolt: { d: 'M13 2L5.5 13H11l-1 9 7.5-11H12l1-9z' },
     moon: { d: 'M20.5 14.8A8.5 8.5 0 119.2 3.5a6.6 6.6 0 0011.3 11.3z' },
     queueAdd: { d: 'M4 6h12M4 12h9M4 18h6M18 7v8M15 12l3 3 3-3' },
-    user: { d: 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0' }
+    user: { d: 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0' },
+    devices: {
+      d: 'M3 5h11v9H3zM3 18h7v1.5H3zM17 7h3a1.5 1.5 0 011.5 1.5v9A1.5 1.5 0 0120 19h-3a1.5 1.5 0 01-1.5-1.5v-9A1.5 1.5 0 0117 7zm1.5 9.6a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4z',
+      solid: true
+    }
   }
 
   const icon = $derived(ICONS[name])
