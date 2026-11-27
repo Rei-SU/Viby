@@ -6,6 +6,8 @@ import type {
   ConnectSession,
   ConnectState
 } from '@shared/connect'
+import type { Track } from '@shared/types'
+import { DeviceClock } from './device-clock'
 import { api } from './api'
 import { player } from './player.svelte'
 import { toast } from './toast.svelte'
@@ -40,6 +42,8 @@ class ConnectStore {
   private applying = 0
   private lastPlaying = false
   private pending: { timer: ReturnType<typeof setTimeout> } | null = null
+  /** Each device's clock and playback position, modelled from fresh samples. */
+  private clocks = new DeviceClock()
 
   constructor() {
     // Claims decide which device the bar mirrors; losing ours on restart would
@@ -67,6 +71,32 @@ class ConnectStore {
 
   get remotePlaying(): ConnectDevice | null {
     return this.others.find((device) => device.playing) ?? null
+  }
+
+  /** What every surface should show: the active device's track, else ours. */
+  get activeTrack(): Track | null {
+    const device = this.remote
+    return device ? this.trackOf(device) : player.current
+  }
+
+  /** A device's snapshot as the Track shape the rest of the app speaks. */
+  trackOf(device: ConnectDevice): Track | null {
+    const track = device.track
+    if (!track) return null
+    return {
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      artistId: track.artistId,
+      album: track.album,
+      durationSec: track.durationSec,
+      thumbnail: track.thumbnail
+    }
+  }
+
+  /** Where that device is right now, corrected for clock difference. */
+  devicePosition(device: ConnectDevice): number {
+    return this.clocks.position(device)
   }
 
   /**
@@ -143,7 +173,9 @@ class ConnectStore {
           }
         : null,
       playing,
-      position: player.position,
+      // The exact element clock, not the 1 Hz mirror, so a pause or seek hands
+      // the other device the position it actually stopped at.
+      position: player.clock,
       volume: player.volume,
       muted: player.muted,
       claimAt: this.claimAt,
@@ -185,9 +217,11 @@ class ConnectStore {
       toast.show(result.error)
       return
     }
+    // The jump belongs to that device's clock; stamping it with ours would
+    // corrupt the offset estimate until the next sample.
     this.devices = this.devices.map((entry) =>
       entry.id === device.id
-        ? { ...entry, position, updatedAt: Date.now() }
+        ? { ...entry, position, updatedAt: this.clocks.stamp(device.id) }
         : entry
     )
   }
@@ -235,6 +269,9 @@ class ConnectStore {
     this.selfId = state.selfId
     this.name = state.name
     this.devices = [...state.devices]
+    // Feed every row; the clock ignores repeats so presence heartbeats cannot
+    // rewind a playing device to its last sample.
+    this.clocks.observe(this.devices)
     if (joined) this.publish()
     if (state.available && !this.pending) this.busyId = ''
   }

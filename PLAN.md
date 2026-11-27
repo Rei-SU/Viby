@@ -1237,13 +1237,19 @@ live-moving clock extrapolated from the last published sample, working
 play/pause, next/previous, seek and volume — and labels it "Playing on
 <device>" with a live equaliser, so a controller never looks paused while music
 is playing elsewhere. Picking a song or list in a controller window plays it on
-that device (the selection is sent as a transfer), and space/arrow shortcuts
-follow the mirrored session. The local claim survives a restart, so an old
-remote session cannot take the bar over on launch. Presence is throttled (one track
+that device (the selection is sent as a transfer), space/arrow shortcuts and
+the lyrics panel follow the mirrored session (lines highlight against the
+remote clock, adjusted for the other machine's clock offset, and clicking a line
+seeks that device). The local claim survives a restart, so an old remote session
+cannot take the bar over on launch. Presence is throttled (one track
 per 7 s, a 30 s heartbeat and a hard cap of four calls per 30 s) because
 Realtime allows five presence calls per client per 30 s; transitions and
 commands use broadcast, and viewers derive the clock from the published
-position. A channel that errors or closes is rejoined with backoff. Devices are unavailable — never broken —
+position. Heartbeats send an advanced copy of the snapshot (position moved to
+the heartbeat time) and viewers only trust genuinely new samples with a
+latency-tolerant clock offset, so a repeated presence payload or a slow packet
+cannot rewind the song. A channel that errors or closes is rejoined with
+backoff. Devices are unavailable — never broken —
 when signed out, in recovery, offline or without a WebSocket.
 
 **Backend.** `supabase/migrations/20261125052234_sync_records.sql` creates

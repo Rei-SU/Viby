@@ -599,6 +599,14 @@ class Player {
     this.persistSession(true)
   }
 
+  /**
+   * The exact element clock. `position` is mirrored at 1 Hz for the UI; handing
+   * another device a position should use this instead.
+   */
+  get clock(): number {
+    return this.loadedId ? audio.currentTime : this.position
+  }
+
   /** Underlying <audio> state, for diagnostics and the drive test. */
   get diagnostics(): {
     readyState: number

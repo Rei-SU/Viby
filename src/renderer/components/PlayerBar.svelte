@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { Track } from '@shared/types'
   import { player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
@@ -46,19 +45,7 @@
   // When another device holds the latest claim this bar mirrors that session,
   // like Spotify's controller window: its track, its moving clock, its controls.
   const remote = $derived(connect.remote)
-  const remoteTrack = $derived<Track | null>(
-    remote?.track
-      ? {
-          id: remote.track.id,
-          title: remote.track.title,
-          artist: remote.track.artist,
-          artistId: remote.track.artistId,
-          album: remote.track.album,
-          durationSec: remote.track.durationSec,
-          thumbnail: remote.track.thumbnail
-        }
-      : null
-  )
+  const remoteTrack = $derived(connect.remote ? connect.trackOf(connect.remote) : null)
   const track = $derived(remoteTrack ?? player.current)
   const fav = $derived(track ? favorites.has(track.id) : false)
   // Resolving a new stream and recovering a dead one are the same wait to the user.
@@ -76,10 +63,10 @@
   })
   const remotePosition = $derived.by(() => {
     if (!remote) return 0
-    const elapsed =
-      remote.position +
-      (remote.playing ? Math.max(0, (clock - remote.updatedAt) / 1_000) : 0)
-    return remote.track?.durationSec ? Math.min(elapsed, remote.track.durationSec) : elapsed
+    // `clock` keeps this reactive once a second; the value itself is corrected
+    // for the other machine's clock offset inside the store.
+    clock
+    return connect.devicePosition(remote)
   })
   const shownPosition = $derived(remote ? remotePosition : dragging ? dragValue : player.position)
 

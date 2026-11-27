@@ -4,6 +4,7 @@
  */
 import {
   ConnectService,
+  advanceSnapshot,
   type ConnectChannel,
   type ConnectChannelFactory,
   type ConnectChannelHandlers
@@ -148,6 +149,24 @@ console.log('\npublish, presence and claims:')
   h.handlers().onMessage({ type: 'state', device: device({ playing: true }) })
   h.handlers().onDevices([device({ playing: false })])
   check('presence sync is authoritative again', JSON.parse(h.states.at(-1)!).devices.find((d: ConnectDevice) => d.id === OTHER)?.playing === false)
+
+  h.handlers().onMessage({ type: 'state', device: device({ position: 50, updatedAt: 5_000 }) })
+  check('a state broadcast applies', JSON.parse(h.states.at(-1)!).devices.find((d: ConnectDevice) => d.id === OTHER)?.position === 50)
+  h.handlers().onDevices([device({ position: 10, updatedAt: 4_000 })])
+  check(
+    'an older presence snapshot cannot rewind a peer',
+    JSON.parse(h.states.at(-1)!).devices.find((d: ConnectDevice) => d.id === OTHER)?.position === 50
+  )
+  h.handlers().onMessage({ type: 'state', device: device({ position: 5, updatedAt: 4_000 }) })
+  check(
+    'an older state broadcast is ignored',
+    JSON.parse(h.states.at(-1)!).devices.find((d: ConnectDevice) => d.id === OTHER)?.position === 50
+  )
+  h.handlers().onMessage({ type: 'state', device: device({ position: 60, updatedAt: 5_000 }) })
+  check(
+    'an equal-timestamp state update still applies',
+    JSON.parse(h.states.at(-1)!).devices.find((d: ConnectDevice) => d.id === OTHER)?.position === 60
+  )
   h.service.dispose()
 }
 
@@ -214,6 +233,33 @@ console.log('\npresence limit and rejoin:')
     JSON.parse(r.states.at(-1)!).available === true
   )
   r.service.dispose()
+}
+
+console.log('\nfresh presence samples:')
+{
+  const playing = device({
+    playing: true,
+    position: 10,
+    updatedAt: 1_000,
+    track: { id: 't', title: 'T', artist: 'A', durationSec: 600 }
+  })
+  const advanced = advanceSnapshot(playing, 11_000)
+  check(
+    'a heartbeat advances a playing snapshot',
+    advanced.position === 20 && advanced.updatedAt === 11_000
+  )
+  const clamped = advanceSnapshot(
+    device({
+      playing: true,
+      position: 595,
+      updatedAt: 0,
+      track: { id: 't', title: 'T', artist: 'A', durationSec: 600 }
+    }),
+    10_000
+  )
+  check('the advance clamps to the track', clamped.position === 600)
+  const paused = advanceSnapshot(device({ playing: false, position: 10, updatedAt: 1_000 }), 11_000)
+  check('a paused snapshot is untouched', paused.position === 10 && paused.updatedAt === 1_000)
 }
 
 console.log('\nvalidation:')

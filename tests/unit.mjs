@@ -59,6 +59,7 @@ const suites = {
   'account-otp': { file: 'account-otp.test.ts' },
   'account-auth-errors': { file: 'account-auth-errors.test.ts', electron: true },
   connect: { file: 'connect.test.ts' },
+  'device-clock': { file: 'device-clock.test.ts' },
   'library-root': { file: 'library-root.test.ts', electron: true }
 }
 

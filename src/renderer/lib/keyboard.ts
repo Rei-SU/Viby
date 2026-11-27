@@ -1,4 +1,3 @@
-import type { Track } from '@shared/types'
 import { favorites } from './favorites.svelte'
 import { player } from './player.svelte'
 import { connect } from './connect.svelte'
@@ -87,9 +86,7 @@ export function installShortcuts(): () => void {
       if (remote) {
         if (!remote.track) return
         event.preventDefault()
-        const elapsed =
-          remote.position +
-          (remote.playing ? Math.max(0, (Date.now() - remote.updatedAt) / 1_000) : 0)
+        const elapsed = connect.devicePosition(remote)
         const limit = remote.track.durationSec > 0 ? remote.track.durationSec : elapsed
         const target = Math.max(0, Math.min(limit, elapsed + direction * SEEK_STEP))
         void connect.remoteSeek(remote, remote.track.id, target)
@@ -118,18 +115,7 @@ export function installShortcuts(): () => void {
         else player.cycleRepeat()
         break
       case 'l': {
-        const source = remote?.track
-        const track: Track | null = source
-          ? {
-              id: source.id,
-              title: source.title,
-              artist: source.artist,
-              artistId: source.artistId,
-              album: source.album,
-              durationSec: source.durationSec,
-              thumbnail: source.thumbnail
-            }
-          : player.current
+        const track = remote ? connect.trackOf(remote) : player.current
         if (!track) return
         event.preventDefault()
         void favorites.toggle(track).catch(() => undefined)

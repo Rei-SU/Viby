@@ -55,6 +55,24 @@ type Listeners = {
 }
 
 /**
+ * Move a playing snapshot to `now`. Presence heartbeats repeat the last payload;
+ * sending it unchanged would tell every other device the song is still where it
+ * was when the payload was made.
+ */
+export function advanceSnapshot(device: ConnectDevice, now: number): ConnectDevice {
+  if (!device.playing) return device
+  const elapsed = Math.max(0, now - device.updatedAt) / 1_000
+  if (elapsed <= 0) return device
+  const position = device.position + elapsed
+  const duration = device.track?.durationSec ?? 0
+  return {
+    ...device,
+    position: duration > 0 ? Math.min(position, duration) : position,
+    updatedAt: now
+  }
+}
+
+/**
  * The account's device channel: who else is online, what they are playing, and
  * commands between them. Nothing here runs signed out, and every failure only
  * makes devices unavailable — playback and sync never depend on it.
@@ -297,7 +315,10 @@ export class ConnectService {
     for (const raw of payloads) {
       const device = asDevice(raw)
       if (!device || device.id === this.options.deviceId) continue
-      next.set(device.id, device)
+      // Presence can lag a broadcast: keep the newer snapshot instead of
+      // rewinding the peer to its last heartbeat.
+      const known = this.peers.get(device.id)
+      next.set(device.id, !known || device.updatedAt >= known.updatedAt ? device : known)
     }
     this.peers = next
     this.emit()
@@ -310,6 +331,10 @@ export class ConnectService {
       case 'state': {
         const device = asDevice(envelope.device)
         if (!device || device.id === this.options.deviceId) return
+        // Drop an out-of-order broadcast; both timestamps come from the same
+        // device clock, so they are comparable.
+        const known = this.peers.get(device.id)
+        if (known && device.updatedAt < known.updatedAt) return
         this.peers.set(device.id, device)
         this.emit()
         return
@@ -335,7 +360,8 @@ export class ConnectService {
     this.stateTimer = setTimeout(() => {
       this.stateTimer = null
       if (!this.channel || !this.self) return
-      void this.channel.send({ type: 'state', device: this.self }).catch(() => {})
+      const device = advanceSnapshot(this.self, this.now())
+      void this.channel.send({ type: 'state', device }).catch(() => {})
     }, this.stateGapMs)
     this.stateTimer.unref?.()
   }
@@ -366,8 +392,8 @@ export class ConnectService {
     const now = this.now()
     this.presenceTimes.push(now)
     this.lastPresenceAt = now
-    const self = this.self
-    void this.channel.track(self).catch(() => {})
+    const device = advanceSnapshot(this.self, now)
+    void this.channel.track(device).catch(() => {})
   }
 
   private emit(): void {

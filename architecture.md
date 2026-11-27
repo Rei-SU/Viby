@@ -530,8 +530,14 @@ device's snapshot (name, platform, track, playing, volume, `claimAt`); commands
 and instant state updates travel as broadcast envelopes, so the
 5-per-30-second Presence limit is never in the critical path. Presence is
 throttled to one call per 7 s plus a 30 s heartbeat and a hard cap of four
-calls per 30 s; viewers extrapolate the position from `updatedAt`. An errored
-or closed channel is recreated with backoff (2 s doubling to 30 s), and
+calls per 30 s; viewers extrapolate the position from `updatedAt`. Presence
+repeats its last payload between player changes, so heartbeats carry an
+advanced copy (position moved to now, fresh timestamp), and the viewer's
+`DeviceClock` ignores repeated or out-of-order samples and keeps the smallest
+observed latency in its offset, so a slow packet cannot move the song. The main
+process also refuses to replace a peer's newer snapshot with an older presence
+or broadcast sample. An errored or closed channel is recreated with backoff
+(2 s doubling to 30 s), and
 handlers from an older channel are ignored, so a refused join or a rate limit
 recovers without restarting the app. `service.ts` merges peers, validates every
 payload on the way in (`validate.ts`), and forwards commands addressed to this
