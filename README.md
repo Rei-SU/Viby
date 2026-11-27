@@ -23,10 +23,10 @@ Ondavi opens on your music, not on an offer. No sign-up screen, no ad before the
 It plays from YouTube Music's catalogue, so almost anything you look for is there. The player, the library, the lyrics and the downloads are built here — which is why none of them are trying to sell you anything, and why what you keep stays on your machine.
 
 <p align="center">
-  <img src="docs/screenshots/home.png" alt="Ondavi home showing Focus, Energy, Late night, and Throwbacks mood shortcuts" />
+  <img src="docs/screenshots/home.png" alt="Ondavi Home showing recently played Daft Punk tracks, weekly listening stats, and the lyrics panel" />
 </p>
 <p align="center">
-  <sub>Home &mdash; mood shortcuts for whatever comes next.</sub>
+  <sub>Home &mdash; recent plays, weekly listening stats, and synced lyrics.</sub>
 </p>
 
 ## Get Ondavi
