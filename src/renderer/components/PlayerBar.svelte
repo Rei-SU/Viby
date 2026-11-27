@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Track } from '@shared/types'
   import { player } from '../lib/player.svelte'
   import { nav } from '../lib/nav.svelte'
   import ArtistLinks from './ArtistLinks.svelte'
@@ -42,16 +43,50 @@
     toast.show(`Added ${item.title} to queue`)
   }
 
-  const shownPosition = $derived(dragging ? dragValue : player.position)
-  const track = $derived(player.current)
+  // When another device holds the latest claim this bar mirrors that session,
+  // like Spotify's controller window: its track, its moving clock, its controls.
+  const remote = $derived(connect.remote)
+  const remoteTrack = $derived<Track | null>(
+    remote?.track
+      ? {
+          id: remote.track.id,
+          title: remote.track.title,
+          artist: remote.track.artist,
+          artistId: remote.track.artistId,
+          album: remote.track.album,
+          durationSec: remote.track.durationSec,
+          thumbnail: remote.track.thumbnail
+        }
+      : null
+  )
+  const track = $derived(remoteTrack ?? player.current)
   const fav = $derived(track ? favorites.has(track.id) : false)
   // Resolving a new stream and recovering a dead one are the same wait to the user.
-  const loading = $derived(player.busy || player.reconnecting)
+  const loading = $derived(remote ? false : player.busy || player.reconnecting)
+  const playing = $derived(remote ? remote.playing : player.playing)
+  const duration = $derived(remote?.track?.durationSec ?? player.duration)
 
-  const progress = $derived(
-    player.duration > 0 ? Math.min(100, (shownPosition / player.duration) * 100) : 0
+  // A remote position is extrapolated from its last published sample; the
+  // clock ticks at 1 Hz only while a remote session is on screen.
+  let clock = $state(Date.now())
+  $effect(() => {
+    if (!remote) return
+    const timer = setInterval(() => (clock = Date.now()), 1_000)
+    return () => clearInterval(timer)
+  })
+  const remotePosition = $derived.by(() => {
+    if (!remote) return 0
+    const elapsed =
+      remote.position +
+      (remote.playing ? Math.max(0, (clock - remote.updatedAt) / 1_000) : 0)
+    return remote.track?.durationSec ? Math.min(elapsed, remote.track.durationSec) : elapsed
+  })
+  const shownPosition = $derived(remote ? remotePosition : dragging ? dragValue : player.position)
+
+  const progress = $derived(duration > 0 ? Math.min(100, (shownPosition / duration) * 100) : 0)
+  const volumeLevel = $derived(
+    Math.round((remote ? (remote.muted ? 0 : remote.volume) : player.muted ? 0 : player.volume) * 100)
   )
-  const volumeLevel = $derived(player.muted ? 0 : Math.round(player.volume * 100))
 
   // The repeat button cycles, so its label names the click rather than the
   // state; the icon carries the state (dim / loop / loop with a 1).
@@ -88,10 +123,13 @@
     wheelPx -= steps * WHEEL_PX_PER_PERCENT
     // Muted is already silent: lowering the hidden volume would change what
     // plays after unmuting, which is not what the gesture looks like it does.
-    if (player.muted && steps > 0) return
+    if (!remote && player.muted && steps > 0) return
     // deltaY is positive when scrolling down, which lowers the volume. Round
     // to the slider's own 1% step so repeated steps cannot drift the float.
-    player.setVolume(Math.round((player.volume - steps / 100) * 100) / 100)
+    const base = remote ? (remote.muted ? 0 : remote.volume) : player.volume
+    const next = Math.round((base - steps / 100) * 100) / 100
+    if (remote) void connect.remoteVolume(remote, next)
+    else player.setVolume(next)
     volumeHint = true
     if (volumeHintTimer) clearTimeout(volumeHintTimer)
     volumeHintTimer = setTimeout(() => (volumeHint = false), 800)
@@ -105,7 +143,7 @@
   // What the stream actually is — not what the setting says it should be.
   const codec = $derived(codecLabel(player.stream?.ext))
 
-  const qualityText = $derived(qualityLabel(player.stream))
+  const qualityText = $derived(remote ? '' : qualityLabel(player.stream))
 
   const qualityTitle = $derived.by(() => {
     const stream = player.stream
@@ -132,8 +170,31 @@
   }
 
   function onSeekCommit(): void {
-    player.seek(dragValue)
     dragging = false
+    if (remote?.track) {
+      void connect.remoteSeek(remote, remote.track.id, dragValue)
+      return
+    }
+    player.seek(dragValue)
+  }
+
+  /** The bar's transport follows whatever it is showing. */
+  function togglePlay(): void {
+    if (remote) {
+      void connect.remotePlayPause(remote)
+      return
+    }
+    if (!loading) player.toggle()
+  }
+
+  function skipPrevious(): void {
+    if (remote) void connect.remotePrevious(remote)
+    else player.previous()
+  }
+
+  function skipNext(): void {
+    if (remote) void connect.remoteNext(remote)
+    else player.next()
   }
 
   const PREVIEW_EDGE = 22
@@ -147,10 +208,10 @@
     if (previewFrame) return
     previewFrame = requestAnimationFrame(() => {
       previewFrame = 0
-      if (!seekEl || !track || player.duration <= 0) return
+      if (!seekEl || !track || duration <= 0) return
       const rect = seekEl.getBoundingClientRect()
       const ratio = Math.min(1, Math.max(0, (previewX - rect.left) / rect.width))
-      preview = { percent: ratio * 100, seconds: Math.round(ratio * player.duration) }
+      preview = { percent: ratio * 100, seconds: Math.round(ratio * duration) }
     })
   }
 
@@ -161,8 +222,8 @@
   }
 
   $effect(() => {
-    player.current?.id
-    player.duration
+    track?.id
+    duration
     clearPreview()
   })
 
@@ -180,7 +241,10 @@
   <div
     class="meta"
     use:contextItem={track
-      ? { item: trackToItem(track), play: () => player.toggle() }
+      ? {
+          item: trackToItem(track),
+          play: () => (remote ? void connect.remotePlayPause(remote) : player.toggle())
+        }
       : null}
   >
     <Cover src={track?.thumbnail} size={50} radius={10} alt={track?.title ?? ''} />
@@ -194,6 +258,16 @@
         </span>
       {:else}
         <span class="artist">—</span>
+      {/if}
+      {#if remote}
+        <button
+          class="device-line"
+          class:live={remote.playing}
+          title="Show devices"
+          onclick={() => connect.toggle()}
+        >
+          <span class="truncate">{remote.playing ? 'Playing' : 'Paused'} on {remote.name}</span>
+        </button>
       {/if}
     </div>
     {#if track}
@@ -213,45 +287,45 @@
     <div class="buttons">
       <button
         class="icon shuffle"
-        class:on={player.shuffle}
-        title="Shuffle"
+        class:on={player.shuffle && !remote}
+        title={remote ? 'Shuffle — this device only' : 'Shuffle'}
         aria-label="Shuffle"
-        aria-pressed={player.shuffle}
+        aria-pressed={player.shuffle && !remote}
+        disabled={!!remote}
         onclick={() => player.toggleShuffle()}
       >
         <Icon name="shuffle" size={16} />
       </button>
 
-      <button class="icon" title="Previous" aria-label="Previous" onclick={() => player.previous()}>
+      <button class="icon" title="Previous" aria-label="Previous" onclick={skipPrevious}>
         <Icon name="prev" size={17} />
       </button>
 
       <button
         class="play"
         class:loading={loading}
-        title={loading ? 'Loading…' : player.playing ? 'Pause' : 'Play'}
-        aria-label={loading ? 'Loading' : player.playing ? 'Pause' : 'Play'}
-        onclick={() => {
-          if (!loading) player.toggle()
-        }}
+        title={loading ? 'Loading…' : playing ? 'Pause' : 'Play'}
+        aria-label={loading ? 'Loading' : playing ? 'Pause' : 'Play'}
+        onclick={togglePlay}
       >
         {#if loading}
           <span class="spinner"></span>
         {:else}
-          <Icon name={player.playing ? 'pause' : 'play'} size={17} />
+          <Icon name={playing ? 'pause' : 'play'} size={17} />
         {/if}
       </button>
 
-      <button class="icon" title="Next" aria-label="Next" onclick={() => player.next()}>
+      <button class="icon" title="Next" aria-label="Next" onclick={skipNext}>
         <Icon name="next" size={17} />
       </button>
 
       <button
         class="icon repeat"
-        class:on={player.repeat !== 'off'}
-        title={repeatLabel}
+        class:on={player.repeat !== 'off' && !remote}
+        title={remote ? 'Repeat — this device only' : repeatLabel}
         aria-label={repeatLabel}
-        aria-pressed={player.repeat !== 'off'}
+        aria-pressed={player.repeat !== 'off' && !remote}
+        disabled={!!remote}
         onclick={() => player.cycleRepeat()}
       >
         <Icon name={player.repeat === 'one' ? 'repeatOne' : 'repeat'} size={16} />
@@ -280,7 +354,7 @@
         <input
           type="range"
           min="0"
-          max={Math.max(player.duration, 1)}
+          max={Math.max(duration, 1)}
           step="1"
           value={shownPosition}
           style="--progress: {progress}%"
@@ -291,7 +365,7 @@
           onchange={onSeekCommit}
         />
       </div>
-      <span class="time tabular">{fmt(player.duration)}</span>
+      <span class="time tabular">{fmt(duration)}</span>
     </div>
   </div>
 
@@ -336,16 +410,19 @@
         <Icon name="devices" size={16} />
       </button>
     {/if}
-    <button
-      class="icon"
-      title={player.muted ? 'Unmute' : 'Mute'}
-      aria-label={player.muted ? 'Unmute' : 'Mute'}
-      onclick={() => player.toggleMute()}
-    >
-      <Icon name={player.muted || player.volume === 0 ? 'mute' : 'volume'} size={16} />
-    </button>
+    {#if !remote}
+      <button
+        class="icon"
+        title={player.muted ? 'Unmute' : 'Mute'}
+        aria-label={player.muted ? 'Unmute' : 'Mute'}
+        onclick={() => player.toggleMute()}
+      >
+        <Icon name={player.muted || player.volume === 0 ? 'mute' : 'volume'} size={16} />
+      </button>
+    {/if}
     <div
       class="volume-wrap"
+      class:remote
       role="presentation"
       onwheel={onVolumeWheel}
       onpointerleave={resetVolumeWheel}
@@ -356,10 +433,15 @@
         min="0"
         max="1"
         step="0.01"
-        value={player.muted ? 0 : player.volume}
+        value={remote ? (remote.muted ? 0 : remote.volume) : player.muted ? 0 : player.volume}
         style="--progress: {volumeLevel}%"
-        aria-label="Volume"
-        oninput={(e) => player.setVolume(Number((e.currentTarget as HTMLInputElement).value))}
+        aria-label={remote ? `Volume on ${remote.name}` : 'Volume'}
+        oninput={(e) => {
+          if (!remote) player.setVolume(Number((e.currentTarget as HTMLInputElement).value))
+        }}
+        onchange={(e) => {
+          if (remote) void connect.remoteVolume(remote, Number((e.currentTarget as HTMLInputElement).value))
+        }}
       />
       <span class="volume-hint" class:show={volumeHint} aria-hidden="true">{volumeLevel}%</span>
     </div>
@@ -421,6 +503,45 @@
     max-width: 100%;
   }
 
+  .device-line {
+    align-self: flex-start;
+    max-width: 100%;
+    margin-top: 2px;
+    padding: 1px 7px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 10.5px;
+    line-height: 1.3;
+    cursor: pointer;
+    transition:
+      color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .device-line.live {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  .device-line:hover {
+    color: var(--text-dim);
+    background: var(--glass-hover);
+  }
+
+  .device-line.live:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+  }
+
+  .device-line span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .icon {
     position: relative;
     flex: 0 0 auto;
@@ -449,6 +570,13 @@
   .icon:hover {
     color: var(--text);
     background: var(--glass-hover);
+  }
+
+  .icon:disabled {
+    color: var(--text-faint);
+    background: none;
+    cursor: default;
+    opacity: 0.55;
   }
 
   .icon.on {

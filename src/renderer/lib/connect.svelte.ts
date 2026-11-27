@@ -3,6 +3,7 @@ import type {
   ConnectCommand,
   ConnectCommandInput,
   ConnectDevice,
+  ConnectSession,
   ConnectState
 } from '@shared/connect'
 import { api } from './api'
@@ -31,13 +32,25 @@ class ConnectStore {
   open = $state(false)
   /** Device waiting on a hand-off we asked for. */
   busyId = $state('')
+  /** When this device last claimed playback; newer remote claims take over. */
+  claimAt = $state(0)
 
   private started = false
   private disposers: (() => void)[] = []
   private applying = 0
-  private claimAt = 0
   private lastPlaying = false
   private pending: { timer: ReturnType<typeof setTimeout> } | null = null
+
+  constructor() {
+    // Claims decide which device the bar mirrors; losing ours on restart would
+    // hand the bar to a remote device that last played long ago.
+    try {
+      const stored = Number(localStorage.getItem('viby-connect-claim'))
+      if (Number.isFinite(stored) && stored > 0) this.claimAt = stored
+    } catch {
+      // Storage unavailable: claims simply start at zero for this run.
+    }
+  }
 
   get self(): ConnectDevice | null {
     return this.devices.find((device) => device.id === this.selfId) ?? null
@@ -56,9 +69,32 @@ class ConnectStore {
     return this.others.find((device) => device.playing) ?? null
   }
 
+  /**
+   * The device whose session this window should mirror: the latest claim, when
+   * it is newer than ours. Spotify behaves this way — a controller window shows
+   * the remote session, not its own paused one.
+   */
+  get remote(): ConnectDevice | null {
+    let best: ConnectDevice | null = null
+    for (const device of this.devices) {
+      if (device.id === this.selfId || !device.track) continue
+      if (device.claimAt <= this.claimAt) continue
+      if (
+        !best ||
+        device.claimAt > best.claimAt ||
+        (device.claimAt === best.claimAt && device.id > best.id)
+      ) {
+        best = device
+      }
+    }
+    return best
+  }
+
   init(): void {
     if (this.started) return
     this.started = true
+    // New selections go to the active device while this window is a controller.
+    player.remotePlay = (session) => this.playRemote(session)
     const bridge = api.connect
     if (!bridge) return
     try {
@@ -92,7 +128,7 @@ class ConnectStore {
     const track = player.current
     const playing = player.playing && !!track
     const now = Date.now()
-    if (playing && !this.lastPlaying && this.applying === 0) this.claimAt = now
+    if (playing && !this.lastPlaying && this.applying === 0) this.setClaim(now)
     this.lastPlaying = playing
     bridge.publish({
       track: track
@@ -129,6 +165,44 @@ class ConnectStore {
 
   async remoteVolume(device: ConnectDevice, volume: number): Promise<void> {
     await this.send({ kind: 'volume', target: device.id, volume })
+  }
+
+  /** Move the other device's playhead; the bar shows the jump immediately. */
+  async remoteSeek(
+    device: ConnectDevice,
+    trackId: string,
+    position: number
+  ): Promise<void> {
+    const bridge = api.connect
+    if (!bridge) return
+    const result = await bridge.send({
+      kind: 'seek',
+      target: device.id,
+      trackId,
+      position
+    })
+    if (!result.ok) {
+      toast.show(result.error)
+      return
+    }
+    this.devices = this.devices.map((entry) =>
+      entry.id === device.id
+        ? { ...entry, position, updatedAt: Date.now() }
+        : entry
+    )
+  }
+
+  /**
+   * Route a new selection to the device that currently owns playback, like
+   * Spotify: picking a song in a controller window plays it on that device.
+   * Returns false when nothing is remote, so the player proceeds locally.
+   */
+  private playRemote(session: ConnectSession): boolean {
+    const target = this.remote
+    if (!target) return false
+    if (player.playing) player.toggle()
+    void this.send({ kind: 'transfer-in', target: target.id, session })
+    return true
   }
 
   /** Ask another device to hand its session to this one. */
@@ -177,7 +251,7 @@ class ConnectStore {
     const newer =
       claim.at > this.claimAt || (claim.at === this.claimAt && claim.deviceId > this.selfId)
     if (!newer) return
-    this.remote(() => {
+    this.applyRemote(() => {
       if (player.playing) player.toggle()
     })
     const name = this.devices.find((device) => device.id === claim.deviceId)?.name
@@ -205,6 +279,11 @@ class ConnectStore {
       case 'volume':
         player.setVolume(command.volume)
         return
+      case 'seek':
+        // Only the track the controller was looking at; a stale timestamp
+        // must not jump whatever is playing now.
+        if (player.current?.id === command.trackId) player.seek(command.position)
+        return
       case 'transfer-out': {
         const session = player.transferSession()
         if (!session) return
@@ -217,7 +296,7 @@ class ConnectStore {
         })
         // The session now belongs to the other device; stop here quietly.
         if (result.ok) {
-          this.remote(() => {
+          this.applyRemote(() => {
             if (player.playing) player.toggle()
           })
         }
@@ -233,15 +312,24 @@ class ConnectStore {
         }
         // The adopted session is this device's now: announce it so any other
         // player pauses. A paused hand-off claims nothing.
-        if (player.playing) this.claimAt = Date.now()
+        if (player.playing) this.setClaim(Date.now())
         this.publish()
         return
       }
     }
   }
 
+  private setClaim(at: number): void {
+    this.claimAt = at
+    try {
+      localStorage.setItem('viby-connect-claim', String(at))
+    } catch {
+      // A full or blocked storage area just means no cross-restart memory.
+    }
+  }
+
   /** Run a player change that came from another device, not from a user here. */
-  private remote(run: () => void): void {
+  private applyRemote(run: () => void): void {
     this.applying += 1
     try {
       run()

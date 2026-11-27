@@ -1,5 +1,7 @@
+import type { Track } from '@shared/types'
 import { favorites } from './favorites.svelte'
 import { player } from './player.svelte'
+import { connect } from './connect.svelte'
 import { playlistPicker } from './playlist-picker.svelte'
 import { sidePanel } from './side-panel.svelte'
 import { changelog } from './changelog.svelte'
@@ -43,16 +45,25 @@ export function installShortcuts(): () => void {
 
     const mod = event.metaKey || event.ctrlKey
 
+    // The keys drive whatever the player bar is showing: when another device
+    // owns the session, transport keys follow it instead of the hidden local
+    // player (Spotify behaves the same way from a controller window).
+    const remote = connect.remote
+
     if (event.code === 'Space') {
       event.preventDefault()
       if (mod || event.repeat) return
-      player.toggle()
+      if (remote) void connect.remotePlayPause(remote)
+      else player.toggle()
       return
     }
 
     if (mod && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
       event.preventDefault()
-      if (event.key === 'ArrowRight') player.next()
+      if (remote) {
+        if (event.key === 'ArrowRight') void connect.remoteNext(remote)
+        else void connect.remotePrevious(remote)
+      } else if (event.key === 'ArrowRight') player.next()
       else player.previous()
       return
     }
@@ -60,16 +71,32 @@ export function installShortcuts(): () => void {
     if (mod && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault()
       const direction = event.key === 'ArrowUp' ? 1 : -1
-      player.setVolume(Math.max(0, Math.min(1, player.volume + direction * VOLUME_STEP)))
+      if (remote) {
+        const volume = Math.max(0, Math.min(1, remote.volume + direction * VOLUME_STEP))
+        void connect.remoteVolume(remote, volume)
+      } else {
+        player.setVolume(Math.max(0, Math.min(1, player.volume + direction * VOLUME_STEP)))
+      }
       return
     }
 
     if (mod) return
 
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      const direction = event.key === 'ArrowRight' ? 1 : -1
+      if (remote) {
+        if (!remote.track) return
+        event.preventDefault()
+        const elapsed =
+          remote.position +
+          (remote.playing ? Math.max(0, (Date.now() - remote.updatedAt) / 1_000) : 0)
+        const limit = remote.track.durationSec > 0 ? remote.track.durationSec : elapsed
+        const target = Math.max(0, Math.min(limit, elapsed + direction * SEEK_STEP))
+        void connect.remoteSeek(remote, remote.track.id, target)
+        return
+      }
       if (!player.current) return
       event.preventDefault()
-      const direction = event.key === 'ArrowRight' ? 1 : -1
       const target = player.position + direction * SEEK_STEP
       const limit = player.duration > 0 ? player.duration : target
       player.seek(Math.max(0, Math.min(limit, target)))
@@ -80,19 +107,29 @@ export function installShortcuts(): () => void {
 
     switch (event.key.toLowerCase()) {
       case 'm':
-        event.preventDefault()
-        player.toggleMute()
-        break
       case 's':
-        event.preventDefault()
-        player.toggleShuffle()
-        break
       case 'r':
+        // Mute, shuffle and repeat configure this computer; while a remote
+        // session owns the bar they are hidden, so the keys do nothing.
+        if (remote) return
         event.preventDefault()
-        player.cycleRepeat()
+        if (event.key.toLowerCase() === 'm') player.toggleMute()
+        else if (event.key.toLowerCase() === 's') player.toggleShuffle()
+        else player.cycleRepeat()
         break
       case 'l': {
-        const track = player.current
+        const source = remote?.track
+        const track: Track | null = source
+          ? {
+              id: source.id,
+              title: source.title,
+              artist: source.artist,
+              artistId: source.artistId,
+              album: source.album,
+              durationSec: source.durationSec,
+              thumbnail: source.thumbnail
+            }
+          : player.current
         if (!track) return
         event.preventDefault()
         void favorites.toggle(track).catch(() => undefined)

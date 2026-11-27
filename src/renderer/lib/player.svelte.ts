@@ -158,6 +158,13 @@ class Player {
   private seeking = false
   /** Local artwork converted to a data URL, keyed by its viby-media URL. */
   private artDataUrls = new Map<string, { src: string; type: string }>()
+  /**
+   * Set by the device layer: a new selection is offered here first so it can
+   * play on the device that currently owns playback. Returning true means it
+   * was routed and this player must stay untouched.
+   */
+  remotePlay: ((session: ConnectSession) => boolean) | null = null
+
   /** Guards an async artwork conversion against a track change in the meantime. */
   private metadataToken = 0
   /**
@@ -384,6 +391,8 @@ class Player {
   ): Promise<void> {
     const tracks = items.filter(isPlayable).map(toTrack)
     if (tracks.length === 0) return
+    const start = Math.max(0, Math.min(startIndex, tracks.length - 1))
+    if (this.remotePlay && this.remotePlay(this.selectionSession(tracks, start))) return
     // A new explicit play replaces the old queue and its lazy tail.
     this.cancelQueueMore()
     this.queueMore = more ?? null
@@ -438,6 +447,7 @@ class Player {
 
   async playAt(i: number): Promise<void> {
     if (i < 0 || i >= this.queue.length) return
+    if (this.remotePlay && this.remotePlay(this.selectionSession(this.queue, i))) return
     this.index = i
     this.recoverTrackId = this.queue[i]?.id ?? null
     this.recoverAttempts = 0
@@ -677,6 +687,21 @@ class Player {
     this.stopTimer()
     api.player.setPlaying(false)
     this.persistSession(true)
+  }
+
+  /** A fresh selection as a transferable session, bounded to the queue window. */
+  private selectionSession(tracks: Track[], index: number): ConnectSession {
+    const window = queueWindow(tracks, index)
+    const local = index - window.queueStart
+    return {
+      track: window.queue[local] ?? tracks[index] ?? null,
+      queue: window.queue.map(plainTrack),
+      index: Math.max(0, local),
+      position: 0,
+      playing: true,
+      shuffle: this.shuffle,
+      repeat: this.repeat
+    }
   }
 
   /**

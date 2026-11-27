@@ -79,6 +79,20 @@
             <span class="sub">{connect.self?.platform ?? ''}</span>
             <span class="now">{nowText(connect.self)}</span>
           </div>
+          {#if connect.remote}
+            <div class="actions">
+              <button
+                class="here"
+                disabled={connect.busyId !== ''}
+                onclick={() => {
+                  const from = connect.remote
+                  if (from) void connect.playHere(from)
+                }}
+              >
+                {connect.busyId === connect.remote.id ? 'Connecting…' : 'Play here'}
+              </button>
+            </div>
+          {/if}
         </div>
 
         {#if connect.others.length === 0}
