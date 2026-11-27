@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon-readme.png" width="84" alt="Ondavi" />
+  <img src="resources/icon.png" width="84" alt="Ondavi" />
 </p>
 
 <h1 align="center">Ondavi</h1>
@@ -18,8 +18,6 @@
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-111111?style=flat-square" /></a>
 </p>
 
-The app is now Ondavi. The repository and installer filenames still use Viby, and macOS keeps the `Viby.app` bundle and Keychain identity. Those names preserve existing installs, updates and signed-in sessions.
-
 Ondavi opens on your music, not on an offer. No sign-up screen, no ad before the first song, no upsell sitting between you and play. Search for something, press play, and the app gets out of the way.
 
 It plays from YouTube Music's catalogue, so almost anything you look for is there. The player, the library, the lyrics and the downloads are built here — which is why none of them are trying to sell you anything, and why what you keep stays on your machine.
@@ -35,15 +33,9 @@ It plays from YouTube Music's catalogue, so almost anything you look for is ther
 
 Download the latest release with the badges above: **Apple silicon** for an M-series Mac, **Intel** for an older one, **x64** for Windows 10 or 11. Every version and its notes are on the [releases page](https://github.com/Rei-SU/Viby/releases).
 
-**macOS.** Drag `Viby.app` to Applications (it appears as Ondavi), then remove the download quarantine once:
+**macOS.** Open the disk image and drag the app into Applications. See the [macOS first-launch instructions](CONTRIBUTING.md#releases) if Gatekeeper blocks it.
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Viby.app
-```
-
-The build is ad-hoc signed but not notarized. Gatekeeper may report it as damaged; that is Gatekeeper's decision, not a corrupt download. Ondavi checks for updates and opens the matching DMG, because an ad-hoc-signed app cannot replace itself in place.
-
-**Windows.** Download `Viby-windows-x64.exe`; the app appears as Ondavi. The installer is per-user and needs no administrator password. Updates download, install in place and reopen Ondavi.
+**Windows.** Run the installer. It installs for your user account without administrator access.
 
 ## What it does
 
@@ -63,8 +55,8 @@ The build is ad-hoc signed but not notarized. Gatekeeper may report it as damage
 ## A closer look
 
 <p align="center">
-  <img src="docs/screenshots/search.png" width="49%" alt="Search results for Tame Impala with a top result, songs and artists" />
-  <img src="docs/screenshots/artist.png" width="49%" alt="Tame Impala artist page with a banner, top songs and albums" />
+  <img src="docs/screenshots/search.png" width="49%" alt="Search results for Tame Impala with song results and category filters" />
+  <img src="docs/screenshots/artist.png" width="49%" alt="Tame Impala artist page with a banner and popular songs" />
 </p>
 <p align="center">
   <sub>Search across songs, albums, artists and playlists &nbsp;·&nbsp; Artist pages with real discographies</sub>
@@ -72,19 +64,11 @@ The build is ad-hoc signed but not notarized. Gatekeeper may report it as damage
 
 <p align="center">
   <img src="docs/screenshots/album.png" width="49%" alt="Daft Punk Discovery album page with its track list" />
-  <img src="docs/screenshots/lyrics.png" width="49%" alt="Synced lyrics docked beside Daft Punk's Discovery album page" />
+  <img src="docs/screenshots/lyrics.png" width="49%" alt="Synced lyrics for Digital Love beside Daft Punk's Discovery album page" />
 </p>
 <p align="center">
   <sub>Daft Punk's Discovery album and track list &nbsp;·&nbsp; Lyrics docked beside Discovery — click a line to jump</sub>
 </p>
-
-## Where it stands
-
-Ondavi is small on purpose and still early. The version badge at the top always shows the latest release; the [releases page](https://github.com/Rei-SU/Viby/releases) has the notes for each one.
-
-- **macOS builds are ad-hoc signed and not notarized.** The first launch needs the `xattr` command above. Updates download the matching DMG; in-place macOS updates wait for Developer ID signing.
-- **Windows updates install in place.** Windows 11 is verified on Electron 45. Windows 10 uses the same x64 build and is expected to behave the same; no separate hardware pass is planned.
-- **Optional sync, no telemetry.** Your liked songs, playlists, history and downloads are local files. An account is optional and only mirrors the library for your other devices; nothing is required to listen.
 
 ## What's next
 
@@ -96,8 +80,8 @@ Ondavi is small on purpose and still early. The version badge at the top always 
 Requirements: **Node.js 22.12+** (required by Electron 45), npm, and the platform you are building for.
 
 ```bash
-git clone https://github.com/Rei-SU/Viby.git
-cd Viby  # repository still uses its original name
+git clone https://github.com/Rei-SU/Viby.git ondavi
+cd ondavi
 npm install
 npm run runtime   # fetch the pinned playback runtime (once)
 npm run dev
