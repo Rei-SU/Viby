@@ -11,6 +11,13 @@ import {
 } from '@shared/ipc'
 import type { AccountCredentials, AccountStatus, SyncStatus } from '@shared/account'
 import type {
+  ConnectClaim,
+  ConnectCommand,
+  ConnectCommandInput,
+  ConnectSnapshot,
+  ConnectState
+} from '@shared/connect'
+import type {
   DownloadCollectionInput,
   DownloadProgress,
   DownloadsSnapshot,
@@ -215,6 +222,26 @@ const api: VibyApi = {
       const handler = (_event: unknown, status: SyncStatus): void => callback(status)
       ipcRenderer.on(CH.syncChanged, handler)
       return () => ipcRenderer.removeListener(CH.syncChanged, handler)
+    }
+  },
+  connect: {
+    state: () => ipcRenderer.invoke(CH.connectState),
+    publish: (snapshot: ConnectSnapshot) => ipcRenderer.send(CH.connectPublish, snapshot),
+    send: (command: ConnectCommandInput) => ipcRenderer.invoke(CH.connectSend, command),
+    onChange: (callback: (state: ConnectState) => void) => {
+      const handler = (_event: unknown, state: ConnectState): void => callback(state)
+      ipcRenderer.on(CH.connectChanged, handler)
+      return () => ipcRenderer.removeListener(CH.connectChanged, handler)
+    },
+    onCommand: (callback: (command: ConnectCommand) => void) => {
+      const handler = (_event: unknown, command: ConnectCommand): void => callback(command)
+      ipcRenderer.on(CH.connectCommand, handler)
+      return () => ipcRenderer.removeListener(CH.connectCommand, handler)
+    },
+    onClaim: (callback: (claim: ConnectClaim) => void) => {
+      const handler = (_event: unknown, claim: ConnectClaim): void => callback(claim)
+      ipcRenderer.on(CH.connectClaim, handler)
+      return () => ipcRenderer.removeListener(CH.connectClaim, handler)
     }
   },
   ...(process.env.VIBY_DEBUG_PORT

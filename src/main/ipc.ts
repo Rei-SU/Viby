@@ -44,7 +44,12 @@ import type {
   AccountStatus
 } from '@shared/account'
 import { auth } from './account/auth'
+import { deviceId } from './account/device'
 import { exportAccount } from './account/export'
+import { ConnectService } from './connect/service'
+import { createSupabaseChannel } from './connect/supabase-channel'
+import { deviceName, platformName } from './connect/naming'
+import type { ConnectCommandInput, ConnectSnapshot } from '@shared/connect'
 import { noteSyncChange, syncEngine } from './account/sync'
 import { setRemoteApplyListener, setRemoteLibrarySink, SYNCED_SETTINGS } from './account/records'
 import { summarizeHistory } from '@shared/listening'
@@ -181,6 +186,19 @@ let importResolveController: AbortController | null = null
   const account = auth()
   const sync = syncEngine()
 
+  // Realtime needs a WebSocket. Without one the feature reports itself
+  // unavailable instead of taking playback or startup down with it.
+  const devices = new ConnectService({
+    deviceId: deviceId(),
+    name: deviceName(),
+    platform: platformName(),
+    createChannel:
+      typeof WebSocket === 'function' ? createSupabaseChannel(account.clientInstance()) : undefined
+  })
+  devices.onState((state) => broadcast(CH.connectChanged, state))
+  devices.onCommand((command) => broadcast(CH.connectCommand, command))
+  devices.onClaim((claim) => broadcast(CH.connectClaim, claim))
+
   const parseEmail = (input: unknown): string | null => {
     if (typeof input !== 'string') return null
     const email = input.trim().toLowerCase()
@@ -205,6 +223,7 @@ let importResolveController: AbortController | null = null
     const switched = setActiveLibrary(userId)
     broadcast(CH.accountChanged, status)
     sync.useAccount(status.state === 'signed-in' ? { id: status.userId } : null)
+    devices.useAccount(status.state === 'signed-in' ? status.userId : null)
     if (switched) {
       broadcast(CH.libraryChanged, {
         favorites: true,
@@ -347,6 +366,19 @@ let importResolveController: AbortController | null = null
   ipcMain.handle(CH.syncNow, () => sync.now())
   ipcMain.handle(CH.syncConflicts, () => sync.conflicts())
   ipcMain.handle(CH.syncClearConflicts, () => sync.clearConflicts())
+
+  ipcMain.handle(CH.connectState, () => devices.state())
+  ipcMain.on(CH.connectPublish, (_e, snapshot: ConnectSnapshot) => devices.publish(snapshot))
+  ipcMain.handle(
+    CH.connectSend,
+    async (_e, input: ConnectCommandInput): Promise<Result<void>> => {
+      try {
+        return await devices.send(input)
+      } catch (error) {
+        return fail(error)
+      }
+    }
+  )
 
   const downloadsStore = downloadStore()
   const manager = new DownloadManager(downloadsStore, {

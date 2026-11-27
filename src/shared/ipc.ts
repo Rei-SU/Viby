@@ -1,5 +1,7 @@
 import type { AccountApi, SyncApi } from './account'
 import { ACCOUNT_CH } from './account'
+import type { ConnectApi } from './connect'
+import { CONNECT_CH } from './connect'
 import type { ListeningSummary } from './listening'
 import type {
   BrowseResult,
@@ -123,7 +125,8 @@ export const CH = {
   importCreate: 'import:create',
   importProgress: 'import:progress',
 
-  ...ACCOUNT_CH
+  ...ACCOUNT_CH,
+  ...CONNECT_CH
 } as const
 
 /** What a pull changed, so the renderer can re-read only the affected stores. */
@@ -331,6 +334,8 @@ export interface VibyApi {
   /** Optional account service. Signed out means no network call at all. */
   account: AccountApi
   sync: SyncApi
+  /** Devices inside the account: presence, remote transport and hand-off. */
+  connect: ConnectApi
   /**
    * Only present when VIBY_DEBUG_PORT is set. Used by the e2e harness to keep
    * synthetic titles ("Track A", "Seed") out of real listening history.
