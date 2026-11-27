@@ -225,6 +225,17 @@ input[type='range']::-webkit-slider-thumb:active {
   scroll-snap-align: start;
 }
 
+/* One glass surface for every floating menu: quick search, account, devices.
+   Components add their own size, position and animation. */
+.popover-surface {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: rgba(11, 11, 15, 0.78);
+  backdrop-filter: blur(32px) saturate(150%);
+  -webkit-backdrop-filter: blur(32px) saturate(150%);
+  box-shadow: var(--shadow-dock);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

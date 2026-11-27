@@ -9,6 +9,31 @@
 
   let sheet = $state<HTMLElement>()
 
+  /**
+   * The titlebar is a glass surface and therefore a backdrop root; a sheet
+   * inside it could only blur the titlebar and looked flat next to the search
+   * dropdown. Move it to <body> and anchor it under the avatar in viewport
+   * coordinates.
+   */
+  function anchoredSheet(node: HTMLElement): { destroy: () => void } {
+    const anchor = node.parentElement
+    document.body.appendChild(node)
+    const place = (): void => {
+      const rect = anchor?.getBoundingClientRect()
+      if (!rect) return
+      node.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`
+      node.style.top = `${Math.max(8, rect.bottom + 10)}px`
+    }
+    place()
+    window.addEventListener('resize', place)
+    return {
+      destroy: () => {
+        window.removeEventListener('resize', place)
+        node.remove()
+      }
+    }
+  }
+
   let mode = $state<Mode>('sign-in')
   let formError = $state('')
   let formBusy = $state(false)
@@ -407,11 +432,12 @@
 
 {#if account.open}
   <div
-    class="sheet"
+    class="sheet popover-surface"
     role="dialog"
     aria-label="Account"
     tabindex="-1"
     bind:this={sheet}
+    use:anchoredSheet
   >
     <header class="sheet-head">
       <p class="eyebrow">Account</p>
@@ -697,21 +723,13 @@
 
 <style>
   .sheet {
-    position: absolute;
-    top: calc(100% + 10px);
-    right: 0;
+    position: fixed;
     z-index: 80;
     display: flex;
     flex-direction: column;
     width: 340px;
     max-width: calc(100vw - 32px);
     max-height: min(560px, calc(100vh - var(--titlebar-h) - var(--player-h) - 32px));
-    border: 1px solid var(--stroke-strong);
-    border-radius: var(--radius-lg);
-    background: var(--glass-strong);
-    backdrop-filter: blur(26px) saturate(150%);
-    -webkit-backdrop-filter: blur(26px) saturate(150%);
-    box-shadow: var(--shadow-dock);
     -webkit-app-region: no-drag;
     animation: account-in 160ms var(--ease);
   }

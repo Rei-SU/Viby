@@ -560,7 +560,7 @@
   </div>
 
   {#if !isSearchPage()}
-  <div class="quick-panel" class:open={open} bind:this={panel} use:portal>
+  <div class="quick-panel popover-surface" class:open={open} bind:this={panel} use:portal>
       <div
         class="quick-list scroll"
         id="viby-quick-search"
@@ -821,12 +821,6 @@
     pointer-events: none;
     visibility: hidden;
     overflow: hidden;
-    border: 1px solid var(--stroke);
-    border-radius: 14px;
-    background: rgba(11, 11, 15, 0.78);
-    backdrop-filter: blur(32px) saturate(150%);
-    -webkit-backdrop-filter: blur(32px) saturate(150%);
-    box-shadow: var(--shadow-dock);
     z-index: 60;
     -webkit-app-region: no-drag;
     transform-origin: top center;

@@ -5,6 +5,31 @@
 
   let panel = $state<HTMLElement>()
 
+  /**
+   * The dock is a glass surface, which makes it a backdrop root: a panel inside
+   * it can only blur the dock, not the page. Move the panel to <body> (as the
+   * search dropdown and account sheet do) and pin it to the trigger in viewport
+   * coordinates, so all three share one blur.
+   */
+  function anchored(node: HTMLElement): { destroy: () => void } {
+    document.body.appendChild(node)
+    const place = (): void => {
+      const trigger = document.querySelector('[data-connect-toggle]')
+      const rect = trigger?.getBoundingClientRect()
+      if (!rect) return
+      node.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`
+      node.style.bottom = `${Math.max(12, window.innerHeight - rect.top + 10)}px`
+    }
+    place()
+    window.addEventListener('resize', place)
+    return {
+      destroy: () => {
+        window.removeEventListener('resize', place)
+        node.remove()
+      }
+    }
+  }
+
   function onWindowClick(event: MouseEvent): void {
     if (!connect.open) return
     const target = event.target as Element | null
@@ -36,7 +61,7 @@
 <svelte:window onclick={onWindowClick} onkeydown={onKeydown} />
 
 {#if connect.open}
-  <section bind:this={panel} class="panel" aria-label="Devices">
+  <section bind:this={panel} class="panel popover-surface" aria-label="Devices" use:anchored>
     <header>
       <h2>Devices</h2>
       <button class="x" aria-label="Close devices" onclick={() => connect.close()}>
@@ -119,17 +144,20 @@
 
 <style>
   .panel {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 14px);
+    position: fixed;
     width: 340px;
     max-width: calc(100vw - 40px);
     padding: 12px 12px 8px;
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
-    background: var(--surface, var(--glass));
-    box-shadow: 0 18px 50px rgb(0 0 0 / 45%);
-    z-index: 40;
+    z-index: 60;
+    -webkit-app-region: no-drag;
+    animation: devices-in 160ms var(--ease);
+  }
+
+  @keyframes devices-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
   }
 
   header {
