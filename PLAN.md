@@ -1231,7 +1231,15 @@ sync engine; "Play here" asks the playing device for its session and adopts the
 queue, position, shuffle and repeat here. One rule keeps audio single: a device
 announcing playback carries a `claimAt`, and a later claim pauses any other
 device (ties break on device id), so starting playback on one machine stops the
-other with a "Paused — playing on …" notice. Presence is throttled (one track
+other with a "Paused — playing on …" notice. A window that does not hold the
+latest claim mirrors the active device in its player bar — that track, a
+live-moving clock extrapolated from the last published sample, working
+play/pause, next/previous, seek and volume — and labels it "Playing on
+<device>" with a live equaliser, so a controller never looks paused while music
+is playing elsewhere. Picking a song or list in a controller window plays it on
+that device (the selection is sent as a transfer), and space/arrow shortcuts
+follow the mirrored session. The local claim survives a restart, so an old
+remote session cannot take the bar over on launch. Presence is throttled (one track
 per 7 s plus a 25 s heartbeat) because Realtime allows five presence calls per
 client per 30 s; transitions and commands use broadcast, and viewers derive the
 clock from the published position. Devices are unavailable — never broken —

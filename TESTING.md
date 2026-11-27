@@ -316,8 +316,14 @@ Find the row for what you changed; run what it lists.
    instead of waiting on a code that never arrives.
 9. Sign in on two computers. Open Devices in the player bar on each: both must
    appear within ~10 s with the right name and platform. Play on A — B must
-   pause (if it was playing) and A's row must show Playing with the track. From
-   B, pause/next and the volume slider must act on A within a second or two.
+   pause (if it was playing) and A's row must show Playing with the track. B's
+   player bar must switch to A's track, label it "Playing on <A>", tick the
+   elapsed time, and its play/pause, next/previous and volume must act on A.
+   From B, pause/next and the volume slider must act on A within a second or
+   two. Pressing Play in B's bar while A plays must pause A (not start B), and
+   Space / ⌘-or-Ctrl+arrows in B must follow A as well. Dragging B's seek bar
+   (or the plain arrow keys) must move A's playhead, and picking any song or
+   playlist in B must play it on A while B stays a controller.
    Press "Play here" on A's row from B: A pauses, B adopts the queue, position,
    shuffle and repeat and starts. Quit A: its row must disappear; quit B too and
    signing back in must show "No other devices are online."
