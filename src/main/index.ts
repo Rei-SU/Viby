@@ -25,7 +25,13 @@ if (!app.isPackaged && process.env.VIBY_DEBUG_PORT) {
 // encrypted session continue to open from the same place after an upgrade.
 const userData = app.getPath('userData')
 app.setPath('userData', userData)
-app.setName('Ondavi')
+// On macOS Electron selects the Keychain service before the ready event. Keep
+// the pre-rebrand name through that step so existing sessions can be decrypted.
+if (process.platform === 'darwin') {
+  if (!app.isPackaged) app.setName('Viby')
+} else {
+  app.setName('Ondavi')
+}
 
 // Windows binds an SMTC media session to a taskbar button by Application User
 // Model ID, and the id it looks for is the one the installer puts on its
@@ -118,6 +124,8 @@ if (!gotLock) {
   app
     .whenReady()
     .then(() => {
+      if (process.platform === 'darwin') app.setName('Ondavi')
+
       // The packaged app gets its icon from the bundle; in development the Dock
       // would otherwise show the generic Electron icon.
       if (!app.isPackaged && process.platform === 'darwin' && app.dock) {

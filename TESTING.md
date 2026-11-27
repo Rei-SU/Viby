@@ -137,7 +137,8 @@ session persists before upgrading.
   existing install opens as Ondavi and its shortcuts launch the same install.
 - On macOS, open the matching DMG and replace the existing app in Applications.
   The bundle filename stays `Viby.app`, and its display name is Ondavi. Open it
-  and confirm that the existing Keychain item can still unlock the session.
+  and confirm that the existing Keychain item can still unlock the session on
+  the first launch after replacement. Quit and reopen Ondavi to check again.
 - On both platforms, check that the new icon appears, the saved library and
   preference survive, the offline download still plays, and an account email
   link still opens the app. Verify the same branding on a clean install.
