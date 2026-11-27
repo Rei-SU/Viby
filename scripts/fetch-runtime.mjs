@@ -66,8 +66,17 @@ const executable = platform === 'win32' ? join(dest, 'python.exe') : join(dest, 
 await vendorZipapp()
 
 if (existsSync(executable) && !force) {
-  console.log(`runtime already vendored: resources/python/${osName}-${arch}`)
-  process.exit(0)
+  if (platform === 'darwin') {
+    // Older caches can retain compile-time files that a fresh extraction trims.
+    // In particular, the pkgconfig symlinks can stop the app bundle from signing.
+    trim(dest, platform, PYTHON)
+  }
+  const invalidLinks = findInvalidSymlinks(dest)
+  if (invalidLinks.length === 0) {
+    console.log(`runtime already vendored: resources/python/${osName}-${arch}`)
+    process.exit(0)
+  }
+  console.warn(`Refreshing cached Python runtime with invalid symlinks:\n  ${invalidLinks.join('\n  ')}`)
 }
 
 console.log(`fetching ${asset}`)
@@ -94,7 +103,10 @@ try {
   cpSync(join(work, 'python'), dest, { recursive: true, verbatimSymlinks: true })
 
   trim(dest, platform, PYTHON)
-  assertNoBrokenSymlinks(dest)
+  const invalidLinks = findInvalidSymlinks(dest)
+  if (invalidLinks.length > 0) {
+    throw new Error(`Vendored Python runtime has invalid symlinks:\n  ${invalidLinks.join('\n  ')}`)
+  }
 
   // Apple Silicon refuses entirely unsigned code, and these builds are shipped
   // unsigned. Ad-hoc signing is free and keeps the runtime launchable. A plain
@@ -229,11 +241,11 @@ function trim(root, targetPlatform, version) {
 }
 
 /**
- * Signing walks the whole bundle with `fs.stat`, so a single dangling symlink
- * aborts the release. Fail here, with the offending link named, instead.
+ * Signing walks the whole bundle with `fs.stat`. A link must still resolve
+ * after the runtime is copied into the app and onto another machine.
  */
-function assertNoBrokenSymlinks(root) {
-  const broken = []
+function findInvalidSymlinks(root) {
+  const invalid = []
   const stack = [root]
   while (stack.length > 0) {
     const dir = stack.pop()
@@ -241,8 +253,9 @@ function assertNoBrokenSymlinks(root) {
       const path = join(dir, entry.name)
       if (entry.isSymbolicLink()) {
         const target = readlinkSync(path)
-        const resolved = isAbsolute(target) ? target : resolve(dir, target)
-        if (!existsSync(resolved)) broken.push(`${path} -> ${target}`)
+        if (isAbsolute(target) || !existsSync(resolve(dir, target))) {
+          invalid.push(`${path} -> ${target}`)
+        }
       } else if (entry.isDirectory()) {
         // Never follow directory links: the runtime has none today, and a loop
         // would hang the build.
@@ -250,9 +263,5 @@ function assertNoBrokenSymlinks(root) {
       }
     }
   }
-  if (broken.length > 0) {
-    throw new Error(
-      `vendored runtime has ${broken.length} dangling symlink(s):\n  ${broken.join('\n  ')}`
-    )
-  }
+  return invalid
 }

@@ -17,7 +17,6 @@ resources/bin/yt-dlp*
 resources/bin/*.exe
 
 # Vendored CPython (~110 MB) is fetched by `npm run runtime`, never committed.
-# It also contains absolute symlinks into the build machine's temp directory.
 resources/python/
 
 # Agent scratch space: throwaway scripts and notes, never committed
