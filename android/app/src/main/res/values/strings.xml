@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Ondavi</string>
+    <style name="Theme.Ondavi" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#111211</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
